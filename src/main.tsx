@@ -122,24 +122,6 @@ function MouseFollower({
   );
 }
 
-const cards = [
-  {
-    title: 'Design',
-    text: 'Quiet interfaces with clear hierarchy and careful motion.',
-    className: 'card card-wide',
-  },
-  {
-    title: 'Build',
-    text: 'Typed React foundations ready for precise product work.',
-    className: 'card',
-  },
-  {
-    title: 'Launch',
-    text: 'A clean surface for the next studio release.',
-    className: 'card card-dark',
-  },
-];
-
 function App() {
   const navRef = useRef<HTMLElement>(null);
 
@@ -147,29 +129,20 @@ function App() {
     <>
       <MouseFollower boundaryRef={navRef} />
       <main className="page-shell">
-      <nav ref={navRef} className="nav" aria-label="Primary">
-        <a className="brand" href="/" aria-label="LiYuan Studio home">
-          <img src="/png/logo.png" alt="" />
-          <span>LiYuan Studio</span>
-        </a>
-        <a className="nav-link" href="mailto:hello@liyuanstudio.com">
-          Contact
-        </a>
-      </nav>
+        <nav ref={navRef} className="nav" aria-label="Primary">
+          <a className="brand" href="/" aria-label="LiYuan Studio home">
+            <img src="/png/logo.png" alt="" />
+            <span>LiYuan Studio</span>
+          </a>
+          <a className="nav-link" href="mailto:hello@liyuanstudio.com">
+            Contact
+          </a>
+        </nav>
 
-      <section className="hero" aria-labelledby="hero-title">
-        <MaskedHeading as="h1" id="hero-title">打造「有生机的科技」</MaskedHeading>
-      </section>
-
-      <section className="bento" aria-label="Template sections">
-        {cards.map((card) => (
-          <article className={card.className} key={card.title}>
-            <p>{card.title}</p>
-            <MaskedHeading as="h2">{card.text}</MaskedHeading>
-          </article>
-        ))}
-      </section>
-    </main>
+        <section className="hero" aria-labelledby="hero-title">
+          <MaskedHeading as="h1" id="hero-title">打造「有生机的科技」</MaskedHeading>
+        </section>
+      </main>
     </>
   );
 }
