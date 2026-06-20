@@ -4,8 +4,8 @@ import './styles.css';
 
 type HeadingTag = 'h1' | 'h2';
 
-// Must match the .mouse-glow diameter (120px) in styles.css.
-const GLOW_RADIUS = 60;
+// Must match the .mouse-glow diameter (180px) in styles.css.
+const GLOW_RADIUS = 90;
 
 function MaskedHeading({
   as: Tag,
