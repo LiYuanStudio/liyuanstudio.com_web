@@ -134,9 +134,13 @@ function App() {
             <img src="/png/logo.png" alt="" />
             <span>LiYuan Studio</span>
           </a>
-          <a className="nav-link" href="mailto:hello@liyuanstudio.com">
-            Contact
-          </a>
+          <div className="nav-links">
+            <a className="nav-item" href="#products">产品</a>
+            <a className="nav-item" href="#blog">博客</a>
+            <a className="nav-link" href="mailto:hello@liyuanstudio.com">
+              Contact
+            </a>
+          </div>
         </nav>
 
         <section className="hero" aria-labelledby="hero-title">

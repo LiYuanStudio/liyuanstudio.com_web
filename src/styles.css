@@ -85,6 +85,7 @@ a {
 
 .brand {
   gap: 10px;
+  margin-left: -16px;
   font-size: 15px;
   font-weight: 600;
 }
@@ -95,18 +96,44 @@ a {
   object-fit: contain;
 }
 
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-item,
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease,
+    color 160ms ease;
+}
+
+.nav-item {
+  padding: 0 14px;
+  border-radius: 999px;
+  color: #6e6e73;
+}
+
+.nav-item:hover {
+  color: #1d1d1f;
+  background: rgba(255, 255, 255, 0.56);
+}
+
 .nav-link {
   padding: 0 18px;
   border: 1px solid rgba(29, 29, 31, 0.12);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 600;
-  transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    transform 160ms ease;
 }
 
 .nav-link:hover {
