@@ -4,3 +4,10 @@
 !.dev.vars.example
 .env*
 !.env.example
+
+# build files
+dist
+node_modules
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
