@@ -87,13 +87,14 @@ function MouseFollower({
       const boundary = boundaryRef.current;
       if (boundary) {
         const rect = boundary.getBoundingClientRect();
-        const inside =
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-        setVisible(!inside);
-      } else if (!visible) {
+        // Distance from the cursor to the nav rectangle. Hide the glow while
+        // the circle (radius = GLOW_RADIUS) would overlap the nav, so the
+        // circle's top edge lines up with the nav bottom boundary.
+        const dx = Math.max(rect.left - e.clientX, 0, e.clientX - rect.right);
+        const dy = Math.max(rect.top - e.clientY, 0, e.clientY - rect.bottom);
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        setVisible(dist > GLOW_RADIUS);
+      } else {
         setVisible(true);
       }
     };
