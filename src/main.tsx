@@ -249,16 +249,8 @@ function MouseFollower({
     const animate = () => {
       updateTarget();
 
-      currentRef.current.x = lerp(
-        currentRef.current.x,
-        targetRef.current.x,
-        SMOOTHING,
-      );
-      currentRef.current.y = lerp(
-        currentRef.current.y,
-        targetRef.current.y,
-        SMOOTHING,
-      );
+      currentRef.current.x = targetRef.current.x;
+      currentRef.current.y = targetRef.current.y;
       currentRef.current.size = lerp(
         currentRef.current.size,
         targetRef.current.size,
