@@ -19,7 +19,7 @@ type GlowPosition = {
 
 // Must match the .mouse-glow diameter (270px) in styles.css.
 const GLOW_RADIUS = 135;
-const MOUSE_CURSOR_SIZE = 40;
+const MOUSE_CURSOR_SIZE = 56;
 const PERIOD_SIZE = 16;
 const PERIOD_GAP = 12;
 const TITLE_BASELINE_RATIO = 0.78;
@@ -149,8 +149,11 @@ function MouseFollower({
   glowRef: React.RefObject<GlowPosition | null>;
 }) {
   const dotRef = useRef<HTMLDivElement>(null);
-  const cursorRef = useRef<HTMLDivElement>(null);
+  const cursorCrossRef = useRef<HTMLDivElement>(null);
+  const cursorDotRef = useRef<HTMLDivElement>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
+  const cursorCrossCurrentRef = useRef({ x: 0, y: 0 });
+  const cursorDotCurrentRef = useRef({ x: 0, y: 0 });
   const visibleRef = useRef(true);
   const cursorVisibleRef = useRef(true);
   const hoverRef = useRef(false);
@@ -164,6 +167,8 @@ function MouseFollower({
     const initialX = window.innerWidth / 2;
     const initialY = window.innerHeight / 2;
     mouseRef.current = { x: initialX, y: initialY };
+    cursorCrossCurrentRef.current = { x: initialX, y: initialY };
+    cursorDotCurrentRef.current = { x: initialX, y: initialY };
     targetRef.current = { x: initialX, y: initialY, size: PERIOD_SIZE };
     currentRef.current = { x: initialX, y: initialY, size: PERIOD_SIZE };
 
@@ -303,13 +308,51 @@ function MouseFollower({
         el.style.opacity = String(Math.max(visibleOpacity, transitionStrength));
       }
 
-      const cursorEl = cursorRef.current;
-      if (cursorEl) {
+      const cursorCrossEl = cursorCrossRef.current;
+      const cursorDotEl = cursorDotRef.current;
+      if (cursorCrossEl && cursorDotEl) {
+        const CURSOR_DOT_SMOOTHING = 0.25;
+        const CURSOR_CROSS_SMOOTHING = 0.08;
+
+        cursorDotCurrentRef.current.x = lerp(
+          cursorDotCurrentRef.current.x,
+          mouseRef.current.x,
+          CURSOR_DOT_SMOOTHING,
+        );
+        cursorDotCurrentRef.current.y = lerp(
+          cursorDotCurrentRef.current.y,
+          mouseRef.current.y,
+          CURSOR_DOT_SMOOTHING,
+        );
+
+        cursorCrossCurrentRef.current.x = lerp(
+          cursorCrossCurrentRef.current.x,
+          cursorDotCurrentRef.current.x,
+          CURSOR_CROSS_SMOOTHING,
+        );
+        cursorCrossCurrentRef.current.y = lerp(
+          cursorCrossCurrentRef.current.y,
+          cursorDotCurrentRef.current.y,
+          CURSOR_CROSS_SMOOTHING,
+        );
+
+        const glowRadius = currentRef.current.size / 2;
+        const dx = cursorDotCurrentRef.current.x - currentRef.current.x;
+        const dy = cursorDotCurrentRef.current.y - currentRef.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const insideGlow = visibleRef.current && dist <= glowRadius;
+        const opacity = cursorVisibleRef.current && !insideGlow ? 1 : 0;
+
         const scale = hoverRef.current ? 1.4 : 1;
-        cursorEl.style.transform = `translate(-50%, -50%) translate(${mouseRef.current.x}px, ${mouseRef.current.y}px) scale(${scale})`;
-        cursorEl.style.width = `${MOUSE_CURSOR_SIZE}px`;
-        cursorEl.style.height = `${MOUSE_CURSOR_SIZE}px`;
-        cursorEl.style.opacity = String(cursorVisibleRef.current ? 1 : 0);
+        cursorCrossEl.style.transform = `translate(-50%, -50%) translate(${cursorCrossCurrentRef.current.x}px, ${cursorCrossCurrentRef.current.y}px) scale(${scale})`;
+        cursorCrossEl.style.width = `${MOUSE_CURSOR_SIZE}px`;
+        cursorCrossEl.style.height = `${MOUSE_CURSOR_SIZE}px`;
+        cursorCrossEl.style.opacity = String(opacity);
+
+        cursorDotEl.style.transform = `translate(-50%, -50%) translate(${cursorDotCurrentRef.current.x}px, ${cursorDotCurrentRef.current.y}px) scale(${scale})`;
+        cursorDotEl.style.width = '6px';
+        cursorDotEl.style.height = '6px';
+        cursorDotEl.style.opacity = String(opacity);
       }
 
       rafId = requestAnimationFrame(animate);
@@ -340,7 +383,8 @@ function MouseFollower({
   return (
     <>
       <div ref={dotRef} className="mouse-glow" />
-      <div ref={cursorRef} className="mouse-cursor" />
+      <div ref={cursorCrossRef} className="mouse-cursor-cross" />
+      <div ref={cursorDotRef} className="mouse-cursor-dot" />
     </>
   );
 }
