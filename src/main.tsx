@@ -10,10 +10,17 @@ import './styles.css';
 
 type HeadingTag = 'h1' | 'h2';
 
+type GlowPosition = {
+  x: number;
+  y: number;
+  size: number;
+  visible: boolean;
+};
+
 // Must match the .mouse-glow diameter (180px) in styles.css.
 const GLOW_RADIUS = 90;
 const PERIOD_SIZE = 16;
-const PERIOD_GAP = 16;
+const PERIOD_GAP = 12;
 const TITLE_BASELINE_RATIO = 0.78;
 
 function clamp(n: number, min: number, max: number): number {
@@ -34,14 +41,15 @@ const MaskedHeading = React.forwardRef<
     as: HeadingTag;
     className?: string;
     id?: string;
+    glowRef: React.RefObject<GlowPosition | null>;
     children: React.ReactNode;
   }
->(({ as: Tag, className, id, children }, forwardedRef) => {
+>(({ as: Tag, className, id, glowRef, children }, forwardedRef) => {
   const ref = useRef<HTMLHeadingElement>(null);
   const baseRef = useRef<HTMLSpanElement>(null);
   const overlayRef = useRef<HTMLSpanElement>(null);
   const [active, setActive] = useState(false);
-  const [pos, setPos] = useState({ x: -999, y: -999 });
+  const [pos, setPos] = useState({ x: -999, y: -999, r: 0 });
 
   const setRefs = useCallback(
     (node: HTMLHeadingElement | null) => {
@@ -56,45 +64,52 @@ const MaskedHeading = React.forwardRef<
   );
 
   useEffect(() => {
-    const handleMove = (e: MouseEvent) => {
-      // Use the rendered text box for activation so overflowing text is
-      // included even when the heading element itself is width-constrained.
-      const textEl = baseRef.current ?? ref.current;
-      const overlayEl = overlayRef.current;
-      if (!textEl) return;
+    const overlayEl = overlayRef.current;
+    let rafId: number;
+
+    const tick = () => {
+      const textEl = ref.current;
+      const glow = glowRef.current;
+      if (!textEl || !glow) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
 
       const textRect = textEl.getBoundingClientRect();
       const dx = Math.max(
-        textRect.left - e.clientX,
+        textRect.left - glow.x,
         0,
-        e.clientX - textRect.right,
+        glow.x - textRect.right,
       );
       const dy = Math.max(
-        textRect.top - e.clientY,
+        textRect.top - glow.y,
         0,
-        e.clientY - textRect.bottom,
+        glow.y - textRect.bottom,
       );
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist <= GLOW_RADIUS) {
+      const radius = glow.size / 2;
+      if (glow.visible && dist <= radius) {
         const localRect = overlayEl?.getBoundingClientRect() ?? textRect;
-        setPos({ x: e.clientX - localRect.left, y: e.clientY - localRect.top });
+        setPos({
+          x: glow.x - localRect.left,
+          y: glow.y - localRect.top,
+          r: radius,
+        });
         setActive(true);
       } else {
         setActive(false);
       }
+
+      rafId = requestAnimationFrame(tick);
     };
 
-    const handleLeave = () => setActive(false);
-
-    window.addEventListener('mousemove', handleMove);
-    document.body.addEventListener('mouseleave', handleLeave);
+    rafId = requestAnimationFrame(tick);
 
     return () => {
-      window.removeEventListener('mousemove', handleMove);
-      document.body.removeEventListener('mouseleave', handleLeave);
+      cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [glowRef]);
 
   return (
     <Tag
@@ -110,7 +125,7 @@ const MaskedHeading = React.forwardRef<
         className="masked-overlay"
         style={{
           clipPath: active
-            ? `circle(${GLOW_RADIUS}px at ${pos.x}px ${pos.y}px)`
+            ? `circle(${pos.r}px at ${pos.x}px ${pos.y}px)`
             : 'circle(0px at -999px -999px)',
         }}
       >
@@ -124,12 +139,14 @@ function MouseFollower({
   boundaryRef,
   heroRef,
   titleRef,
+  glowRef,
 }: {
   boundaryRef: React.RefObject<HTMLElement | null>;
   heroRef: React.RefObject<HTMLElement | null>;
   titleRef: React.RefObject<HTMLHeadingElement | null>;
+  glowRef: React.RefObject<GlowPosition | null>;
 }) {
-  const glowRef = useRef<HTMLDivElement>(null);
+  const dotRef = useRef<HTMLDivElement>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
   const visibleRef = useRef(true);
   const progressRef = useRef(0);
@@ -147,34 +164,29 @@ function MouseFollower({
 
     const computeTitleEnd = () => {
       const title = titleRef.current;
-      if (!title) return;
+      const baseSpan = title?.querySelector('.masked-base');
+      if (!title || !baseSpan) return;
 
-      // Measure the actual end of the rendered text so the circle lands exactly
-      // where a trailing period would sit, rather than guessing from the h1 box.
-      const baseSpan = title.querySelector('.masked-base');
-      const textNode = baseSpan?.lastChild;
-      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-        const text = textNode.textContent ?? '';
-        if (text.length > 0) {
-          const range = document.createRange();
-          // Use the last character's rect: collapsed ranges after a text node can
-          // report zero geometry, so span the final character instead.
-          range.setStart(textNode, text.length - 1);
-          range.setEnd(textNode, text.length);
-          const rect = range.getBoundingClientRect();
-          titleEndRef.current = {
-            x: rect.right + PERIOD_GAP,
-            y: rect.top + rect.height * TITLE_BASELINE_RATIO,
-          };
-          return;
-        }
+      const text = baseSpan.textContent ?? '';
+      if (text.length === 0) return;
+
+      const baseRect = baseSpan.getBoundingClientRect();
+      const style = getComputedStyle(title);
+
+      // Chinese full-width punctuation (e.g. 「」) leaves empty side-bearing on
+      // its right half, so measuring the last character's bounding box places the
+      // dot far from the visible glyph. Use the canvas ink bounds instead.
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let inkRight = baseRect.width;
+      if (ctx) {
+        ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        inkRight = ctx.measureText(text).actualBoundingBoxRight;
       }
 
-      // Fallback to the heading box if the text node is not available.
-      const rect = title.getBoundingClientRect();
       titleEndRef.current = {
-        x: rect.right + PERIOD_GAP,
-        y: rect.top + rect.height * TITLE_BASELINE_RATIO,
+        x: baseRect.left + inkRight + PERIOD_GAP,
+        y: baseRect.top + baseRect.height * TITLE_BASELINE_RATIO,
       };
     };
 
@@ -257,7 +269,15 @@ function MouseFollower({
         SMOOTHING,
       );
 
-      const el = glowRef.current;
+      const shared = glowRef.current;
+      if (shared) {
+        shared.x = currentRef.current.x;
+        shared.y = currentRef.current.y;
+        shared.size = currentRef.current.size;
+        shared.visible = visibleRef.current;
+      }
+
+      const el = dotRef.current;
       if (el) {
         const transitionStrength = easeInOutCubic(
           clamp((progressRef.current - 0.5) / 0.5, 0, 1),
@@ -280,6 +300,7 @@ function MouseFollower({
 
     computeProgress();
     computeTitleEnd();
+    document.fonts?.ready.then(computeTitleEnd);
 
     rafId = requestAnimationFrame(animate);
 
@@ -293,13 +314,19 @@ function MouseFollower({
     };
   }, [boundaryRef, heroRef, titleRef]);
 
-  return <div ref={glowRef} className="mouse-glow" />;
+  return <div ref={dotRef} className="mouse-glow" />;
 }
 
 function App() {
   const navRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const glowRef = useRef<GlowPosition>({
+    x: 0,
+    y: 0,
+    size: PERIOD_SIZE,
+    visible: false,
+  });
 
   return (
     <>
@@ -307,6 +334,7 @@ function App() {
         boundaryRef={navRef}
         heroRef={heroRef}
         titleRef={titleRef}
+        glowRef={glowRef}
       />
       <main className="page-shell">
         <nav ref={navRef} className="nav" aria-label="Primary">
@@ -328,7 +356,7 @@ function App() {
           className="hero"
           aria-labelledby="hero-title"
         >
-          <MaskedHeading as="h1" id="hero-title" ref={titleRef}>
+          <MaskedHeading as="h1" id="hero-title" ref={titleRef} glowRef={glowRef}>
             打造「有生机的科技」
           </MaskedHeading>
         </section>
@@ -338,7 +366,7 @@ function App() {
           id="products"
           aria-labelledby="products-title"
         >
-          <MaskedHeading as="h2" id="products-title">
+          <MaskedHeading as="h2" id="products-title" glowRef={glowRef}>
             我们的产品
           </MaskedHeading>
           <p className="products-lead">

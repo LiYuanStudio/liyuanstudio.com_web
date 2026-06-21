@@ -50,7 +50,7 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
+  width: max-content;
   height: 100%;
   color: #ffffff;
   pointer-events: none;
@@ -220,7 +220,7 @@ h1 {
 
 .product-grid {
   display: grid;
-  width: 100%;
+  width: max-content;
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-top: 56px;
