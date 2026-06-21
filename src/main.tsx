@@ -17,11 +17,13 @@ type GlowPosition = {
   visible: boolean;
 };
 
-// Must match the .mouse-glow diameter (180px) in styles.css.
-const GLOW_RADIUS = 90;
+// Must match the .mouse-glow diameter (270px) in styles.css.
+const GLOW_RADIUS = 135;
+const MOUSE_CURSOR_SIZE = 40;
 const PERIOD_SIZE = 16;
 const PERIOD_GAP = 12;
 const TITLE_BASELINE_RATIO = 0.78;
+const NAV_SCROLL_OFFSET = 120;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -147,8 +149,11 @@ function MouseFollower({
   glowRef: React.RefObject<GlowPosition | null>;
 }) {
   const dotRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef<HTMLDivElement>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
   const visibleRef = useRef(true);
+  const cursorVisibleRef = useRef(true);
+  const hoverRef = useRef(false);
   const progressRef = useRef(0);
   const titleEndRef = useRef({ x: 0, y: 0 });
   const targetRef = useRef({ x: 0, y: 0, size: PERIOD_SIZE });
@@ -222,6 +227,13 @@ function MouseFollower({
     const handleMove = (e: MouseEvent) => {
       hasMouseMovedRef.current = true;
       mouseRef.current = { x: e.clientX, y: e.clientY };
+      cursorVisibleRef.current = true;
+
+      const target = e.target as HTMLElement | null;
+      hoverRef.current =
+        target !== null &&
+        (target.closest('a, button, [role="button"], input, textarea, select') !==
+          null);
 
       const boundary = boundaryRef.current;
       if (boundary) {
@@ -240,10 +252,12 @@ function MouseFollower({
 
     const handleLeave = () => {
       visibleRef.current = false;
+      cursorVisibleRef.current = false;
     };
 
     const handleEnter = () => {
       visibleRef.current = true;
+      cursorVisibleRef.current = true;
     };
 
     const handleScroll = () => {
@@ -289,6 +303,15 @@ function MouseFollower({
         el.style.opacity = String(Math.max(visibleOpacity, transitionStrength));
       }
 
+      const cursorEl = cursorRef.current;
+      if (cursorEl) {
+        const scale = hoverRef.current ? 1.4 : 1;
+        cursorEl.style.transform = `translate(-50%, -50%) translate(${mouseRef.current.x}px, ${mouseRef.current.y}px) scale(${scale})`;
+        cursorEl.style.width = `${MOUSE_CURSOR_SIZE}px`;
+        cursorEl.style.height = `${MOUSE_CURSOR_SIZE}px`;
+        cursorEl.style.opacity = String(cursorVisibleRef.current ? 1 : 0);
+      }
+
       rafId = requestAnimationFrame(animate);
     };
 
@@ -314,7 +337,12 @@ function MouseFollower({
     };
   }, [boundaryRef, heroRef, titleRef]);
 
-  return <div ref={dotRef} className="mouse-glow" />;
+  return (
+    <>
+      <div ref={dotRef} className="mouse-glow" />
+      <div ref={cursorRef} className="mouse-cursor" />
+    </>
+  );
 }
 
 function App() {
@@ -328,6 +356,23 @@ function App() {
     visible: false,
   });
 
+  useEffect(() => {
+    const nav = navRef.current;
+    const hero = heroRef.current;
+    if (!nav || !hero) return;
+
+    const handleScroll = () => {
+      const navRect = nav.getBoundingClientRect();
+      const heroRect = hero.getBoundingClientRect();
+      const isScrolled = heroRect.top < navRect.bottom - NAV_SCROLL_OFFSET;
+      nav.classList.toggle('nav-scrolled', isScrolled);
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
     <>
       <MouseFollower
@@ -338,17 +383,19 @@ function App() {
       />
       <main className="page-shell">
         <nav ref={navRef} className="nav" aria-label="Primary">
-          <a className="brand" href="/" aria-label="LiYuan Studio home">
-            <img src="/png/logo.png" alt="" />
-            <span>LiYuan Studio</span>
-          </a>
-          <div className="nav-links">
-            <a className="nav-item" href="#products">产品</a>
-            <a className="nav-item" href="#blog">博客</a>
+          <div className="nav-inner">
+            <a className="brand" href="/" aria-label="LiYuan Studio home">
+              <img src="/png/logo.png" alt="" />
+              <span>LiYuan Studio</span>
+            </a>
+            <div className="nav-links">
+              <a className="nav-item" href="#products">产品</a>
+              <a className="nav-item" href="#blog">博客</a>
+            </div>
+            <a className="nav-link" href="mailto:hello@liyuanstudio.com">
+              Contact
+            </a>
           </div>
-          <a className="nav-link" href="mailto:hello@liyuanstudio.com">
-            Contact
-          </a>
         </nav>
 
         <section

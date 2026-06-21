@@ -26,15 +26,43 @@ body {
   position: fixed;
   left: 0;
   top: 0;
-  width: 180px;
-  height: 180px;
+  width: 270px;
+  height: 270px;
   border-radius: 50%;
   pointer-events: none;
   transform: translate(-50%, -50%);
   background: #206ccf;
-  z-index: 9999;
+  z-index: 9998;
   transition: opacity 180ms ease;
   will-change: transform, width, height;
+}
+
+.mouse-cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  border: 1px solid #ffffff;
+  z-index: 9999;
+  transition: opacity 180ms ease, transform 180ms ease;
+  will-change: transform, opacity;
+  mix-blend-mode: difference;
+}
+
+.mouse-cursor::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: translate(-50%, -50%);
 }
 
 .masked-heading {
@@ -73,15 +101,41 @@ a {
 .nav {
   position: fixed;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   z-index: 1000;
+  padding: 28px 24px 0;
+  min-height: 72px;
+}
+
+.nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 80%, transparent 100%);
+  transition: opacity 220ms ease;
+}
+
+.nav-scrolled::before {
+  opacity: 1;
+}
+
+.nav-inner {
   display: grid;
-  width: min(1120px, calc(100% - 40px));
+  width: min(1120px, 100%);
+  margin: 0 auto;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding-top: 28px;
-  min-height: 72px;
+}
+
+.nav-scrolled .nav-item:hover {
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .brand,
@@ -93,7 +147,6 @@ a {
 
 .brand {
   gap: 10px;
-  margin-left: -16px;
   font-size: 15px;
   font-weight: 600;
 }
@@ -177,11 +230,11 @@ p {
 
 h1 {
   width: max-content;
+  margin: 0 auto;
   font-size: clamp(24px, 8vw, 92px);
   line-height: 0.96;
   font-weight: 700;
   white-space: nowrap;
-  transform: translateX(-20px);
 }
 
 .hero-copy {
@@ -203,11 +256,12 @@ h1 {
 }
 
 .products h2 {
+  width: max-content;
+  margin: 0 auto;
   font-size: clamp(28px, 5vw, 64px);
   line-height: 1.05;
   font-weight: 700;
   white-space: nowrap;
-  transform: translateX(-12px);
 }
 
 .products-lead {
@@ -329,7 +383,8 @@ h1 {
   }
 
   .products h2 {
-    transform: translateX(-6px);
+    width: max-content;
+    margin: 0 auto;
   }
 
   .products-lead {
