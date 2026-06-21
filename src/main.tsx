@@ -14,7 +14,7 @@ type HeadingTag = 'h1' | 'h2';
 const GLOW_RADIUS = 90;
 const PERIOD_SIZE = 16;
 const PERIOD_GAP = 16;
-const TITLE_BASELINE_RATIO = 0.83;
+const TITLE_BASELINE_RATIO = 0.78;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -148,6 +148,29 @@ function MouseFollower({
     const computeTitleEnd = () => {
       const title = titleRef.current;
       if (!title) return;
+
+      // Measure the actual end of the rendered text so the circle lands exactly
+      // where a trailing period would sit, rather than guessing from the h1 box.
+      const baseSpan = title.querySelector('.masked-base');
+      const textNode = baseSpan?.lastChild;
+      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+        const text = textNode.textContent ?? '';
+        if (text.length > 0) {
+          const range = document.createRange();
+          // Use the last character's rect: collapsed ranges after a text node can
+          // report zero geometry, so span the final character instead.
+          range.setStart(textNode, text.length - 1);
+          range.setEnd(textNode, text.length);
+          const rect = range.getBoundingClientRect();
+          titleEndRef.current = {
+            x: rect.right + PERIOD_GAP,
+            y: rect.top + rect.height * TITLE_BASELINE_RATIO,
+          };
+          return;
+        }
+      }
+
+      // Fallback to the heading box if the text node is not available.
       const rect = title.getBoundingClientRect();
       titleEndRef.current = {
         x: rect.right + PERIOD_GAP,
@@ -167,22 +190,21 @@ function MouseFollower({
       const mx = mouseRef.current.x;
       const my = mouseRef.current.y;
 
-      if (p < 0.5) {
-        if (hasMouseMovedRef.current) {
-          targetRef.current = { x: mx, y: my, size: GLOW_RADIUS * 2 };
-        } else {
-          // Intro dot: sits at the viewport centre as a small blue dot until
-          // the user moves the mouse.
-          targetRef.current = { x: initialX, y: initialY, size: PERIOD_SIZE };
-        }
-      } else {
-        const t = easeInOutCubic(clamp((p - 0.5) / 0.5, 0, 1));
-        targetRef.current = {
-          x: lerp(mx, titleEndRef.current.x, t),
-          y: lerp(my, titleEndRef.current.y, t),
-          size: lerp(GLOW_RADIUS * 2, PERIOD_SIZE, t),
-        };
-      }
+      // As soon as the page scrolls, move the glow from its current position
+      // (mouse cursor or intro dot) to the title's trailing period position.
+      // Complete by p = 0.3 so the period is settled while the title is still
+      // visible on screen.
+      const PERIOD_TRANSITION_END = 0.3;
+      const t = easeInOutCubic(clamp(p / PERIOD_TRANSITION_END, 0, 1));
+      const baseSize = hasMouseMovedRef.current ? GLOW_RADIUS * 2 : PERIOD_SIZE;
+      const baseX = hasMouseMovedRef.current ? mx : initialX;
+      const baseY = hasMouseMovedRef.current ? my : initialY;
+
+      targetRef.current = {
+        x: lerp(baseX, titleEndRef.current.x, t),
+        y: lerp(baseY, titleEndRef.current.y, t),
+        size: lerp(baseSize, PERIOD_SIZE, t),
+      };
     };
 
     const handleMove = (e: MouseEvent) => {
