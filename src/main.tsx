@@ -389,6 +389,14 @@ function MouseFollower({
   );
 }
 
+type NewsUpdate = {
+  id: string;
+  title: string;
+  description: string;
+  tag: string;
+  date: string;
+};
+
 type BlogPost = {
   id: string;
   title: string;
@@ -397,6 +405,33 @@ type BlogPost = {
   date: string;
   readTime: string;
 };
+
+const newsUpdates: NewsUpdate[] = [
+  {
+    id: '1',
+    title: 'LiYuan Workbench 开放内测',
+    description:
+      '首批创作者已入驻，欢迎提交申请，与我们一起打磨下一代创作工具。',
+    tag: '产品动态',
+    date: '2026-06-20',
+  },
+  {
+    id: '2',
+    title: '官网视觉全新升级',
+    description:
+      '更轻盈的界面、更流畅的动效，让每一次访问都像第一次见面。',
+    tag: '品牌',
+    date: '2026-06-10',
+  },
+  {
+    id: '3',
+    title: '加入 Cloudflare 创业支持计划',
+    description:
+      '借助全球边缘网络，为我们的服务带来更快、更稳定的访问体验。',
+    tag: '合作',
+    date: '2026-05-22',
+  },
+];
 
 const blogPosts: BlogPost[] = [
   {
@@ -428,9 +463,56 @@ const blogPosts: BlogPost[] = [
   },
 ];
 
-function Blog({ glowRef }: { glowRef: React.RefObject<GlowPosition | null> }) {
+const News = React.forwardRef<
+  HTMLElement,
+  { glowRef: React.RefObject<GlowPosition | null> }
+>(({ glowRef }, forwardedRef) => {
   return (
-    <section className="blog" id="blog" aria-labelledby="blog-title">
+    <section
+      ref={forwardedRef}
+      className="news"
+      id="news"
+      aria-labelledby="news-title"
+    >
+      <MaskedHeading as="h2" id="news-title" glowRef={glowRef}>
+        最新动态
+      </MaskedHeading>
+      <p className="news-lead">
+        产品更新、品牌动向与团队成长的一线消息。
+      </p>
+
+      <div className="news-grid">
+        {newsUpdates.map((update) => (
+          <article key={update.id} className="news-card">
+            <div className="news-card-meta">
+              <span className="news-tag">{update.tag}</span>
+              <span className="news-date">{update.date}</span>
+            </div>
+            <h3>{update.title}</h3>
+            <p>{update.description}</p>
+            <div className="news-card-footer">
+              <button type="button" className="news-link">
+                查看详情 →
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+});
+
+const Blog = React.forwardRef<
+  HTMLElement,
+  { glowRef: React.RefObject<GlowPosition | null> }
+>(({ glowRef }, forwardedRef) => {
+  return (
+    <section
+      ref={forwardedRef}
+      className="blog"
+      id="blog"
+      aria-labelledby="blog-title"
+    >
       <MaskedHeading as="h2" id="blog-title" glowRef={glowRef}>
         博客
       </MaskedHeading>
@@ -449,21 +531,24 @@ function Blog({ glowRef }: { glowRef: React.RefObject<GlowPosition | null> }) {
             <p>{post.excerpt}</p>
             <div className="blog-card-footer">
               <span className="blog-read-time">{post.readTime}</span>
-              <a className="blog-link" href="#">
+              <button type="button" className="blog-link">
                 阅读更多 →
-              </a>
+              </button>
             </div>
           </article>
         ))}
       </div>
     </section>
   );
-}
+});
 
 function App() {
   const navRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const productsRef = useRef<HTMLElement>(null);
+  const newsRef = useRef<HTMLElement>(null);
+  const blogRef = useRef<HTMLElement>(null);
   const glowRef = useRef<GlowPosition>({
     x: 0,
     y: 0,
@@ -504,8 +589,33 @@ function App() {
               <span>LiYuan Studio</span>
             </a>
             <div className="nav-links">
-              <a className="nav-item" href="#products">产品</a>
-              <a className="nav-item" href="#blog">博客</a>
+              <button
+                type="button"
+                className="nav-item"
+                onClick={() =>
+                  productsRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }
+              >
+                产品
+              </button>
+              <button
+                type="button"
+                className="nav-item"
+                onClick={() =>
+                  newsRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }
+              >
+                动态
+              </button>
+              <button
+                type="button"
+                className="nav-item"
+                onClick={() =>
+                  blogRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }
+              >
+                博客
+              </button>
             </div>
             <a className="nav-link" href="mailto:hello@liyuanstudio.com">
               Contact
@@ -524,6 +634,7 @@ function App() {
         </section>
 
         <section
+          ref={productsRef}
           className="products"
           id="products"
           aria-labelledby="products-title"
@@ -545,7 +656,9 @@ function App() {
                 <p>一站式创作工作台，把灵感快速变成可交付的作品。</p>
                 <div className="product-card-meta">
                   <span className="product-tag">旗舰</span>
-                  <a className="product-link" href="#">了解更多 →</a>
+                  <button type="button" className="product-link">
+                    了解更多 →
+                  </button>
                 </div>
               </div>
             </article>
@@ -568,7 +681,9 @@ function App() {
           </div>
         </section>
 
-        <Blog glowRef={glowRef} />
+        <News ref={newsRef} glowRef={glowRef} />
+
+        <Blog ref={blogRef} glowRef={glowRef} />
       </main>
     </>
   );
