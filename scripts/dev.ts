@@ -67,6 +67,19 @@ async function getListeningPids(port: number): Promise<number[]> {
     .filter((n) => !Number.isNaN(n));
 }
 
+async function killProcess(pid: number) {
+  try {
+    if (process.platform === 'win32') {
+      // /T kills the entire process tree so grandchildren can't keep the port alive.
+      await run('taskkill', ['/F', '/T', '/PID', String(pid)]);
+    } else {
+      await run('kill', ['-9', String(pid)]);
+    }
+  } catch (err) {
+    log(`failed to kill ${pid}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 async function killStaleNode(port: number) {
   const pids = await getListeningPids(port);
   for (const pid of pids) {
@@ -74,15 +87,21 @@ async function killStaleNode(port: number) {
     const name = await getProcessName(pid);
     if (name?.toLowerCase().includes('node')) {
       log(`killing stale node process ${pid} (${name}) on port ${port}`);
-      if (process.platform === 'win32') {
-        await run('taskkill', ['//F', '//PID', String(pid)]);
-      } else {
-        await run('kill', ['-9', String(pid)]);
-      }
+      await killProcess(pid);
     } else if (name) {
       log(`port ${port} is held by ${name} (pid ${pid}) — not killing`);
     }
   }
+}
+
+async function ensurePortFree(port: number, maxWaitMs = 5000): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const pids = (await getListeningPids(port)).filter((pid) => pid !== process.pid);
+    if (pids.length === 0) return true;
+    await setTimeout(200);
+  }
+  return false;
 }
 
 async function waitForApi(timeoutMs = 30000): Promise<boolean> {
@@ -120,7 +139,7 @@ async function cleanup(children: ChildProcess[]) {
       await setTimeout(500);
       if (!child.killed && process.platform === 'win32') {
         try {
-          await run('taskkill', ['//F', '//T', '//PID', String(child.pid)]);
+          await run('taskkill', ['/F', '/T', '/PID', String(child.pid)]);
         } catch {
           // ignore
         }
@@ -134,6 +153,12 @@ async function main() {
   await killStaleNode(API_PORT);
   for (const port of VITE_PORTS) {
     await killStaleNode(port);
+  }
+
+  const apiPortFree = await ensurePortFree(API_PORT);
+  if (!apiPortFree) {
+    log(`port ${API_PORT} is still in use after cleanup; aborting`);
+    process.exit(1);
   }
 
   const api = startProcess('api', 'npm', ['run', 'dev:api']);

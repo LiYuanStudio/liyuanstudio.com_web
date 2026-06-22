@@ -699,34 +699,50 @@ function App() {
 
           <div className="product-grid">
             <article className="product-card product-card-large">
-              <div className="product-card-preview product-card-preview-large" aria-hidden="true">
+              <div className="product-card-visual product-card-visual-large" aria-hidden="true">
                 <div className="preview-block preview-block-large" />
               </div>
-              <div className="product-card-content product-card-content-large">
-                <h3>LiYuan Workbench</h3>
-                <p>一站式创作工作台，把灵感快速变成可交付的作品。</p>
-                <div className="product-card-meta">
+              <div className="product-card-body product-card-body-large">
+                <div className="product-card-text">
+                  <h3>LiYuan Workbench</h3>
+                  <p>一站式创作工作台，把灵感快速变成可交付的作品。</p>
+                </div>
+                <div className="product-card-footer">
+                  <span className="product-date">2024.06</span>
                   <span className="product-tag">旗舰</span>
-                  <button type="button" className="product-link">
-                    了解更多 →
-                  </button>
                 </div>
               </div>
             </article>
 
             <article className="product-card product-card-side product-card-side-1">
-              <div className="product-card-content">
-                <h3>LiYuan Sync</h3>
-                <p>多端实时同步，文件与数据始终触手可及。</p>
-                <span className="product-tag">工具</span>
+              <div className="product-card-visual" aria-hidden="true">
+                <div className="preview-block preview-block-side preview-block-side-1" />
+              </div>
+              <div className="product-card-body">
+                <div className="product-card-text">
+                  <h3>LiYuan Sync</h3>
+                  <p>多端实时同步，文件与数据始终触手可及。</p>
+                </div>
+                <div className="product-card-footer">
+                  <span className="product-date">2024.03</span>
+                  <span className="product-tag">工具</span>
+                </div>
               </div>
             </article>
 
             <article className="product-card product-card-side product-card-side-2">
-              <div className="product-card-content">
-                <h3>LiYuan Cloud</h3>
-                <p>为小型团队打造的轻量云托管方案。</p>
-                <span className="product-tag">服务</span>
+              <div className="product-card-visual" aria-hidden="true">
+                <div className="preview-block preview-block-side preview-block-side-2" />
+              </div>
+              <div className="product-card-body">
+                <div className="product-card-text">
+                  <h3>LiYuan Cloud</h3>
+                  <p>为小型团队打造的轻量云托管方案。</p>
+                </div>
+                <div className="product-card-footer">
+                  <span className="product-date">2024.01</span>
+                  <span className="product-tag">服务</span>
+                </div>
               </div>
             </article>
           </div>

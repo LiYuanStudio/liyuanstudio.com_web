@@ -205,6 +205,18 @@ There are currently **no tests** and no test runner configured. If you add tests
 - `CORS_ORIGIN` is a whitelist. For local dev it includes common Vite ports and `127.0.0.1`; for production it should be the exact frontend origin.
 - If dynamic content or user-supplied values are introduced, sanitize them before injecting into JSX or the DOM.
 
+### Pre-commit / security scan exclusions
+
+The following files and directories contain local secrets, placeholders, or local-only notes and are excluded from automated secret scanning:
+
+- `.env` — frontend local environment variables (gitignored)
+- `server/.env` — backend local environment variables (gitignored)
+- `.env.example` — template with placeholder values
+- `server/.env.example` — template with placeholder values
+- `accounts.md` — local deployment account notes (gitignored)
+
+These files are either gitignored or contain only non-functional placeholders and must not be treated as production secrets in scan reports.
+
 ## Notes for agents
 
 - `vite.config.js` and `vite.config.d.ts` are generated artifacts and gitignored; edit `vite.config.ts` instead.
