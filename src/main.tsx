@@ -395,6 +395,7 @@ type NewsUpdate = {
   description: string;
   tag: string;
   date: string;
+  image?: string;
 };
 
 type BlogPost = {
@@ -404,6 +405,7 @@ type BlogPost = {
   category: string;
   date: string;
   readTime: string;
+  image?: string;
 };
 
 const newsUpdates: NewsUpdate[] = [
@@ -484,16 +486,23 @@ const News = React.forwardRef<
       <div className="news-grid">
         {newsUpdates.map((update) => (
           <article key={update.id} className="news-card">
-            <div className="news-card-meta">
-              <span className="news-tag">{update.tag}</span>
-              <span className="news-date">{update.date}</span>
+            <div className="polaroid-photo">
+              {update.image ? (
+                <img src={update.image} alt="" loading="lazy" />
+              ) : null}
             </div>
-            <h3>{update.title}</h3>
-            <p>{update.description}</p>
-            <div className="news-card-footer">
-              <button type="button" className="news-link">
-                查看详情 →
-              </button>
+            <div className="news-card-content">
+              <div className="news-card-meta">
+                <span className="news-tag">{update.tag}</span>
+                <span className="news-date">{update.date}</span>
+              </div>
+              <h3>{update.title}</h3>
+              <p>{update.description}</p>
+              <div className="news-card-footer">
+                <button type="button" className="news-link">
+                  查看详情 →
+                </button>
+              </div>
             </div>
           </article>
         ))}
@@ -501,6 +510,48 @@ const News = React.forwardRef<
     </section>
   );
 });
+
+function Footer() {
+  return (
+    <footer className="footer">
+      <div className="footer-inner">
+        <div className="footer-main">
+          <div className="footer-brand">
+            <a className="brand footer-brand-link" href="/" aria-label="LiYuan Studio home">
+              <img src="/png/logo.png" alt="" />
+              <span>LiYuan Studio</span>
+            </a>
+            <p className="footer-tagline">打造「有生机的科技」</p>
+          </div>
+
+          <nav className="footer-nav" aria-label="Footer">
+            <div className="footer-group">
+              <h4>产品</h4>
+              <a href="#products">LiYuan Workbench</a>
+              <a href="#products">LiYuan Sync</a>
+              <a href="#products">LiYuan Cloud</a>
+            </div>
+            <div className="footer-group">
+              <h4>内容</h4>
+              <a href="#news">最新动态</a>
+              <a href="#blog">博客</a>
+            </div>
+            <div className="footer-group">
+              <h4>联系</h4>
+              <a href="mailto:hello@liyuanstudio.com">hello@liyuanstudio.com</a>
+              <a href="#" aria-label="GitHub">GitHub</a>
+              <a href="#" aria-label="Twitter">Twitter</a>
+            </div>
+          </nav>
+        </div>
+
+        <div className="footer-bottom">
+          <span>© {new Date().getFullYear()} LiYuan Studio. All rights reserved.</span>
+        </div>
+      </div>
+    </footer>
+  );
+}
 
 const Blog = React.forwardRef<
   HTMLElement,
@@ -523,17 +574,24 @@ const Blog = React.forwardRef<
       <div className="blog-grid">
         {blogPosts.map((post) => (
           <article key={post.id} className="blog-card">
-            <div className="blog-card-meta">
-              <span className="blog-tag">{post.category}</span>
-              <span className="blog-date">{post.date}</span>
+            <div className="polaroid-photo">
+              {post.image ? (
+                <img src={post.image} alt="" loading="lazy" />
+              ) : null}
             </div>
-            <h3>{post.title}</h3>
-            <p>{post.excerpt}</p>
-            <div className="blog-card-footer">
-              <span className="blog-read-time">{post.readTime}</span>
-              <button type="button" className="blog-link">
-                阅读更多 →
-              </button>
+            <div className="blog-card-content">
+              <div className="blog-card-meta">
+                <span className="blog-tag">{post.category}</span>
+                <span className="blog-date">{post.date}</span>
+              </div>
+              <h3>{post.title}</h3>
+              <p>{post.excerpt}</p>
+              <div className="blog-card-footer">
+                <span className="blog-read-time">{post.readTime}</span>
+                <button type="button" className="blog-link">
+                  阅读更多 →
+                </button>
+              </div>
             </div>
           </article>
         ))}
@@ -685,6 +743,8 @@ function App() {
 
         <Blog ref={blogRef} glowRef={glowRef} />
       </main>
+
+      <Footer />
     </>
   );
 }
