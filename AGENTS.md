@@ -42,7 +42,8 @@ Key configuration files:
 ├── src/
 │   ├── main.tsx            # Application root; all components currently live here
 │   └── styles.css          # Global styles, component styles, responsive rules
-├── png/                    # Static image assets (logo, favicons)
+├── public/
+│   └── png/                # Static image assets (logo, favicons)
 └── dist/                   # Build output (generated, gitignored)
 ```
 
@@ -54,7 +55,7 @@ Key configuration files:
   - `MouseFollower` — fixed-position cursor glow that follows the mouse.
   - `MaskedHeading` — renders two stacked text layers and reveals a white overlay clipped to a circle near the cursor.
 - **Data is inline:** the bento card list is a hard-coded `cards` array in `main.tsx`.
-- **Static assets:** images referenced from `/png/...` are in the `png/` folder. Favicons are referenced explicitly in `index.html`.
+- **Static assets:** images referenced from `/png/...` live in `public/png/`. Vite serves `public/` at the site root in dev and copies it to `dist/` on build. Favicons are referenced explicitly in `index.html`.
 
 If the site grows, prefer splitting components into `src/components/` and data/constants into `src/data/` or similar, keeping the flat structure otherwise.
 

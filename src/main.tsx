@@ -19,7 +19,7 @@ type GlowPosition = {
 
 // Must match the .mouse-glow diameter (270px) in styles.css.
 const GLOW_RADIUS = 135;
-const MOUSE_CURSOR_SIZE = 56;
+const MOUSE_CURSOR_SIZE = 28;
 const PERIOD_SIZE = 16;
 const PERIOD_GAP = 12;
 const TITLE_BASELINE_RATIO = 0.78;
@@ -350,8 +350,8 @@ function MouseFollower({
         cursorCrossEl.style.opacity = String(opacity);
 
         cursorDotEl.style.transform = `translate(-50%, -50%) translate(${cursorDotCurrentRef.current.x}px, ${cursorDotCurrentRef.current.y}px) scale(${scale})`;
-        cursorDotEl.style.width = '6px';
-        cursorDotEl.style.height = '6px';
+        cursorDotEl.style.width = '5px';
+        cursorDotEl.style.height = '5px';
         cursorDotEl.style.opacity = String(opacity);
       }
 
@@ -386,6 +386,77 @@ function MouseFollower({
       <div ref={cursorCrossRef} className="mouse-cursor-cross" />
       <div ref={cursorDotRef} className="mouse-cursor-dot" />
     </>
+  );
+}
+
+type BlogPost = {
+  id: string;
+  title: string;
+  excerpt: string;
+  category: string;
+  date: string;
+  readTime: string;
+};
+
+const blogPosts: BlogPost[] = [
+  {
+    id: '1',
+    title: '从灵感上线：LiYuan Workbench 的设计哲学',
+    excerpt:
+      '我们如何在复杂工具与简洁体验之间找到平衡，让创作者专注于内容本身而非软件。',
+    category: '产品',
+    date: '2026-06-15',
+    readTime: '6 分钟',
+  },
+  {
+    id: '2',
+    title: '小型团队的云托管选型指南',
+    excerpt:
+      '从轻量博客到协作服务，梳理选型时需要关注的关键指标与常见误区。',
+    category: '技术',
+    date: '2026-06-08',
+    readTime: '8 分钟',
+  },
+  {
+    id: '3',
+    title: '「有生机的科技」意味着什么',
+    excerpt:
+      '技术不应只是效率工具，更应该成为创造者与用户之间温暖的连接。',
+    category: '思考',
+    date: '2026-05-28',
+    readTime: '5 分钟',
+  },
+];
+
+function Blog({ glowRef }: { glowRef: React.RefObject<GlowPosition | null> }) {
+  return (
+    <section className="blog" id="blog" aria-labelledby="blog-title">
+      <MaskedHeading as="h2" id="blog-title" glowRef={glowRef}>
+        博客
+      </MaskedHeading>
+      <p className="blog-lead">
+        记录产品迭代、技术探索与我们对数字体验的思考。
+      </p>
+
+      <div className="blog-grid">
+        {blogPosts.map((post) => (
+          <article key={post.id} className="blog-card">
+            <div className="blog-card-meta">
+              <span className="blog-tag">{post.category}</span>
+              <span className="blog-date">{post.date}</span>
+            </div>
+            <h3>{post.title}</h3>
+            <p>{post.excerpt}</p>
+            <div className="blog-card-footer">
+              <span className="blog-read-time">{post.readTime}</span>
+              <a className="blog-link" href="#">
+                阅读更多 →
+              </a>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -496,6 +567,8 @@ function App() {
             </article>
           </div>
         </section>
+
+        <Blog glowRef={glowRef} />
       </main>
     </>
   );
