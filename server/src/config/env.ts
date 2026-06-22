@@ -14,6 +14,7 @@ export const env = {
   PORT: Number(process.env.PORT ?? '3000'),
   MONGODB_URI: requireEnv('MONGODB_URI'),
   API_KEY: requireEnv('API_KEY'),
+  JWT_SECRET: requireEnv('JWT_SECRET'),
   CORS_ORIGIN: requireEnv('CORS_ORIGIN')
     .split(',')
     .map((s) => s.trim())

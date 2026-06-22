@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
 
 const API_HEALTH_URL = 'http://localhost:3000/api/health';
 
@@ -41,7 +42,16 @@ function backendHealthCheck(): Plugin {
 
 export default defineConfig({
   plugins: [react(), backendHealthCheck()],
-  base: './',
+  base: '/',
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        papyrusdesktop: resolve(__dirname, 'products/papyrusdesktop/index.html'),
+        login: resolve(__dirname, 'login/index.html'),
+      },
+    },
+  },
   server: {
     proxy: {
       '/api': {

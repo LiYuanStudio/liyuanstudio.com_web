@@ -30,3 +30,14 @@ export interface BlogPost {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface User {
+  _id: string;
+  email: string;
+  avatar: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}

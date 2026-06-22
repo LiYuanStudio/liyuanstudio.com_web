@@ -1,0 +1,430 @@
+.papyrus-page {
+  min-height: 100vh;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  cursor: none;
+}
+
+.papyrus-page a,
+.papyrus-page button,
+.papyrus-page [role="button"] {
+  cursor: none;
+}
+
+
+.papyrus-nav {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10001;
+  padding: 28px 24px 12px;
+  min-height: 84px;
+}
+
+.papyrus-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 100%);
+}
+
+.papyrus-nav-inner {
+  width: min(100% - 48px, 1120px);
+  margin: 0 auto;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.papyrus-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1d1d1f;
+  text-decoration: none;
+}
+
+.papyrus-brand img {
+  width: 28px;
+  height: 28px;
+}
+
+.papyrus-nav-link {
+  font-size: 14px;
+  color: #0071e3;
+  text-decoration: none;
+}
+
+.papyrus-nav-link:hover {
+  text-decoration: underline;
+}
+
+.papyrus-hero {
+  padding: 100px 0 80px;
+  text-align: center;
+}
+
+.papyrus-hero-inner {
+  width: min(100% - 48px, 800px);
+  margin: 0 auto;
+}
+
+.papyrus-eyebrow {
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6e6e73;
+}
+
+.papyrus-hero h1 {
+  width: max-content;
+  margin: 0 auto 12px;
+  font-size: clamp(40px, 8vw, 72px);
+  line-height: 1.05;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.papyrus-version {
+  font-size: 16px;
+  color: #86868b;
+  margin-bottom: 24px;
+}
+
+.papyrus-lead {
+  font-size: 20px;
+  line-height: 1.6;
+  color: #6e6e73;
+  margin-bottom: 32px;
+  letter-spacing: 0.25em;
+}
+
+.papyrus-hero-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.papyrus-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 24px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.papyrus-button:hover {
+  transform: translateY(-2px);
+}
+
+.papyrus-button-primary {
+  background: #1d1d1f;
+  color: #fff;
+}
+
+.papyrus-button-secondary {
+  background: #fff;
+  color: #1d1d1f;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+}
+
+.papyrus-note {
+  font-size: 13px;
+  color: #86868b;
+}
+
+.papyrus-main {
+  width: min(100% - 48px, 1120px);
+  margin: 0 auto;
+  padding-bottom: 120px;
+}
+
+.papyrus-section {
+  margin-top: 80px;
+}
+
+.papyrus-section h2 {
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.papyrus-section-lead {
+  font-size: 17px;
+  color: #6e6e73;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.papyrus-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.papyrus-card {
+  background: #fff;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+}
+
+.papyrus-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.papyrus-card p {
+  font-size: 15px;
+  line-height: 1.55;
+  color: #6e6e73;
+}
+
+.papyrus-table-wrap {
+  overflow-x: auto;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+}
+
+.papyrus-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.papyrus-table th,
+.papyrus-table td {
+  padding: 16px 24px;
+  text-align: left;
+  border-bottom: 1px solid rgba(29, 29, 31, 0.06);
+}
+
+.papyrus-table th {
+  font-weight: 600;
+  color: #6e6e73;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.papyrus-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.papyrus-table kbd {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #f5f5f7;
+  border: 1px solid rgba(29, 29, 31, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+}
+
+.papyrus-stack {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.papyrus-stack li {
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px 22px;
+  font-size: 15px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+}
+
+.papyrus-footer {
+  border-top: 1px solid rgba(29, 29, 31, 0.06);
+}
+
+.papyrus-footer-inner {
+  width: min(100% - 48px, 1120px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.papyrus-download {
+  padding: 80px 0 60px;
+}
+
+.papyrus-download-title {
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 700;
+  margin: 0 0 32px;
+  text-align: center;
+  color: #1d1d1f;
+}
+
+.papyrus-download-status {
+  text-align: center;
+  color: #6e6e73;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.papyrus-download-status p {
+  margin: 0 0 16px;
+}
+
+.papyrus-download-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.papyrus-download-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: #fff;
+  border-radius: 24px;
+  padding: 32px 28px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.papyrus-download-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+}
+
+.papyrus-download-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 20px;
+}
+
+.papyrus-download-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.papyrus-download-info h4 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: #1d1d1f;
+}
+
+.papyrus-download-arch {
+  font-size: 13px;
+  color: #86868b;
+}
+
+.papyrus-download-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.papyrus-download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: #1d1d1f;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.papyrus-download-link:hover {
+  transform: translateY(-2px);
+  background: #000;
+}
+
+.papyrus-download-link-secondary {
+  background: #fff;
+  color: #1d1d1f;
+  border: 1px solid rgba(29, 29, 31, 0.12);
+}
+
+.papyrus-download-link-secondary:hover {
+  background: #f5f5f7;
+}
+
+.papyrus-footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 0;
+  border-top: 1px solid rgba(29, 29, 31, 0.06);
+  font-size: 13px;
+  color: #86868b;
+}
+
+.papyrus-footer-bottom a {
+  color: #86868b;
+  text-decoration: none;
+}
+
+.papyrus-footer-bottom a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .papyrus-hero {
+    padding: 72px 0 56px;
+  }
+
+  .papyrus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .papyrus-table th,
+  .papyrus-table td {
+    padding: 14px 18px;
+  }
+
+  .papyrus-download {
+    padding: 64px 0 48px;
+  }
+
+  .papyrus-download-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .papyrus-footer-bottom {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+}

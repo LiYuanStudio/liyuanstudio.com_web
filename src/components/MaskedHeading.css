@@ -1,0 +1,19 @@
+.masked-heading {
+  position: relative;
+  z-index: 10000;
+}
+
+.masked-base {
+  color: inherit;
+}
+
+.masked-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  height: 100%;
+  color: #ffffff;
+  pointer-events: none;
+  user-select: none;
+}

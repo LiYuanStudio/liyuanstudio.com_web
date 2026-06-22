@@ -167,6 +167,7 @@ npm run coverage:api  # backend only
 Dev details:
 
 - **Always use `npm run dev` for local development.** Do not start the frontend and backend manually in separate terminals unless you understand the setup. The orchestrator handles stale-process cleanup, backend health checks, and graceful shutdown.
+- `npm run dev` is a **long-running process** (it keeps both the API and Vite dev server alive until `Ctrl+C`). When running it as a background task, do not apply a timeout, or the task will be killed once the timeout expires.
 - `npm run dev` runs `scripts/dev.ts`, which:
   1. Kills stale `node.exe` processes on ports `3000` and `5173–5175`.
   2. Starts `npm run dev:api` and polls `http://localhost:3000/api/health` until ready.

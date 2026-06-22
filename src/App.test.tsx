@@ -32,7 +32,7 @@ describe('App', () => {
 
     expect(container.querySelector('#hero-title')).toBeInTheDocument();
     expect(container.querySelector('#products-title')).toBeInTheDocument();
-    expect(container.querySelector('.product-card-large h3')).toHaveTextContent('LiYuan Workbench');
+    expect(container.querySelector('.product-card-large h3')).toHaveTextContent('Papyrus Desktop');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
 

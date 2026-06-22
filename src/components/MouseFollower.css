@@ -1,0 +1,48 @@
+.mouse-glow {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 270px;
+  height: 270px;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  background: #206ccf;
+  z-index: 9998;
+  transition: opacity 180ms ease;
+  will-change: transform, width, height;
+}
+
+.mouse-cursor-cross {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 10002;
+  transition: opacity 180ms ease;
+  will-change: transform, opacity;
+  mix-blend-mode: difference;
+  background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48ZyBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PGxpbmUgeDE9IjMwIiB5MT0iMzAiIHgyPSIxMiIgeTI9IjEyIi8+PGxpbmUgeDE9IjcwIiB5MT0iMzAiIHgyPSI4OCIgeTI9IjEyIi8+PGxpbmUgeDE9IjMwIiB5MT0iNzAiIHgyPSIxMiIgeTI9Ijg4Ii8+PGxpbmUgeDE9IjcwIiB5MT0iNzAiIHgyPSI4OCIgeTI9Ijg4Ii8+PC9nPjwvc3ZnPg==');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.mouse-cursor-dot {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  background: #ffffff;
+  z-index: 10002;
+  transition: opacity 180ms ease;
+  will-change: transform, opacity;
+  mix-blend-mode: difference;
+}
