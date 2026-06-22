@@ -18,3 +18,7 @@ vite.config.d.ts
 vite.config.js
 server/dist
 
+# test coverage
+coverage
+server/coverage
+

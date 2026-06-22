@@ -21,4 +21,6 @@ const NewsSchema = new mongoose.Schema<NewsUpdate>(
   { timestamps: true },
 );
 
-export const NewsModel = mongoose.model<NewsUpdate>('News', NewsSchema);
+export const NewsModel =
+  (mongoose.models.News as mongoose.Model<NewsUpdate>) ||
+  mongoose.model<NewsUpdate>('News', NewsSchema);

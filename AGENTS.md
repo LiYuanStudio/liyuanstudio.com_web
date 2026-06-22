@@ -24,6 +24,8 @@ This is the marketing site for **LiYuan Studio**. It is a client-side rendered R
 - **Language:** TypeScript 5 in strict mode
 - **Styling:** Plain CSS (`src/styles.css`), no CSS-in-JS or preprocessor
 - **Icons:** `@arco-design/web-react/icon`
+- **Testing:** Vitest 3 with `@testing-library/react`, `jsdom`, and `@testing-library/jest-dom` (frontend); Vitest in Node environment (backend)
+- **Coverage:** `@vitest/coverage-v8` with 80% thresholds for statements, branches, functions, and lines
 
 ### Backend
 
@@ -46,7 +48,9 @@ Key configuration files:
 | `vite.config.ts` | Vite config (React plugin + dev proxy) |
 | `tsconfig.json` | TypeScript config for application code (`src/`) |
 | `tsconfig.node.json` | TypeScript config for build tooling (`vite.config.ts`) |
-| `server/tsconfig.json` | TypeScript config for the backend |
+| `server/tsconfig.json` | TypeScript config for the backend (excludes `**/*.test.ts` and `src/test` from build) |
+| `vitest.config.ts` | Vitest config for frontend tests and coverage |
+| `server/vitest.config.ts` | Vitest config for backend tests and coverage |
 | `wrangler.jsonc` | Cloudflare / Wrangler static-asset deployment config |
 | `vercel.json` | Vercel function config for the API |
 | `index.html` | HTML entry point, references `/src/main.tsx` |
@@ -82,12 +86,22 @@ Key configuration files:
 │   │   ├── routes/blog.ts  # /blog CRUD routes
 │   │   ├── models/news.ts  # News Mongoose model
 │   │   ├── models/blog.ts  # Blog Mongoose model
-│   │   └── middleware/     # admin auth, error handler
-│   └── scripts/seed.ts     # Seed sample news/blog data
+│   │   ├── middleware/     # admin auth, error handler (each with `.test.ts`)
+│   │   ├── test/
+│   │   │   └── setup.ts    # Vitest setup: mocks Hono logger in tests
+│   │   ├── *.test.ts       # Co-located unit tests for env, lib, models, routes, and app
+│   │   └── scripts/seed.ts # Seed sample news/blog posts
 ├── src/
-│   ├── main.tsx            # Application root; all components live here
+│   ├── main.tsx            # React bootstrap entry
+│   ├── App.tsx             # Page components (App, MouseFollower, MaskedHeading, News, Blog, Footer)
 │   ├── api.ts              # fetchNews / fetchBlogPosts helpers
-│   ├── config/env.ts       # Vite env validation
+│   ├── api.test.ts         # API helper tests
+│   ├── App.test.tsx        # Component tests
+│   ├── config/
+│   │   ├── env.ts          # Vite env validation
+│   │   └── env.test.ts     # Env validation tests
+│   ├── test/
+│   │   └── setup.ts        # Vitest setup: jsdom canvas mock + jest-dom matchers
 │   ├── types.ts            # Shared TS types
 │   └── styles.css          # Global and component styles
 ├── public/
@@ -98,11 +112,12 @@ Key configuration files:
 ## Code organization
 
 - **Single entry:** `src/main.tsx` bootstraps the React app into `#root` in `index.html`.
-- **Components are colocated in `main.tsx`:**
+- **Components live in `src/App.tsx`:**
   - `App` — top-level layout (nav, hero, products, news, blog).
   - `MouseFollower` — fixed-position cursor glow that follows the mouse.
   - `MaskedHeading` — renders two stacked text layers and reveals a white overlay clipped to a circle near the cursor.
   - `News` / `Blog` — fetch dynamic data on mount and render cards.
+  - `Footer` — site footer.
 - **Data fetching:** `src/api.ts` exports `fetchNews()` and `fetchBlogPosts()`, which call `${env.API_BASE_URL}/news` and `/blog`.
 - **Environment access:** `src/config/env.ts` validates `import.meta.env.VITE_API_BASE_URL` at runtime. Local dev uses `/api`; production uses a full URL from `.env.production`.
 - **Static assets:** images referenced from `/png/...` live in `public/png/`. Vite serves `public/` at the site root in dev and copies it to `dist/` on build. Favicons are referenced explicitly in `index.html`.
@@ -137,6 +152,16 @@ npm run seed:api
 
 # Preview the production frontend build locally
 npm run preview
+
+# Run tests
+npm run test          # frontend + backend
+npm run test:web      # frontend only
+npm run test:api      # backend only
+
+# Run tests with coverage
+npm run coverage      # frontend + backend
+npm run coverage:web  # frontend only
+npm run coverage:api  # backend only
 ```
 
 Dev details:
@@ -156,7 +181,13 @@ Dev details:
 
 ### Testing
 
-There are currently **no tests** and no test runner configured. If you add tests, install the runner (e.g., Vitest) and update `package.json` scripts; keep the existing `build`, `dev`, and `preview` scripts intact.
+Tests run with **Vitest**. Frontend tests use `jsdom` and `@testing-library/react`; backend tests run in the Node environment and mock the database layer.
+
+- `npm run test` runs the full suite (34 frontend tests + 46 backend tests at the time of writing).
+- `npm run coverage` enforces 80% thresholds for statements, branches, functions, and lines.
+- Backend tests mock `connectDB` and the Mongoose models so they do not require a running MongoDB instance.
+- Security-focused tests cover the `X-API-Key` check (missing, wrong, different-length, timing-safe behavior), CORS origin whitelist, and production error-message leakage.
+- Keep the existing `build`, `dev`, and `preview` scripts intact when modifying scripts.
 
 ## Deployment process
 
@@ -187,7 +218,7 @@ There are currently **no tests** and no test runner configured. If you add tests
 - Prefer **functional components** and React hooks.
 - Event listeners added in `useEffect` must be removed in the cleanup function.
 - Keep component props typed with inline TypeScript interfaces/types.
-- Keep runtime constants that depend on CSS values in sync with `styles.css` (e.g., `GLOW_RADIUS` in `main.tsx` must match the `.mouse-glow` diameter).
+- Keep runtime constants that depend on CSS values in sync with `styles.css` (e.g., `GLOW_RADIUS` in `App.tsx` must match the `.mouse-glow` diameter).
 - Validate environment variables explicitly; do not assume `import.meta.env` or `process.env` values exist.
 - CSS:
   - Use CSS custom properties sparingly; the current palette is hard-coded in `styles.css`.
