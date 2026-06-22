@@ -537,32 +537,32 @@ function App() {
 
           <div className="product-grid">
             <article className="product-card product-card-large">
-              <div className="product-card-content">
-                <span className="product-tag">旗舰</span>
+              <div className="product-card-preview product-card-preview-large" aria-hidden="true">
+                <div className="preview-block preview-block-large" />
+              </div>
+              <div className="product-card-content product-card-content-large">
                 <h3>LiYuan Workbench</h3>
                 <p>一站式创作工作台，把灵感快速变成可交付的作品。</p>
-                <a className="product-link" href="#">了解更多 →</a>
-              </div>
-              <div className="product-card-preview" aria-hidden="true">
-                <div className="preview-block" />
+                <div className="product-card-meta">
+                  <span className="product-tag">旗舰</span>
+                  <a className="product-link" href="#">了解更多 →</a>
+                </div>
               </div>
             </article>
 
-            <article className="product-card">
+            <article className="product-card product-card-side product-card-side-1">
               <div className="product-card-content">
-                <span className="product-tag">工具</span>
                 <h3>LiYuan Sync</h3>
                 <p>多端实时同步，文件与数据始终触手可及。</p>
-                <a className="product-link" href="#">了解更多 →</a>
+                <span className="product-tag">工具</span>
               </div>
             </article>
 
-            <article className="product-card">
+            <article className="product-card product-card-side product-card-side-2">
               <div className="product-card-content">
-                <span className="product-tag">服务</span>
                 <h3>LiYuan Cloud</h3>
                 <p>为小型团队打造的轻量云托管方案。</p>
-                <a className="product-link" href="#">了解更多 →</a>
+                <span className="product-tag">服务</span>
               </div>
             </article>
           </div>
