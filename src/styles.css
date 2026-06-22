@@ -511,13 +511,13 @@ h1 {
   display: flex;
   flex-direction: column;
   min-height: 460px;
-  padding: 16px 16px 32px;
   border-radius: 18px;
   background: #ffffff;
   box-shadow:
     0 8px 30px rgba(0, 0, 0, 0.07),
     0 2px 8px rgba(0, 0, 0, 0.04);
   text-align: left;
+  overflow: hidden;
   transition:
     transform 260ms ease,
     box-shadow 260ms ease;
@@ -530,33 +530,46 @@ h1 {
     0 6px 14px rgba(0, 0, 0, 0.05);
 }
 
+.news-card-hero {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 32px;
+  text-align: center;
+  background: linear-gradient(135deg, #ff9a7b 0%, #ffc9a8 100%);
+}
+
+.news-card-hero h4 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.2;
+  font-weight: 700;
+  max-width: 260px;
+}
+
 .news-card-content {
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding: 22px 8px 0;
+  gap: 12px;
+  padding: 28px 32px 32px;
+  background: #ffffff;
 }
 
 .news-card h3 {
-  margin: 14px 0 0;
+  margin: 0;
   font-size: 24px;
   line-height: 1.25;
   font-weight: 700;
 }
 
 .news-card p {
-  margin-top: 12px;
+  margin: 0;
   color: #6e6e73;
   font-size: 16px;
   line-height: 1.55;
-}
-
-.news-card-meta {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 .news-tag {
@@ -580,22 +593,10 @@ h1 {
   display: flex;
   width: 100%;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: auto;
   padding-top: 20px;
-}
-
-.news-link {
-  padding: 0;
-  border: none;
-  background: transparent;
-  font-size: 15px;
-  font-weight: 600;
-  color: #0071e3;
-  transition: opacity 160ms ease;
-}
-
-.news-link:hover {
-  opacity: 0.72;
 }
 
 .blog {
@@ -637,13 +638,13 @@ h1 {
   display: flex;
   flex-direction: column;
   min-height: 460px;
-  padding: 16px 16px 32px;
   border-radius: 18px;
   background: #ffffff;
   box-shadow:
     0 8px 30px rgba(0, 0, 0, 0.07),
     0 2px 8px rgba(0, 0, 0, 0.04);
   text-align: left;
+  overflow: hidden;
   transition:
     transform 260ms ease,
     box-shadow 260ms ease;
@@ -656,33 +657,46 @@ h1 {
     0 6px 14px rgba(0, 0, 0, 0.05);
 }
 
+.blog-card-hero {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 32px;
+  text-align: center;
+  background: linear-gradient(135deg, #5bb8ff 0%, #a8d8ff 100%);
+}
+
+.blog-card-hero h4 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.2;
+  font-weight: 700;
+  max-width: 260px;
+}
+
 .blog-card-content {
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding: 22px 8px 0;
+  gap: 12px;
+  padding: 28px 32px 32px;
+  background: #ffffff;
 }
 
 .blog-card h3 {
-  margin: 14px 0 0;
+  margin: 0;
   font-size: 24px;
   line-height: 1.25;
   font-weight: 700;
 }
 
 .blog-card p {
-  margin-top: 12px;
+  margin: 0;
   color: #6e6e73;
   font-size: 16px;
   line-height: 1.55;
-}
-
-.blog-card-meta {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 .blog-tag {
@@ -707,28 +721,9 @@ h1 {
   width: 100%;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-top: auto;
   padding-top: 20px;
-}
-
-.blog-read-time {
-  color: #86868b;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.blog-link {
-  padding: 0;
-  border: none;
-  background: transparent;
-  font-size: 15px;
-  font-weight: 600;
-  color: #0071e3;
-  transition: opacity 160ms ease;
-}
-
-.blog-link:hover {
-  opacity: 0.72;
 }
 
 .polaroid-photo {
@@ -1008,11 +1003,18 @@ h1 {
 
   .news-card {
     min-height: 420px;
-    padding: 14px 14px 26px;
+  }
+
+  .news-card-hero {
+    padding: 28px 24px;
+  }
+
+  .news-card-hero h4 {
+    font-size: 22px;
   }
 
   .news-card-content {
-    padding: 18px 6px 0;
+    padding: 24px;
   }
 
   .news-card h3 {
@@ -1044,11 +1046,18 @@ h1 {
 
   .blog-card {
     min-height: 420px;
-    padding: 14px 14px 26px;
+  }
+
+  .blog-card-hero {
+    padding: 28px 24px;
+  }
+
+  .blog-card-hero h4 {
+    font-size: 22px;
   }
 
   .blog-card-content {
-    padding: 18px 6px 0;
+    padding: 24px;
   }
 
   .blog-card h3 {

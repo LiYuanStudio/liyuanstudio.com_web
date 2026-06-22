@@ -85,7 +85,8 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('「有生机的科技」意味着什么')).toBeInTheDocument();
       expect(screen.getByText('技术不应只是效率工具')).toBeInTheDocument();
-      expect(screen.getByText('5 分钟')).toBeInTheDocument();
+      expect(screen.getByText('思考')).toBeInTheDocument();
+      expect(screen.getByText('2026-05-28')).toBeInTheDocument();
     });
   });
 
@@ -179,14 +180,15 @@ describe('News component', () => {
     });
   });
 
-  it('renders update images when present', async () => {
+  it('renders update hero with tag', async () => {
     const updates: NewsUpdate[] = [
       { slug: 'a', title: 'A', description: 'Desc A', tag: 'T', date: '2026-01-01', image: '/png/logo.png' },
     ];
     mockFetchNews.mockResolvedValueOnce(updates);
     const { container } = render(<News glowRef={{ current: null }} />);
     await waitFor(() => {
-      expect(container.querySelector('img')).toBeInTheDocument();
+      expect(container.querySelector('.news-card-hero')).toBeInTheDocument();
+      expect(container.querySelector('.news-card-hero h4')).toHaveTextContent('T');
     });
   });
 });
@@ -204,14 +206,15 @@ describe('Blog component', () => {
     });
   });
 
-  it('renders post images when present', async () => {
+  it('renders post hero with category', async () => {
     const posts: BlogPost[] = [
       { slug: 'b', title: 'B', excerpt: 'Excerpt B', category: 'C', date: '2026-01-01', readTime: '1 min', image: '/png/logo.png' },
     ];
     mockFetchBlogPosts.mockResolvedValueOnce(posts);
     const { container } = render(<Blog glowRef={{ current: null }} />);
     await waitFor(() => {
-      expect(container.querySelector('img')).toBeInTheDocument();
+      expect(container.querySelector('.blog-card-hero')).toBeInTheDocument();
+      expect(container.querySelector('.blog-card-hero h4')).toHaveTextContent('C');
     });
   });
 });

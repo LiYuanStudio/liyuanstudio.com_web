@@ -489,22 +489,15 @@ export const News = React.forwardRef<
         <div className="news-grid">
           {updates.map((update) => (
             <article key={update._id ?? update.slug} className="news-card">
-              <div className="polaroid-photo">
-                {update.image ? (
-                  <img src={update.image} alt="" loading="lazy" />
-                ) : null}
+              <div className="news-card-hero">
+                <h4>{update.tag}</h4>
               </div>
               <div className="news-card-content">
-                <div className="news-card-meta">
-                  <span className="news-tag">{update.tag}</span>
-                  <span className="news-date">{update.date}</span>
-                </div>
                 <h3>{update.title}</h3>
                 <p>{update.description}</p>
                 <div className="news-card-footer">
-                  <button type="button" className="news-link">
-                    查看详情 →
-                  </button>
+                  <span className="news-tag">动态</span>
+                  <span className="news-date">{update.date}</span>
                 </div>
               </div>
             </article>
@@ -565,23 +558,15 @@ export const Blog = React.forwardRef<
         <div className="blog-grid">
           {posts.map((post) => (
             <article key={post._id ?? post.slug} className="blog-card">
-              <div className="polaroid-photo">
-                {post.image ? (
-                  <img src={post.image} alt="" loading="lazy" />
-                ) : null}
+              <div className="blog-card-hero">
+                <h4>{post.category}</h4>
               </div>
               <div className="blog-card-content">
-                <div className="blog-card-meta">
-                  <span className="blog-tag">{post.category}</span>
-                  <span className="blog-date">{post.date}</span>
-                </div>
                 <h3>{post.title}</h3>
                 <p>{post.excerpt}</p>
                 <div className="blog-card-footer">
-                  <span className="blog-read-time">{post.readTime}</span>
-                  <button type="button" className="blog-link">
-                    阅读更多 →
-                  </button>
+                  <span className="blog-tag">博客</span>
+                  <span className="blog-date">{post.date}</span>
                 </div>
               </div>
             </article>
