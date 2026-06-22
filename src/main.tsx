@@ -7,16 +7,11 @@ import React, {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import { IconGithub } from '@arco-design/web-react/icon';
+import { fetchBlogPosts, fetchNews } from './api.js';
+import type { BlogPost, GlowPosition, NewsUpdate } from './types.js';
 import './styles.css';
 
 type HeadingTag = 'h1' | 'h2';
-
-type GlowPosition = {
-  x: number;
-  y: number;
-  size: number;
-  visible: boolean;
-};
 
 // Must match the .mouse-glow diameter (270px) in styles.css.
 const GLOW_RADIUS = 135;
@@ -390,128 +385,6 @@ function MouseFollower({
   );
 }
 
-type NewsUpdate = {
-  id: string;
-  title: string;
-  description: string;
-  tag: string;
-  date: string;
-  image?: string;
-};
-
-type BlogPost = {
-  id: string;
-  title: string;
-  excerpt: string;
-  category: string;
-  date: string;
-  readTime: string;
-  image?: string;
-};
-
-const newsUpdates: NewsUpdate[] = [
-  {
-    id: '1',
-    title: 'LiYuan Workbench 开放内测',
-    description:
-      '首批创作者已入驻，欢迎提交申请，与我们一起打磨下一代创作工具。',
-    tag: '产品动态',
-    date: '2026-06-20',
-  },
-  {
-    id: '2',
-    title: '官网视觉全新升级',
-    description:
-      '更轻盈的界面、更流畅的动效，让每一次访问都像第一次见面。',
-    tag: '品牌',
-    date: '2026-06-10',
-  },
-  {
-    id: '3',
-    title: '加入 Cloudflare 创业支持计划',
-    description:
-      '借助全球边缘网络，为我们的服务带来更快、更稳定的访问体验。',
-    tag: '合作',
-    date: '2026-05-22',
-  },
-];
-
-const blogPosts: BlogPost[] = [
-  {
-    id: '1',
-    title: '从灵感上线：LiYuan Workbench 的设计哲学',
-    excerpt:
-      '我们如何在复杂工具与简洁体验之间找到平衡，让创作者专注于内容本身而非软件。',
-    category: '产品',
-    date: '2026-06-15',
-    readTime: '6 分钟',
-  },
-  {
-    id: '2',
-    title: '小型团队的云托管选型指南',
-    excerpt:
-      '从轻量博客到协作服务，梳理选型时需要关注的关键指标与常见误区。',
-    category: '技术',
-    date: '2026-06-08',
-    readTime: '8 分钟',
-  },
-  {
-    id: '3',
-    title: '「有生机的科技」意味着什么',
-    excerpt:
-      '技术不应只是效率工具，更应该成为创造者与用户之间温暖的连接。',
-    category: '思考',
-    date: '2026-05-28',
-    readTime: '5 分钟',
-  },
-];
-
-const News = React.forwardRef<
-  HTMLElement,
-  { glowRef: React.RefObject<GlowPosition | null> }
->(({ glowRef }, forwardedRef) => {
-  return (
-    <section
-      ref={forwardedRef}
-      className="news"
-      id="news"
-      aria-labelledby="news-title"
-    >
-      <MaskedHeading as="h2" id="news-title" glowRef={glowRef}>
-        最新动态
-      </MaskedHeading>
-      <p className="news-lead">
-        产品更新、品牌动向与团队成长的一线消息。
-      </p>
-
-      <div className="news-grid">
-        {newsUpdates.map((update) => (
-          <article key={update.id} className="news-card">
-            <div className="polaroid-photo">
-              {update.image ? (
-                <img src={update.image} alt="" loading="lazy" />
-              ) : null}
-            </div>
-            <div className="news-card-content">
-              <div className="news-card-meta">
-                <span className="news-tag">{update.tag}</span>
-                <span className="news-date">{update.date}</span>
-              </div>
-              <h3>{update.title}</h3>
-              <p>{update.description}</p>
-              <div className="news-card-footer">
-                <button type="button" className="news-link">
-                  查看详情 →
-                </button>
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-});
-
 function Footer() {
   return (
     <footer className="footer">
@@ -550,8 +423,6 @@ function Footer() {
             <div className="footer-group">
               <h4>联系</h4>
               <a href="mailto:hello@liyuanstudio.com">hello@liyuanstudio.com</a>
-              <a href="#" aria-label="GitHub">GitHub</a>
-              <a href="#" aria-label="Twitter">Twitter</a>
             </div>
             <div className="footer-group">
               <h4>法律</h4>
@@ -569,10 +440,110 @@ function Footer() {
   );
 }
 
+const News = React.forwardRef<
+  HTMLElement,
+  { glowRef: React.RefObject<GlowPosition | null> }
+>(({ glowRef }, forwardedRef) => {
+  const [updates, setUpdates] = useState<NewsUpdate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchNews()
+      .then((data) => {
+        if (cancelled) return;
+        setUpdates(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : '加载失败');
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section
+      ref={forwardedRef}
+      className="news"
+      id="news"
+      aria-labelledby="news-title"
+    >
+      <MaskedHeading as="h2" id="news-title" glowRef={glowRef}>
+        最新动态
+      </MaskedHeading>
+      <p className="news-lead">
+        产品更新、品牌动向与团队成长的一线消息。
+      </p>
+
+      {loading ? (
+        <p className="news-lead">加载中…</p>
+      ) : error ? (
+        <p className="news-lead" role="alert">{error}</p>
+      ) : (
+        <div className="news-grid">
+          {updates.map((update) => (
+            <article key={update._id ?? update.slug} className="news-card">
+              <div className="polaroid-photo">
+                {update.image ? (
+                  <img src={update.image} alt="" loading="lazy" />
+                ) : null}
+              </div>
+              <div className="news-card-content">
+                <div className="news-card-meta">
+                  <span className="news-tag">{update.tag}</span>
+                  <span className="news-date">{update.date}</span>
+                </div>
+                <h3>{update.title}</h3>
+                <p>{update.description}</p>
+                <div className="news-card-footer">
+                  <button type="button" className="news-link">
+                    查看详情 →
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+});
+
 const Blog = React.forwardRef<
   HTMLElement,
   { glowRef: React.RefObject<GlowPosition | null> }
 >(({ glowRef }, forwardedRef) => {
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchBlogPosts()
+      .then((data) => {
+        if (cancelled) return;
+        setPosts(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : '加载失败');
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <section
       ref={forwardedRef}
@@ -587,31 +558,37 @@ const Blog = React.forwardRef<
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
 
-      <div className="blog-grid">
-        {blogPosts.map((post) => (
-          <article key={post.id} className="blog-card">
-            <div className="polaroid-photo">
-              {post.image ? (
-                <img src={post.image} alt="" loading="lazy" />
-              ) : null}
-            </div>
-            <div className="blog-card-content">
-              <div className="blog-card-meta">
-                <span className="blog-tag">{post.category}</span>
-                <span className="blog-date">{post.date}</span>
+      {loading ? (
+        <p className="blog-lead">加载中…</p>
+      ) : error ? (
+        <p className="blog-lead" role="alert">{error}</p>
+      ) : (
+        <div className="blog-grid">
+          {posts.map((post) => (
+            <article key={post._id ?? post.slug} className="blog-card">
+              <div className="polaroid-photo">
+                {post.image ? (
+                  <img src={post.image} alt="" loading="lazy" />
+                ) : null}
               </div>
-              <h3>{post.title}</h3>
-              <p>{post.excerpt}</p>
-              <div className="blog-card-footer">
-                <span className="blog-read-time">{post.readTime}</span>
-                <button type="button" className="blog-link">
-                  阅读更多 →
-                </button>
+              <div className="blog-card-content">
+                <div className="blog-card-meta">
+                  <span className="blog-tag">{post.category}</span>
+                  <span className="blog-date">{post.date}</span>
+                </div>
+                <h3>{post.title}</h3>
+                <p>{post.excerpt}</p>
+                <div className="blog-card-footer">
+                  <span className="blog-read-time">{post.readTime}</span>
+                  <button type="button" className="blog-link">
+                    阅读更多 →
+                  </button>
+                </div>
               </div>
-            </div>
-          </article>
-        ))}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 });
