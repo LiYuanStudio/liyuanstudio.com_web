@@ -6,6 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { createRoot } from 'react-dom/client';
+import { IconGithub } from '@arco-design/web-react/icon';
 import './styles.css';
 
 type HeadingTag = 'h1' | 'h2';
@@ -517,11 +518,21 @@ function Footer() {
       <div className="footer-inner">
         <div className="footer-main">
           <div className="footer-brand">
-            <a className="brand footer-brand-link" href="/" aria-label="LiYuan Studio home">
+            <a className="footer-brand-link" href="/" aria-label="LiYuan Studio home">
               <img src="/png/logo.png" alt="" />
               <span>LiYuan Studio</span>
             </a>
             <p className="footer-tagline">打造「有生机的科技」</p>
+            <div className="footer-socials">
+              <a
+                href="https://github.com/LiYuanStudio"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub"
+              >
+                <IconGithub style={{ fontSize: '16px' }} />
+              </a>
+            </div>
           </div>
 
           <nav className="footer-nav" aria-label="Footer">
@@ -541,6 +552,11 @@ function Footer() {
               <a href="mailto:hello@liyuanstudio.com">hello@liyuanstudio.com</a>
               <a href="#" aria-label="GitHub">GitHub</a>
               <a href="#" aria-label="Twitter">Twitter</a>
+            </div>
+            <div className="footer-group">
+              <h4>法律</h4>
+              <a href="#">服务条款</a>
+              <a href="#">隐私政策</a>
             </div>
           </nav>
         </div>
