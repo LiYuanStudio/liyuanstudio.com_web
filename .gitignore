@@ -7,6 +7,9 @@
 !.env.example
 !.env.production
 
+# local account notes
+accounts.md
+
 # build files
 dist
 node_modules
