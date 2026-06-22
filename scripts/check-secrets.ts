@@ -4,6 +4,7 @@ import { extname, relative, resolve } from 'node:path';
 
 const ALLOWLIST = new Set([
   '.env.example',
+  '.env.production',
   'server/.env.example',
   'README.md',
   'AGENTS.md',
