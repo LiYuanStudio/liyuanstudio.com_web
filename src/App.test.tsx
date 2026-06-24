@@ -5,11 +5,20 @@ import { App, Footer, News, Blog, MouseFollower, MaskedHeading, clamp, lerp, eas
 import { fetchNews, fetchBlogPosts } from './api.js';
 import type { GlowPosition, NewsUpdate, BlogPost } from './types.js';
 import { createRef } from 'react';
+import { AuthProvider } from './context/AuthContext.js';
 
 vi.mock('./api.js');
 
 const mockFetchNews = vi.mocked(fetchNews);
 const mockFetchBlogPosts = vi.mocked(fetchBlogPosts);
+
+function renderApp() {
+  return render(
+    <AuthProvider>
+      <App />
+    </AuthProvider>,
+  );
+}
 
 describe('App', () => {
   beforeEach(() => {
@@ -28,7 +37,7 @@ describe('App', () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockResolvedValue([]);
 
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     expect(container.querySelector('#hero-title')).toBeInTheDocument();
     expect(container.querySelector('#products-title')).toBeInTheDocument();
@@ -56,7 +65,7 @@ describe('App', () => {
     mockFetchNews.mockResolvedValue(news);
     mockFetchBlogPosts.mockResolvedValue([]);
 
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText('官网视觉全新升级')).toBeInTheDocument();
@@ -80,7 +89,7 @@ describe('App', () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockResolvedValue(posts);
 
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText('「有生机的科技」意味着什么')).toBeInTheDocument();
@@ -94,7 +103,7 @@ describe('App', () => {
     mockFetchNews.mockRejectedValue(new Error('news down'));
     mockFetchBlogPosts.mockRejectedValue(new Error('blog down'));
 
-    render(<App />);
+    renderApp();
 
     await waitFor(() => {
       expect(screen.getByText('news down')).toBeInTheDocument();
@@ -109,7 +118,7 @@ describe('App', () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
 
-    render(<App />);
+    renderApp();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: '产品' }));
@@ -424,3 +433,4 @@ describe('MaskedHeading', () => {
     await new Promise((r) => requestAnimationFrame(r));
   });
 });
+

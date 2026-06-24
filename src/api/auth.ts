@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import type { AuthResponse, User } from '../types.js';
+import type { AuthResponse, MessageResponse, RegisterResponse, User } from '../types.js';
 
 const TOKEN_KEY = 'liyuan_auth_token';
 
@@ -40,13 +40,15 @@ async function fetchJson<T>(
   return res.json() as Promise<T>;
 }
 
-export async function register(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetchJson<AuthResponse>('/auth/register', {
+export function register(
+  email: string,
+  password: string,
+  displayName: string,
+): Promise<RegisterResponse> {
+  return fetchJson<RegisterResponse>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, displayName }),
   });
-  setStoredToken(response.token);
-  return response;
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
@@ -60,6 +62,17 @@ export async function login(email: string, password: string): Promise<AuthRespon
 
 export function fetchMe(): Promise<{ user: User }> {
   return fetchJson<{ user: User }>('/auth/me');
+}
+
+export function verifyEmail(token: string): Promise<MessageResponse> {
+  return fetchJson<MessageResponse>(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+}
+
+export function resendVerification(email: string): Promise<MessageResponse> {
+  return fetchJson<MessageResponse>('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
 }
 
 export function updateAvatar(avatarUrl: string): Promise<{ user: User }> {

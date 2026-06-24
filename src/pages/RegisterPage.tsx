@@ -1,7 +1,7 @@
 import { AuthForm } from '../components/AuthForm.js';
 import './login.css';
 
-export function LoginPage() {
+export function RegisterPage() {
   return (
     <div className="login-page">
       <nav className="login-nav">
@@ -12,12 +12,7 @@ export function LoginPage() {
       </nav>
 
       <main className="login-main">
-        <AuthForm
-          initialMode="login"
-          onSuccess={() => {
-            window.location.href = '/';
-          }}
-        />
+        <AuthForm initialMode="register" allowModeSwitch={false} />
       </main>
     </div>
   );

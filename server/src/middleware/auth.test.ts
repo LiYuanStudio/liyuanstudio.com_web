@@ -1,21 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
-import { signToken, verifyToken, requireAuth } from './auth.js';
+import { signToken, verifyToken, requireAuth, requireAdmin } from './auth.js';
 
 describe('auth middleware', () => {
   let token: string;
 
   beforeEach(async () => {
-    token = await signToken('user-123');
+    token = await signToken({
+      id: 'user-123',
+      email: 'user@example.com',
+      role: 'user',
+    });
   });
 
-  afterEach(() => {
-    // Reset env stub if any.
-  });
-
-  it('signs and verifies a token', async () => {
-    const userId = await verifyToken(token);
-    expect(userId).toBe('user-123');
+  it('signs and verifies a token with user payload', async () => {
+    const user = await verifyToken(token);
+    expect(user).toEqual({
+      id: 'user-123',
+      email: 'user@example.com',
+      role: 'user',
+    });
   });
 
   it('rejects an invalid token', async () => {
@@ -25,14 +29,17 @@ describe('auth middleware', () => {
   it('allows requests with a valid bearer token', async () => {
     const app = new Hono();
     app.use('/me', requireAuth);
-    app.get('/me', (c) => c.json({ userId: c.get('userId') }));
+    app.get('/me', (c) => c.json({ userId: c.get('userId'), user: c.get('authUser') }));
 
     const res = await app.request('/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: 'user-123' });
+    expect(await res.json()).toEqual({
+      userId: 'user-123',
+      user: { id: 'user-123', email: 'user@example.com', role: 'user' },
+    });
   });
 
   it('rejects requests without authorization header', async () => {
@@ -56,5 +63,34 @@ describe('auth middleware', () => {
     });
 
     expect(res.status).toBe(401);
+  });
+
+  it('allows admin users through requireAdmin', async () => {
+    const adminToken = await signToken({
+      id: 'admin-1',
+      email: 'admin@example.com',
+      role: 'admin',
+    });
+    const app = new Hono();
+    app.use('/admin', requireAuth, requireAdmin);
+    app.get('/admin', (c) => c.json({ ok: true }));
+
+    const res = await app.request('/admin', {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects non-admin users in requireAdmin', async () => {
+    const app = new Hono();
+    app.use('/admin', requireAuth, requireAdmin);
+    app.get('/admin', (c) => c.json({ ok: true }));
+
+    const res = await app.request('/admin', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(403);
   });
 });

@@ -8,7 +8,7 @@ LiYuan Studio 官网。
 
 ## 目录结构
 
-```
+```text
 .
 ├── api/              # Vercel Serverless Functions 入口
 ├── server/           # Hono + Mongoose 后端源码
@@ -33,14 +33,14 @@ npm install
 ```bash
 # 前端
 cp .env.example .env
-# 编辑 .env，填入 VITE_API_BASE_URL=http://localhost:3000/api
+# 本地一般保持 VITE_API_BASE_URL=/api，让 Vite 代理到后端
 
 # 后端
 cp server/.env.example server/.env
-# 编辑 server/.env，填入 MONGODB_URI、API_KEY、CORS_ORIGIN
+# 编辑 server/.env，填入本地 MongoDB/Atlas、API_KEY、JWT_SECRET、CORS_ORIGIN、APP_URL
 ```
 
-> ⚠️ `.env` 文件已被 `.gitignore` 忽略，**永远不要**把真实密钥提交到仓库。
+本地开发可以不配置邮件服务：保持 `EMAIL_PROVIDER=` 为空，注册时后端会在控制台打印邮箱验证链接。不要把 `.env`、API Key、token、密码或真实数据库连接提交到仓库。
 
 ### 3. 初始化数据库示例数据
 
@@ -51,25 +51,38 @@ npm run seed:api
 ### 4. 同时启动前后端
 
 ```bash
-# 终端 1：后端
-npm run dev:api
-
-# 终端 2：前端
 npm run dev
 ```
 
-前端默认在 `http://localhost:5173`，后端默认在 `http://localhost:3000/api`。
+`npm run dev` 会先启动后端 API 并等待 `/api/health`，再启动 Vite。前端默认在 `http://localhost:5173`，后端默认在 `http://localhost:3000/api`。
 
 ## 常用脚本
 
 | 脚本 | 说明 |
 |---|---|
-| `npm run dev` | 启动 Vite 前端开发服务器 |
+| `npm run dev` | 同时启动后端 API 和 Vite 前端 |
+| `npm run dev:web` | 仅启动 Vite 前端 |
 | `npm run build` | 前端 TypeScript 检查并构建 |
 | `npm run dev:api` | 启动 Hono 后端开发服务器 |
 | `npm run build:api` | 编译后端 TypeScript |
 | `npm run seed:api` | 向后端数据库写入示例新闻/博客数据 |
 | `npm run check:secrets` | 扫描仓库中可能的密钥泄漏 |
+
+## 账号系统
+
+### 公开认证接口
+
+- `POST /api/auth/register` — 注册账号，body: `{ email, password, displayName }`
+- `POST /api/auth/login` — 登录，body: `{ email, password }`
+- `GET /api/auth/me` — 当前用户，需要 `Authorization: Bearer <token>`
+- `GET /api/auth/verify-email?token=xxx` — 邮箱验证
+- `POST /api/auth/resend-verification` — 重发验证邮件，body: `{ email }`
+
+注册接口不会接受 `role`，新用户默认 `role=user` 且 `emailVerified=false`。密码只保存 bcrypt hash；邮箱验证 token 只以 SHA-256 hash 保存到数据库，明文 token 只通过邮件链接发送给用户。
+
+### 管理员
+
+第一位管理员需要在 MongoDB Atlas 中手动把对应用户文档的 `role` 改为 `admin`。前端不会决定用户是否为管理员；管理员权限以后端 JWT 和 `role` 为准。
 
 ## 部署
 
@@ -83,29 +96,37 @@ npm run build
 
 然后在 Cloudflare Pages 控制台设置环境变量：
 
-```
+```text
 VITE_API_BASE_URL=https://<your-vercel-project>.vercel.app/api
 ```
 
 ### 后端（Vercel）
 
-1. 在 Vercel 新建 Project，关联本仓库。
-2. 在 Vercel 面板添加环境变量：
-   - `MONGODB_URI`
-   - `API_KEY`
-   - `CORS_ORIGIN`
-3. 部署完成后，API 入口为 `https://<your-vercel-project>.vercel.app/api/*`。
+在 Vercel Project 的环境变量中配置：
+
+- `MONGODB_URI`
+- `API_KEY`
+- `JWT_SECRET`
+- `CORS_ORIGIN`，包含生产前端域名
+- `APP_URL`，生产前端地址，例如 `https://liyuanstudio.com`
+- `EMAIL_PROVIDER=resend`
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+
+生产邮件使用 Resend。请在 Resend 配置发信域名，并在 Cloudflare DNS 中添加 Resend 要求的 DNS 记录，等域名验证通过后再启用生产注册邮件。
+
+部署完成后，API 入口为 `https://<your-vercel-project>.vercel.app/api/*`。
 
 ## API 说明
 
-### 公开接口
+### 公开内容接口
 
 - `GET /api/news` — 新闻列表
 - `GET /api/news/:slug` — 单条新闻
 - `GET /api/blog` — 博客列表
 - `GET /api/blog/:slug` — 单篇博客
 
-### 管理接口（需 `X-API-Key` Header）
+### 管理接口（保留旧版 `X-API-Key` Header）
 
 - `POST /api/news` / `POST /api/blog` — 创建
 - `PATCH /api/news/:id` / `PATCH /api/blog/:id` — 更新
@@ -113,7 +134,8 @@ VITE_API_BASE_URL=https://<your-vercel-project>.vercel.app/api
 
 ## 安全
 
-- 所有敏感信息均通过环境变量注入，代码中无默认值。
+- 所有敏感信息均通过环境变量注入，代码中无真实默认值。
+- `JWT_SECRET` 必须来自环境变量。
 - 后端 `API_KEY` 使用恒定时间比较，防止时序攻击。
-- `npm run check:secrets` 会扫描 `.env` 文件、MongoDB URI、API Key 等模式。
-- GitHub Actions 在每次 PR 时自动运行密钥扫描。
+- `npm run check:secrets` 会扫描 `.env` 文件、MongoDB URI、API Key、JWT secret、Resend key、token、密码等常见模式。
+- 不要提交 `.env`、真实 API Key、token、密码、Resend key 或 MongoDB 连接串。

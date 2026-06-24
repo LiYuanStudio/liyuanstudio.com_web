@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import {
   fetchMe,
+  getStoredToken,
   login as apiLogin,
   register as apiRegister,
   setStoredToken,
@@ -23,7 +24,7 @@ type AuthState =
 interface AuthContextValue {
   state: AuthState;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => void;
   updateAvatar: (avatarUrl: string) => Promise<void>;
 }
@@ -42,6 +43,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
 
   const loadUser = useCallback(async () => {
+    if (!getStoredToken()) {
+      setState({ status: 'unauthenticated' });
+      return;
+    }
+
     try {
       const { user } = await fetchMe();
       setState({ status: 'authenticated', user });
@@ -61,10 +67,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ status: 'authenticated', user });
   }, []);
 
-  const register = useCallback(async (email: string, password: string) => {
-    const { token, user } = await apiRegister(email, password);
-    setStoredToken(token);
-    setState({ status: 'authenticated', user });
+  const register = useCallback(async (
+    email: string,
+    password: string,
+    displayName: string,
+  ) => {
+    await apiRegister(email, password, displayName);
+    setStoredToken(null);
+    setState({ status: 'unauthenticated' });
   }, []);
 
   const logout = useCallback(() => {

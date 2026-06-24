@@ -60,23 +60,23 @@ describe('AuthForm', () => {
     });
   });
 
-  it('submits register and calls onSuccess', async () => {
+  it('submits register and shows verification message', async () => {
     const register = vi.fn().mockResolvedValue(undefined);
-    const onSuccess = vi.fn();
     mockUseAuth.mockReturnValue(
       unauthMock({ register }) as ReturnType<typeof useAuth>,
     );
-    render(<AuthForm onSuccess={onSuccess} />);
+    render(<AuthForm />);
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: '去注册' }));
+    await user.type(screen.getByLabelText('显示名称'), 'New User');
     await user.type(screen.getByLabelText('邮箱'), 'new@example.com');
     await user.type(screen.getByLabelText('密码'), 'password123');
     await user.click(screen.getByRole('button', { name: '注册' }));
 
     await waitFor(() => {
-      expect(register).toHaveBeenCalledWith('new@example.com', 'password123');
-      expect(onSuccess).toHaveBeenCalled();
+      expect(register).toHaveBeenCalledWith('new@example.com', 'password123', 'New User');
+      expect(screen.getByRole('status')).toHaveTextContent('注册成功，请检查邮箱完成验证。');
     });
   });
 
@@ -111,7 +111,7 @@ describe('AuthForm', () => {
     await user.click(screen.getByRole('button', { name: '登录' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '处理中…' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '处理中...' })).toBeDisabled();
     });
 
     resolveLogin();
@@ -123,12 +123,18 @@ describe('AuthForm', () => {
   it('renders authenticated state', () => {
     mockUseAuth.mockReturnValue(
       unauthMock({
-        state: { status: 'authenticated', user: { email: 'me@example.com' } },
+        state: { status: 'authenticated', user: { id: '1', email: 'me@example.com', displayName: 'Me', role: 'user', emailVerified: true } },
       }) as ReturnType<typeof useAuth>,
     );
     render(<AuthForm />);
 
     expect(screen.getByRole('heading', { name: '已登录' })).toBeInTheDocument();
-    expect(screen.getByText('me@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Me')).toBeInTheDocument();
   });
 });
+
+
+
+
+
+

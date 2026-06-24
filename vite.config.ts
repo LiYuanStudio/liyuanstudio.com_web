@@ -49,6 +49,8 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         papyrusdesktop: resolve(__dirname, 'products/papyrusdesktop/index.html'),
         login: resolve(__dirname, 'login/index.html'),
+        register: resolve(__dirname, 'register/index.html'),
+        verifyEmail: resolve(__dirname, 'verify-email/index.html'),
       },
     },
   },
@@ -61,4 +63,5 @@ export default defineConfig({
     },
   },
 });
+
 

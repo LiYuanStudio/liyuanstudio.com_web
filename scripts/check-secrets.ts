@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { extname, relative, resolve } from 'node:path';
 
 const ALLOWLIST = new Set([
@@ -17,6 +17,7 @@ const SKIP_DIRS = new Set([
   '.git',
   'node_modules',
   'dist',
+  'server/dist',
   '.vercel',
   '.wrangler',
   '.kimi-code',
@@ -46,9 +47,13 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 const PATTERNS = [
-  { name: 'MongoDB URI', regex: /mongodb\+srv:\/\/[^\s'"`]+/ },
-  { name: 'MONGODB_URI assignment', regex: /MONGODB_URI\s*=\s*[^\s'"`]+/ },
-  { name: 'API_KEY assignment', regex: /API_KEY\s*=\s*[^\s'"`]+/ },
+  { name: 'MongoDB URI', regex: /mongodb\+srv:\/\/[A-Za-z0-9._~%+-]+:[^\s'"`@]+@[^\s'"`]+/ },
+  { name: 'MONGODB_URI assignment', regex: /^MONGODB_URI\s*=\s*(?!.*PLACEHOLDER)[^\s'"`]+/m },
+  { name: 'API_KEY assignment', regex: /^API_KEY\s*=\s*(?!your-|test-|secret-key)[^\s'"`]+/m },
+  { name: 'JWT_SECRET assignment', regex: /^JWT_SECRET\s*=\s*(?!your-|test-)[^\s'"`]+/m },
+  { name: 'RESEND_API_KEY assignment', regex: /^RESEND_API_KEY\s*=\s*(?!your-|test-|$)[^\s'"`]+/m },
+  { name: 'Token assignment', regex: /^(?:TOKEN|ACCESS_TOKEN|AUTH_TOKEN)\s*=\s*(?!your-|test-|abc|xyz)[^\s'"`]+/m },
+  { name: 'Password assignment', regex: /^(?:PASSWORD|PASS|PWD)\s*=\s*(?!your-|test-|password)[^\s'"`]+/m },
 ];
 
 function isBinary(filePath: string): boolean {
@@ -97,7 +102,7 @@ for (const file of files) {
   if (isBinary(file)) continue;
 
   if (rel.includes('.env') && !rel.endsWith('.example')) {
-    console.error(`🚫 Found potential env file in repo: ${rel}`);
+    console.error(`Found potential env file in repo: ${rel}`);
     findings++;
     continue;
   }
@@ -112,7 +117,7 @@ for (const file of files) {
   for (const { name, regex } of PATTERNS) {
     const match = content.match(regex);
     if (match) {
-      console.error(`🚫 ${name} detected in ${rel}`);
+      console.error(`${name} detected in ${rel}`);
       findings++;
     }
   }
@@ -123,4 +128,4 @@ if (findings > 0) {
   process.exit(1);
 }
 
-console.log('✅ No obvious secrets detected in tracked files.');
+console.log('No obvious secrets detected in tracked files.');

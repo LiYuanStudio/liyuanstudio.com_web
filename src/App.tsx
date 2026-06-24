@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import { IconGithub } from '@arco-design/web-react/icon';
 import { fetchBlogPosts, fetchNews } from './api.js';
+import { useAuth } from './context/AuthContext.js';
 import type { BlogPost, GlowPosition, NewsUpdate } from './types.js';
 import {
   MouseFollower,
@@ -203,6 +204,28 @@ export const Blog = React.forwardRef<
   );
 });
 
+function AuthNav() {
+  const { state, logout } = useAuth();
+
+  if (state.status === 'authenticated') {
+    return (
+      <>
+        <span className="nav-item nav-user">{state.user.displayName}</span>
+        <button type="button" className="nav-item" onClick={logout}>
+          退出
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <a className="nav-item" href="/login/">登录</a>
+      <a className="nav-item" href="/register/">注册</a>
+    </>
+  );
+}
+
 export function App() {
   const navRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
@@ -277,6 +300,7 @@ export function App() {
               >
                 博客
               </button>
+              <AuthNav />
             </div>
           </div>
         </nav>
@@ -333,3 +357,4 @@ export function App() {
     </>
   );
 }
+

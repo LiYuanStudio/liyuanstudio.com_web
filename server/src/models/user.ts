@@ -6,15 +6,30 @@ export const DEFAULT_AVATAR =
 export interface User {
   email: string;
   passwordHash: string;
+  displayName: string;
+  role: 'user' | 'admin';
+  emailVerified: boolean;
+  emailVerifyTokenHash?: string;
+  emailVerifyExpiresAt?: Date;
   avatar: string;
-  createdAt?: string;
-  updatedAt?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const UserSchema = new mongoose.Schema<User>(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+    displayName: { type: String, required: true, trim: true },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      required: true,
+      default: 'user',
+    },
+    emailVerified: { type: Boolean, required: true, default: false },
+    emailVerifyTokenHash: { type: String },
+    emailVerifyExpiresAt: { type: Date },
     avatar: { type: String, required: true, default: DEFAULT_AVATAR },
   },
   { timestamps: true },

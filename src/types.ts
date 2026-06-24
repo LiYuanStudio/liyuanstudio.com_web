@@ -31,13 +31,27 @@ export interface BlogPost {
   updatedAt?: string;
 }
 
+export type UserRole = 'user' | 'admin';
+
 export interface User {
-  _id: string;
+  id: string;
   email: string;
-  avatar: string;
+  displayName: string;
+  role: UserRole;
+  emailVerified: boolean;
+  avatar?: string;
 }
 
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface RegisterResponse {
+  message: string;
+  user: User;
+}
+
+export interface MessageResponse {
+  message: string;
 }

@@ -18,26 +18,36 @@ describe('auth api helpers', () => {
     return mod;
   }
 
-  it('register sends a POST request and stores token', async () => {
+  it('register sends a POST request without storing a token', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      status: 200,
-      statusText: 'OK',
+      status: 201,
+      statusText: 'Created',
       json: async () => ({
-        token: 'abc123',
-        user: { _id: '1', email: 'hello@example.com', avatar: 'avatar.png' },
+        message: 'Please check your email to complete verification.',
+        user: {
+          id: '1',
+          email: 'hello@example.com',
+          displayName: 'Hello',
+          role: 'user',
+          emailVerified: false,
+        },
       }),
     } as Response));
 
     const { register, getStoredToken } = await importAuthApi();
-    const result = await register('hello@example.com', 'password123');
+    const result = await register('hello@example.com', 'password123', 'Hello');
 
     expect(result.user.email).toBe('hello@example.com');
-    expect(getStoredToken()).toBe('abc123');
+    expect(getStoredToken()).toBeNull();
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@example.com', password: 'password123' }),
+      body: JSON.stringify({
+        email: 'hello@example.com',
+        password: 'password123',
+        displayName: 'Hello',
+      }),
     });
   });
 
@@ -48,7 +58,13 @@ describe('auth api helpers', () => {
       statusText: 'OK',
       json: async () => ({
         token: 'xyz789',
-        user: { _id: '2', email: 'login@example.com', avatar: 'avatar.png' },
+        user: {
+          id: '2',
+          email: 'login@example.com',
+          displayName: 'Login',
+          role: 'user',
+          emailVerified: true,
+        },
       }),
     } as Response));
 
@@ -69,7 +85,15 @@ describe('auth api helpers', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: async () => ({ user: { _id: '3', email: 'me@example.com', avatar: 'avatar.png' } }),
+      json: async () => ({
+        user: {
+          id: '3',
+          email: 'me@example.com',
+          displayName: 'Me',
+          role: 'user',
+          emailVerified: true,
+        },
+      }),
     } as Response));
 
     const { fetchMe } = await importAuthApi();
@@ -84,13 +108,39 @@ describe('auth api helpers', () => {
     });
   });
 
+  it('verifyEmail calls the verification endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: 'Email verified successfully.' }),
+    } as Response));
+
+    const { verifyEmail } = await importAuthApi();
+    await expect(verifyEmail('abc 123')).resolves.toEqual({
+      message: 'Email verified successfully.',
+    });
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/verify-email?token=abc%20123', {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  });
+
   it('updateAvatar sends a PATCH request', async () => {
     localStorage.setItem('liyuan_auth_token', 'my-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: async () => ({ user: { _id: '3', email: 'me@example.com', avatar: 'new.png' } }),
+      json: async () => ({
+        user: {
+          id: '3',
+          email: 'me@example.com',
+          displayName: 'Me',
+          role: 'user',
+          emailVerified: true,
+          avatar: 'new.png',
+        },
+      }),
     } as Response));
 
     const { updateAvatar } = await importAuthApi();
@@ -116,6 +166,6 @@ describe('auth api helpers', () => {
     } as Response));
 
     const { login } = await importAuthApi();
-    await expect(login('a@b.com', 'pw')).rejects.toThrow('Invalid credentials');
+    await expect(login('a@b.com', 'password123')).rejects.toThrow('Invalid credentials');
   });
 });
