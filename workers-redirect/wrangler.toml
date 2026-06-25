@@ -1,0 +1,7 @@
+name = "liyuanstudio-apex-redirect"
+main = "index.js"
+compatibility_date = "2025-09-27"
+
+[[routes]]
+pattern = "liyuanstudio.com"
+custom_domain = true
