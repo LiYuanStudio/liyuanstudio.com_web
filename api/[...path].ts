@@ -1,14 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { createApp } from '../server/dist/src/app.js';
-
-let app: ReturnType<typeof createApp> | undefined;
-let initError: Error | undefined;
-
-try {
-  app = createApp('/api');
-} catch (err) {
-  initError = err instanceof Error ? err : new Error(String(err));
-}
+import { resolve } from 'path';
+import { pathToFileURL } from 'url';
 
 function getBody(req: IncomingMessage): ReadableStream<Uint8Array> | undefined {
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -26,19 +18,9 @@ function getBody(req: IncomingMessage): ReadableStream<Uint8Array> | undefined {
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
-    if (initError) {
-      res.statusCode = 500;
-      res.setHeader('content-type', 'text/plain; charset=utf-8');
-      res.end('Init error: ' + initError.message);
-      return;
-    }
-
-    if (!app) {
-      res.statusCode = 500;
-      res.setHeader('content-type', 'text/plain; charset=utf-8');
-      res.end('App not initialized');
-      return;
-    }
+    const appPath = resolve(process.cwd(), 'server/dist/src/app.js');
+    const { createApp } = await import(pathToFileURL(appPath).href);
+    const app = createApp('/api');
 
     const url = `http://${req.headers.host || 'localhost'}${req.url}`;
 
