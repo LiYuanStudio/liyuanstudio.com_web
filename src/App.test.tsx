@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App, Footer, News, Blog, MouseFollower, MaskedHeading, clamp, lerp, easeInOutCubic } from './App.js';
 import { fetchNews, fetchBlogPosts } from './api.js';
-import type { GlowPosition, NewsUpdate, BlogPost } from './types.js';
+import type { GlowPosition } from './types.js';
 import { createRef } from 'react';
 import { AuthProvider } from './context/AuthContext.js';
 
@@ -33,7 +33,7 @@ describe('App', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the hero, products, news and blog sections', async () => {
+  it('renders the hero, products, news and blog sections', () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockResolvedValue([]);
 
@@ -44,71 +44,7 @@ describe('App', () => {
     expect(container.querySelector('.product-card-large h3')).toHaveTextContent('Papyrus Desktop');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getAllByText('加载中…')).toHaveLength(2);
-    });
-  });
-
-  it('renders news cards after loading', async () => {
-    const news: NewsUpdate[] = [
-      {
-        _id: '1',
-        slug: 'site-refresh',
-        title: '官网视觉全新升级',
-        description: '更轻盈的界面',
-        tag: '品牌',
-        date: '2026-06-10',
-        image: '/png/logo.png',
-      },
-    ];
-    mockFetchNews.mockResolvedValue(news);
-    mockFetchBlogPosts.mockResolvedValue([]);
-
-    renderApp();
-
-    await waitFor(() => {
-      expect(screen.getByText('官网视觉全新升级')).toBeInTheDocument();
-      expect(screen.getByText('更轻盈的界面')).toBeInTheDocument();
-      expect(screen.getByText('品牌')).toBeInTheDocument();
-    });
-  });
-
-  it('renders blog cards after loading', async () => {
-    const posts: BlogPost[] = [
-      {
-        _id: 'b1',
-        slug: 'living-tech',
-        title: '「有生机的科技」意味着什么',
-        excerpt: '技术不应只是效率工具',
-        category: '思考',
-        date: '2026-05-28',
-        readTime: '5 分钟',
-      },
-    ];
-    mockFetchNews.mockResolvedValue([]);
-    mockFetchBlogPosts.mockResolvedValue(posts);
-
-    renderApp();
-
-    await waitFor(() => {
-      expect(screen.getByText('「有生机的科技」意味着什么')).toBeInTheDocument();
-      expect(screen.getByText('技术不应只是效率工具')).toBeInTheDocument();
-      expect(screen.getByText('思考')).toBeInTheDocument();
-      expect(screen.getByText('2026-05-28')).toBeInTheDocument();
-    });
-  });
-
-  it('displays error messages when API fails', async () => {
-    mockFetchNews.mockRejectedValue(new Error('news down'));
-    mockFetchBlogPosts.mockRejectedValue(new Error('blog down'));
-
-    renderApp();
-
-    await waitFor(() => {
-      expect(screen.getByText('news down')).toBeInTheDocument();
-      expect(screen.getByText('blog down')).toBeInTheDocument();
-    });
+    expect(screen.getAllByText('敬请期待')).toHaveLength(2);
   });
 
   it('scrolls to sections when nav buttons are clicked', async () => {
@@ -163,68 +99,18 @@ describe('Footer', () => {
 });
 
 describe('News component', () => {
-  it('renders loading state', () => {
-    mockFetchNews.mockImplementation(() => new Promise(() => {}));
+  it('renders heading and placeholder text', () => {
     render(<News glowRef={{ current: null }} />);
-    expect(screen.getByText('加载中…')).toBeInTheDocument();
-  });
-
-  it('renders error state', async () => {
-    mockFetchNews.mockRejectedValueOnce(new Error('network error'));
-    render(<News glowRef={{ current: null }} />);
-    await waitFor(() => {
-      expect(screen.getByText('network error')).toBeInTheDocument();
-    });
-  });
-
-  it('renders a list of updates', async () => {
-    const updates: NewsUpdate[] = [
-      { slug: 'a', title: 'A', description: 'Desc A', tag: 'T', date: '2026-01-01' },
-    ];
-    mockFetchNews.mockResolvedValueOnce(updates);
-    render(<News glowRef={{ current: null }} />);
-    await waitFor(() => {
-      expect(screen.getByText('A')).toBeInTheDocument();
-      expect(screen.getByText('Desc A')).toBeInTheDocument();
-    });
-  });
-
-  it('renders update hero with tag', async () => {
-    const updates: NewsUpdate[] = [
-      { slug: 'a', title: 'A', description: 'Desc A', tag: 'T', date: '2026-01-01', image: '/png/logo.png' },
-    ];
-    mockFetchNews.mockResolvedValueOnce(updates);
-    const { container } = render(<News glowRef={{ current: null }} />);
-    await waitFor(() => {
-      expect(container.querySelector('.news-card-hero')).toBeInTheDocument();
-      expect(container.querySelector('.news-card-hero h4')).toHaveTextContent('T');
-    });
+    expect(screen.getByRole('heading', { name: '最新动态' })).toBeInTheDocument();
+    expect(screen.getByText('敬请期待')).toBeInTheDocument();
   });
 });
 
 describe('Blog component', () => {
-  it('renders a list of posts', async () => {
-    const posts: BlogPost[] = [
-      { slug: 'b', title: 'B', excerpt: 'Excerpt B', category: 'C', date: '2026-01-01', readTime: '1 min' },
-    ];
-    mockFetchBlogPosts.mockResolvedValueOnce(posts);
+  it('renders heading and placeholder text', () => {
     render(<Blog glowRef={{ current: null }} />);
-    await waitFor(() => {
-      expect(screen.getByText('B')).toBeInTheDocument();
-      expect(screen.getByText('Excerpt B')).toBeInTheDocument();
-    });
-  });
-
-  it('renders post hero with category', async () => {
-    const posts: BlogPost[] = [
-      { slug: 'b', title: 'B', excerpt: 'Excerpt B', category: 'C', date: '2026-01-01', readTime: '1 min', image: '/png/logo.png' },
-    ];
-    mockFetchBlogPosts.mockResolvedValueOnce(posts);
-    const { container } = render(<Blog glowRef={{ current: null }} />);
-    await waitFor(() => {
-      expect(container.querySelector('.blog-card-hero')).toBeInTheDocument();
-      expect(container.querySelector('.blog-card-hero h4')).toHaveTextContent('C');
-    });
+    expect(screen.getByRole('heading', { name: '博客' })).toBeInTheDocument();
+    expect(screen.getByText('敬请期待')).toBeInTheDocument();
   });
 });
 

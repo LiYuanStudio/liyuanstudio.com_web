@@ -14,7 +14,7 @@ describe('createApp', () => {
   async function makeApp(basePath?: string) {
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
     vi.stubEnv('API_KEY', 'secret');
-    vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
+    vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com,https://www.liyuanstudio.com');
     const { createApp: factory } = await import('./app.js');
     return factory(basePath);
   }
@@ -65,5 +65,21 @@ describe('createApp', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://liyuanstudio.com');
     expect(res.headers.get('Access-Control-Allow-Headers')).toContain('X-API-Key');
+  });
+
+  it('allows auth register preflight OPTIONS from the www production origin', async () => {
+    const app = await makeApp('/api');
+    const res = await app.request('/api/auth/register', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://www.liyuanstudio.com',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    });
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://www.liyuanstudio.com');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
   });
 });

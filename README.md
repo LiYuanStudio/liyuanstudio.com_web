@@ -107,8 +107,8 @@ VITE_API_BASE_URL=https://<your-vercel-project>.vercel.app/api
 - `MONGODB_URI`
 - `API_KEY`
 - `JWT_SECRET`
-- `CORS_ORIGIN`，包含生产前端域名
-- `APP_URL`，生产前端地址，例如 `https://liyuanstudio.com`
+- `CORS_ORIGIN`，包含生产前端域名；如果同时使用 apex 和 www，配置为 `https://liyuanstudio.com,https://www.liyuanstudio.com`
+- `APP_URL`，生产前端地址；如果正式站以 www 访问，配置为 `https://www.liyuanstudio.com`
 - `EMAIL_PROVIDER=resend`
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
