@@ -105,6 +105,23 @@ describe('AuthForm', () => {
     });
   });
 
+  it('shows resend verification button when login fails due to unverified email', async () => {
+    const login = vi.fn().mockRejectedValue(new Error('邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。'));
+    mockUseAuth.mockReturnValue(unauthMock({ login }) as ReturnType<typeof useAuth>);
+    render(<AuthForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('邮箱'), 'hello@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    await user.click(screen.getByRole('button', { name: '登录' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('邮箱未验证');
+    });
+
+    expect(screen.getByRole('button', { name: '重新发送验证邮件' })).toBeInTheDocument();
+  });
+
   it('shows loading state while submitting', async () => {
     let resolveLogin: () => void = () => {};
     const login = vi.fn().mockImplementation(

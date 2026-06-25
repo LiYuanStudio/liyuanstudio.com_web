@@ -125,6 +125,25 @@ describe('auth api helpers', () => {
     });
   });
 
+  it('resendVerification sends a POST request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: '如果该账号需要验证，验证邮件已发送。' }),
+    } as Response));
+
+    const { resendVerification } = await importAuthApi();
+    await expect(resendVerification('hello@example.com')).resolves.toEqual({
+      message: '如果该账号需要验证，验证邮件已发送。',
+    });
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@example.com' }),
+    });
+  });
+
   it('requestPasswordReset sends a POST request', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,

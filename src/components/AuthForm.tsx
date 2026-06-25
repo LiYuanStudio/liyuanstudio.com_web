@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext.js';
+import { resendVerification } from '../api/auth.js';
 import './AuthForm.css';
 
 interface AuthFormProps {
@@ -21,6 +22,12 @@ export function AuthForm({
   const [error, setError] = useState<string | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resendStatus, setResendStatus] = useState<
+    | { type: 'loading' }
+    | { type: 'success'; message: string }
+    | { type: 'error'; message: string }
+    | null
+  >(null);
 
   if (state.status === 'authenticated') {
     return (
@@ -37,6 +44,7 @@ export function AuthForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResendStatus(null);
     setLoading(true);
 
     try {
@@ -54,6 +62,22 @@ export function AuthForm({
       setLoading(false);
     }
   };
+
+  const handleResendVerification = async () => {
+    if (!email) return;
+    setResendStatus({ type: 'loading' });
+    try {
+      const response = await resendVerification(email);
+      setResendStatus({ type: 'success', message: response.message });
+    } catch (err) {
+      setResendStatus({
+        type: 'error',
+        message: err instanceof Error ? err.message : '重新发送失败',
+      });
+    }
+  };
+
+  const showResendButton = isLogin && error && error.includes('验证');
 
   if (registeredEmail && !isLogin) {
     return (
@@ -132,6 +156,29 @@ export function AuthForm({
         {error && (
           <p className="auth-error" role="alert">
             {error}
+          </p>
+        )}
+
+        {showResendButton && (
+          <button
+            type="button"
+            className="auth-secondary-button"
+            onClick={handleResendVerification}
+            disabled={resendStatus?.type === 'loading'}
+          >
+            {resendStatus?.type === 'loading' ? '发送中...' : '重新发送验证邮件'}
+          </button>
+        )}
+
+        {resendStatus?.type === 'success' && (
+          <p className="auth-success" role="status">
+            {resendStatus.message}
+          </p>
+        )}
+
+        {resendStatus?.type === 'error' && (
+          <p className="auth-error" role="alert">
+            {resendStatus.message}
           </p>
         )}
 

@@ -153,7 +153,31 @@ app.post('/login', async (c) => {
   }
 
   if (!user.emailVerified) {
-    return c.json({ error: '请先验证邮箱再登录。' }, 403);
+    const verification = createEmailVerifyToken();
+    user.emailVerifyTokenHash = verification.tokenHash;
+    user.emailVerifyExpiresAt = verification.expiresAt;
+    await user.save();
+
+    try {
+      await sendVerificationEmail({
+        email: user.email,
+        displayName: user.displayName,
+        token: verification.token,
+      });
+    } catch (error) {
+      return c.json(
+        {
+          error: '验证邮件发送失败',
+          detail: error instanceof Error ? error.message : '未知邮件错误',
+        },
+        502,
+      );
+    }
+
+    return c.json(
+      { error: '邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。' },
+      403,
+    );
   }
 
   const token = await signToken({

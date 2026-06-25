@@ -167,9 +167,10 @@ describe('auth routes', () => {
     expect(await res.json()).toEqual({ error: '邮箱或密码错误' });
   });
 
-  it('POST /api/auth/login rejects unverified users', async () => {
+  it('POST /api/auth/login rejects unverified users and resends verification email', async () => {
     const app = await makeApp();
-    mockUserModel.findOne.mockResolvedValue(userDoc({ emailVerified: false }) as never);
+    const doc = userDoc({ emailVerified: false });
+    mockUserModel.findOne.mockResolvedValue(doc as never);
     mockBcrypt.compare.mockResolvedValue(true as never);
 
     const res = await app.request('/api/auth/login', {
@@ -179,6 +180,17 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(403);
+    expect(doc.emailVerifyTokenHash).toEqual(expect.any(String));
+    expect(doc.emailVerifyExpiresAt).toEqual(expect.any(Date));
+    expect(doc.save).toHaveBeenCalled();
+    expect(mockSendVerificationEmail).toHaveBeenCalledWith({
+      email: 'hello@liyuanstudio.com',
+      displayName: 'Hello User',
+      token: expect.any(String),
+    });
+    expect(await res.json()).toEqual({
+      error: '邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。',
+    });
   });
 
   it('GET /api/auth/me returns the current user', async () => {
