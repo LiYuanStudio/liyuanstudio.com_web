@@ -12,7 +12,11 @@ export function RegisterPage() {
       </nav>
 
       <main className="login-main">
-        <AuthForm initialMode="register" allowModeSwitch={false} />
+        <AuthForm
+          initialMode="register"
+          allowModeSwitch={false}
+          onSuccess={() => { window.location.href = '/'; }}
+        />
       </main>
     </div>
   );
