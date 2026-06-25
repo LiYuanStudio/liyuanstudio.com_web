@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
 const app = new Hono();
-app.get('/', (c) => c.text('hello'));
+app.get('/api/hello', (c) => c.text('hello'));
 
 export default async function handler(req: any, res: any) {
   const url = `http://${req.headers.host || 'localhost'}${req.url}`;

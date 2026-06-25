@@ -8,5 +8,8 @@
       "maxDuration": 10,
       "includeFiles": "server/dist/**"
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" }
+  ]
 }
