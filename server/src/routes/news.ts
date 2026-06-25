@@ -12,7 +12,7 @@ app.get('/', async (c) => {
 app.get('/:slug', async (c) => {
   const item = await NewsModel.findOne({ slug: c.req.param('slug') }).lean();
   if (!item) {
-    return c.json({ error: 'Not found' }, 404);
+    return c.json({ error: '未找到' }, 404);
   }
   return c.json(item);
 });
@@ -29,7 +29,7 @@ app.patch('/:id', adminAuth, async (c) => {
     new: true,
   }).lean();
   if (!doc) {
-    return c.json({ error: 'Not found' }, 404);
+    return c.json({ error: '未找到' }, 404);
   }
   return c.json(doc);
 });
@@ -37,7 +37,7 @@ app.patch('/:id', adminAuth, async (c) => {
 app.delete('/:id', adminAuth, async (c) => {
   const doc = await NewsModel.findByIdAndDelete(c.req.param('id')).lean();
   if (!doc) {
-    return c.json({ error: 'Not found' }, 404);
+    return c.json({ error: '未找到' }, 404);
   }
   return c.json({ ok: true });
 });

@@ -60,7 +60,7 @@ describe('news routes', () => {
 
     const res = await app.request('/api/news/missing');
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: 'Not found' });
+    expect(await res.json()).toEqual({ error: '未找到' });
   });
 
   it('POST /api/news requires API key', async () => {

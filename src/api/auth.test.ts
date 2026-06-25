@@ -24,7 +24,7 @@ describe('auth api helpers', () => {
       status: 201,
       statusText: 'Created',
       json: async () => ({
-        message: 'Please check your email to complete verification.',
+        message: '请查看邮箱完成验证。',
         user: {
           id: '1',
           email: 'hello@example.com',
@@ -113,12 +113,12 @@ describe('auth api helpers', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: async () => ({ message: 'Email verified successfully.' }),
+      json: async () => ({ message: '邮箱验证成功。' }),
     } as Response));
 
     const { verifyEmail } = await importAuthApi();
     await expect(verifyEmail('abc 123')).resolves.toEqual({
-      message: 'Email verified successfully.',
+      message: '邮箱验证成功。',
     });
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/verify-email?token=abc%20123', {
       headers: { 'Content-Type': 'application/json' },
@@ -219,10 +219,10 @@ describe('auth api helpers', () => {
       ok: false,
       status: 401,
       statusText: 'Unauthorized',
-      json: async () => ({ error: 'Invalid credentials' }),
+      json: async () => ({ error: '邮箱或密码错误' }),
     } as Response));
 
     const { login } = await importAuthApi();
-    await expect(login('a@b.com', 'password123')).rejects.toThrow('Invalid credentials');
+    await expect(login('a@b.com', 'password123')).rejects.toThrow('邮箱或密码错误');
   });
 });
