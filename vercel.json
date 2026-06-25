@@ -14,15 +14,9 @@
   ],
   "headers": [
     {
-      "source": "/",
+      "source": "/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
-    },
-    {
-      "source": "/:path*.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
       ]
     }
   ]
