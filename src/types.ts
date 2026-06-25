@@ -47,11 +47,6 @@ export interface AuthResponse {
   user: User;
 }
 
-export interface RegisterResponse {
-  message: string;
-  user: User;
-}
-
 export interface MessageResponse {
   message: string;
 }

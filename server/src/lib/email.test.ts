@@ -68,4 +68,50 @@ describe('email helpers', () => {
     expect(body.html).toContain('Hello &lt;User&gt;');
     expect(body.text).toContain('https://liyuanstudio.com/app/reset-password/?token=plain-token');
   });
+
+  it('logs registration codes in mock email mode', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const { sendRegistrationCodeEmail } = await importEmail();
+
+    await sendRegistrationCodeEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      code: '123456',
+    });
+
+    expect(log).toHaveBeenCalledWith(
+      '[email:mock] 注册验证码 hello@example.com: 123456',
+    );
+  });
+
+  it('sends registration code emails through Resend', async () => {
+    vi.stubEnv('EMAIL_PROVIDER', 'resend');
+    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    } as Response));
+    const { sendRegistrationCodeEmail } = await importEmail();
+
+    await sendRegistrationCodeEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello <User>',
+      code: '123456',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('https://api.resend.com/emails', expect.objectContaining({
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer resend-key',
+        'Content-Type': 'application/json',
+      },
+      body: expect.stringContaining('你的 LiYuan Studio 注册验证码'),
+    }));
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(body.to).toBe('hello@example.com');
+    expect(body.html).toContain('123456');
+    expect(body.html).toContain('Hello &lt;User&gt;');
+    expect(body.text).toContain('123456');
+  });
 });

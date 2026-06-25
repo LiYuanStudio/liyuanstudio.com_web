@@ -12,6 +12,12 @@ interface SendPasswordResetEmailInput {
   token: string;
 }
 
+interface SendRegistrationCodeEmailInput {
+  email: string;
+  displayName: string;
+  code: string;
+}
+
 function buildAppUrl(): string {
   return env.APP_URL.replace(/\/$/, '');
 }
@@ -61,6 +67,49 @@ export async function sendVerificationEmail({
         `<p><a href="${verificationUrl}">验证邮箱</a></p>`,
       ].join(''),
       text: `你好 ${displayName}，\n\n请点击链接验证你的 LiYuan Studio 账号：${verificationUrl}\n\n该链接将在 30 分钟后失效。`,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Resend 邮件发送失败，状态码 ${response.status}`);
+  }
+}
+
+export async function sendRegistrationCodeEmail({
+  email,
+  displayName,
+  code,
+}: SendRegistrationCodeEmailInput): Promise<void> {
+  if (!env.EMAIL_PROVIDER) {
+    // eslint-disable-next-line no-console
+    console.log(`[email:mock] 注册验证码 ${email}: ${code}`);
+    return;
+  }
+
+  if (env.EMAIL_PROVIDER !== 'resend') {
+    throw new Error(`不支持的邮件服务商：${env.EMAIL_PROVIDER}`);
+  }
+
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+    throw new Error('缺少 Resend 邮件配置');
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: email,
+      subject: '你的 LiYuan Studio 注册验证码',
+      html: [
+        `<p>你好 ${escapeHtml(displayName)}，</p>`,
+        `<p>你的注册验证码是：<strong>${escapeHtml(code)}</strong></p>`,
+        '<p>验证码将在 10 分钟后失效。如果你没有请求注册，请忽略此邮件。</p>',
+      ].join(''),
+      text: `你好 ${displayName}，\n\n你的注册验证码是：${code}\n\n验证码将在 10 分钟后失效。如果你没有请求注册，请忽略此邮件。`,
     }),
   });
 

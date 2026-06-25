@@ -72,13 +72,12 @@ npm run dev
 
 ### 公开认证接口
 
-- `POST /api/auth/register` — 注册账号，body: `{ email, password, displayName }`
+- `POST /api/auth/register/send-code` — 发送注册验证码，body: `{ email, password, displayName }`
+- `POST /api/auth/register/verify` — 验证注册验证码并完成注册，body: `{ email, code }`
 - `POST /api/auth/login` — 登录，body: `{ email, password }`
 - `GET /api/auth/me` — 当前用户，需要 `Authorization: Bearer <token>`
-- `GET /api/auth/verify-email?token=xxx` — 邮箱验证
-- `POST /api/auth/resend-verification` — 重发验证邮件，body: `{ email }`
 
-注册接口不会接受 `role`，新用户默认 `role=user` 且 `emailVerified=false`。密码只保存 bcrypt hash；邮箱验证 token 只以 SHA-256 hash 保存到数据库，明文 token 只通过邮件链接发送给用户。
+注册分为两步：先发送 6 位数字验证码到邮箱，验证通过后才会在数据库创建用户。新用户默认 `role=user` 且 `emailVerified=true`。密码只保存 bcrypt hash；验证码只以 SHA-256 hash 保存到数据库，明文验证码只通过邮件发送给用户。
 
 ### 管理员
 

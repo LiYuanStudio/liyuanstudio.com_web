@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import type { AuthResponse, MessageResponse, RegisterResponse, User } from '../types.js';
+import type { AuthResponse, MessageResponse, User } from '../types.js';
 
 const TOKEN_KEY = 'liyuan_auth_token';
 
@@ -40,14 +40,24 @@ async function fetchJson<T>(
   return res.json() as Promise<T>;
 }
 
-export function register(
+export function sendRegistrationCode(
   email: string,
   password: string,
   displayName: string,
-): Promise<RegisterResponse> {
-  return fetchJson<RegisterResponse>('/auth/register', {
+): Promise<MessageResponse> {
+  return fetchJson<MessageResponse>('/auth/register/send-code', {
     method: 'POST',
     body: JSON.stringify({ email, password, displayName }),
+  });
+}
+
+export function verifyRegistrationCode(
+  email: string,
+  code: string,
+): Promise<AuthResponse> {
+  return fetchJson<AuthResponse>('/auth/register/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
   });
 }
 
@@ -62,17 +72,6 @@ export async function login(email: string, password: string): Promise<AuthRespon
 
 export function fetchMe(): Promise<{ user: User }> {
   return fetchJson<{ user: User }>('/auth/me');
-}
-
-export function verifyEmail(token: string): Promise<MessageResponse> {
-  return fetchJson<MessageResponse>(`/auth/verify-email?token=${encodeURIComponent(token)}`);
-}
-
-export function resendVerification(email: string): Promise<MessageResponse> {
-  return fetchJson<MessageResponse>('/auth/resend-verification', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  });
 }
 
 export function requestPasswordReset(email: string): Promise<MessageResponse> {

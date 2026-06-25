@@ -18,29 +18,20 @@ describe('auth api helpers', () => {
     return mod;
   }
 
-  it('register sends a POST request without storing a token', async () => {
+  it('sendRegistrationCode sends a POST request without storing a token', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      status: 201,
-      statusText: 'Created',
-      json: async () => ({
-        message: '请查看邮箱完成验证。',
-        user: {
-          id: '1',
-          email: 'hello@example.com',
-          displayName: 'Hello',
-          role: 'user',
-          emailVerified: false,
-        },
-      }),
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: '验证码已发送，请查收邮箱。' }),
     } as Response));
 
-    const { register, getStoredToken } = await importAuthApi();
-    const result = await register('hello@example.com', 'password123', 'Hello');
+    const { sendRegistrationCode, getStoredToken } = await importAuthApi();
+    const result = await sendRegistrationCode('hello@example.com', 'password123', 'Hello');
 
-    expect(result.user.email).toBe('hello@example.com');
+    expect(result.message).toBe('验证码已发送，请查收邮箱。');
     expect(getStoredToken()).toBeNull();
-    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register', {
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register/send-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -48,6 +39,36 @@ describe('auth api helpers', () => {
         password: 'password123',
         displayName: 'Hello',
       }),
+    });
+  });
+
+  it('verifyRegistrationCode sends a POST request and returns token', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      json: async () => ({
+        token: 'xyz789',
+        user: {
+          id: '2',
+          email: 'hello@example.com',
+          displayName: 'Hello',
+          role: 'user',
+          emailVerified: true,
+        },
+      }),
+    } as Response));
+
+    const { verifyRegistrationCode, getStoredToken } = await importAuthApi();
+    const result = await verifyRegistrationCode('hello@example.com', '123456');
+
+    expect(result.user.emailVerified).toBe(true);
+    expect(result.token).toBe('xyz789');
+    expect(getStoredToken()).toBeNull();
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@example.com', code: '123456' }),
     });
   });
 
@@ -105,42 +126,6 @@ describe('auth api helpers', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer my-token',
       },
-    });
-  });
-
-  it('verifyEmail calls the verification endpoint', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => ({ message: '邮箱验证成功。' }),
-    } as Response));
-
-    const { verifyEmail } = await importAuthApi();
-    await expect(verifyEmail('abc 123')).resolves.toEqual({
-      message: '邮箱验证成功。',
-    });
-    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/verify-email?token=abc%20123', {
-      headers: { 'Content-Type': 'application/json' },
-    });
-  });
-
-  it('resendVerification sends a POST request', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => ({ message: '如果该账号需要验证，验证邮件已发送。' }),
-    } as Response));
-
-    const { resendVerification } = await importAuthApi();
-    await expect(resendVerification('hello@example.com')).resolves.toEqual({
-      message: '如果该账号需要验证，验证邮件已发送。',
-    });
-    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/resend-verification', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@example.com' }),
     });
   });
 

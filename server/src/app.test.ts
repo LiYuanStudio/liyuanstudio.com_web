@@ -69,7 +69,7 @@ describe('createApp', () => {
 
   it('allows auth register preflight OPTIONS from the www production origin', async () => {
     const app = await makeApp('/api');
-    const res = await app.request('/api/auth/register', {
+    const res = await app.request('/api/auth/register/send-code', {
       method: 'OPTIONS',
       headers: {
         Origin: 'https://www.liyuanstudio.com',

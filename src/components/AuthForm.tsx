@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.js';
-import { resendVerification } from '../api/auth.js';
 import './AuthForm.css';
 
 interface AuthFormProps {
@@ -9,25 +8,30 @@ interface AuthFormProps {
   onSuccess?: () => void;
 }
 
+const CODE_COUNTDOWN_SECONDS = 60;
+
 export function AuthForm({
   initialMode = 'login',
   allowModeSwitch = true,
   onSuccess,
 }: AuthFormProps) {
-  const { state, login, register, logout } = useAuth();
+  const { state, login, sendRegistrationCode, verifyRegistrationCode, logout } = useAuth();
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [resendStatus, setResendStatus] = useState<
-    | { type: 'loading' }
-    | { type: 'success'; message: string }
-    | { type: 'error'; message: string }
-    | null
-  >(null);
+  const [registerStep, setRegisterStep] = useState<'form' | 'code'>('form');
+  const [codeSent, setCodeSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown((v) => v - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   if (state.status === 'authenticated') {
     return (
@@ -41,21 +45,29 @@ export function AuthForm({
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const resetForm = () => {
     setError(null);
-    setResendStatus(null);
+    setLoading(false);
+  };
+
+  const handleModeSwitch = (nextLogin: boolean) => {
+    setIsLogin(nextLogin);
+    setRegisterStep('form');
+    setCodeSent(false);
+    setCode('');
+    setError(null);
+  };
+
+  const handleSendCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetForm();
     setLoading(true);
 
     try {
-      if (isLogin) {
-        await login(email, password);
-        onSuccess?.();
-      } else {
-        await register(email, password, displayName);
-        setRegisteredEmail(email);
-        setPassword('');
-      }
+      await sendRegistrationCode(email, password, displayName);
+      setCodeSent(true);
+      setRegisterStep('code');
+      setCountdown(CODE_COUNTDOWN_SECONDS);
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
     } finally {
@@ -63,134 +75,185 @@ export function AuthForm({
     }
   };
 
-  const handleResendVerification = async () => {
-    if (!email) return;
-    setResendStatus({ type: 'loading' });
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetForm();
+    setLoading(true);
+
     try {
-      const response = await resendVerification(email);
-      setResendStatus({ type: 'success', message: response.message });
+      await verifyRegistrationCode(email, code);
+      onSuccess?.();
     } catch (err) {
-      setResendStatus({
-        type: 'error',
-        message: err instanceof Error ? err.message : '重新发送失败',
-      });
+      setError(err instanceof Error ? err.message : '请求失败');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const showResendButton = isLogin && error && error.includes('验证');
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetForm();
+    setLoading(true);
 
-  if (registeredEmail && !isLogin) {
-    return (
-      <div className="auth-card auth-verification-card">
-        <div className="auth-verification-icon" aria-hidden="true">
-          ✓
-        </div>
-        <h2>请查收邮箱</h2>
-        <p className="auth-lead" role="status">
-          验证链接已发送至 {registeredEmail}，请打开邮件完成验证。
-        </p>
-        <a className="auth-button auth-link-button" href="/login/">
-          去登录
-        </a>
-        <button
-          type="button"
-          className="auth-secondary-button"
-          onClick={() => {
-            setRegisteredEmail(null);
-            setPassword('');
-            setError(null);
-          }}
-        >
-          修改邮箱
-        </button>
-      </div>
-    );
-  }
+    try {
+      await login(email, password);
+      onSuccess?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '请求失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (countdown > 0) return;
+    resetForm();
+    setLoading(true);
+
+    try {
+      await sendRegistrationCode(email, password, displayName);
+      setCountdown(CODE_COUNTDOWN_SECONDS);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '请求失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const codeInput = (
+    <>
+      <label htmlFor="auth-code">验证码</label>
+      <input
+        id="auth-code"
+        type="text"
+        inputMode="numeric"
+        maxLength={6}
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        required
+        autoComplete="one-time-code"
+        placeholder="请输入 6 位验证码"
+      />
+    </>
+  );
 
   return (
     <div className="auth-card">
       <h2>{isLogin ? '登录' : '注册'}</h2>
 
-      <form className="auth-form" onSubmit={handleSubmit}>
-        {!isLogin && (
-          <>
-            <label htmlFor="auth-display-name">显示名称</label>
-            <input
-              id="auth-display-name"
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              required
-              autoComplete="name"
-            />
-          </>
-        )}
+      {isLogin ? (
+        <form className="auth-form" onSubmit={handleLogin}>
+          <label htmlFor="auth-email">邮箱</label>
+          <input
+            id="auth-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
 
-        <label htmlFor="auth-email">邮箱</label>
-        <input
-          id="auth-email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoComplete="email"
-        />
+          <label htmlFor="auth-password">密码</label>
+          <input
+            id="auth-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="current-password"
+          />
 
-        <label htmlFor="auth-password">密码</label>
-        <input
-          id="auth-password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          autoComplete={isLogin ? 'current-password' : 'new-password'}
-        />
-
-        {isLogin && (
           <a className="auth-inline-link auth-forgot-link" href="/forgot-password/">
             忘记密码？
           </a>
-        )}
 
-        {error && (
-          <p className="auth-error" role="alert">
-            {error}
+          {error && (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" className="auth-button" disabled={loading}>
+            {loading ? '处理中...' : '登录'}
+          </button>
+        </form>
+      ) : registerStep === 'form' ? (
+        <form className="auth-form" onSubmit={handleSendCode}>
+          <label htmlFor="auth-display-name">显示名称</label>
+          <input
+            id="auth-display-name"
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+            autoComplete="name"
+          />
+
+          <label htmlFor="auth-email">邮箱</label>
+          <input
+            id="auth-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+
+          <label htmlFor="auth-password">密码</label>
+          <input
+            id="auth-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+
+          {error && (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" className="auth-button" disabled={loading}>
+            {loading ? '发送中...' : '获取验证码'}
+          </button>
+        </form>
+      ) : (
+        <form className="auth-form" onSubmit={handleVerifyCode}>
+          <p className="auth-lead">
+            验证码已发送至 {email}，请输入邮件中的 6 位验证码完成注册。
           </p>
-        )}
 
-        {showResendButton && (
+          {codeInput}
+
+          {error && (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          )}
+
           <button
             type="button"
             className="auth-secondary-button"
-            onClick={handleResendVerification}
-            disabled={resendStatus?.type === 'loading'}
+            onClick={handleResendCode}
+            disabled={countdown > 0 || loading}
           >
-            {resendStatus?.type === 'loading' ? '发送中...' : '重新发送验证邮件'}
+            {countdown > 0 ? `${countdown} 秒后重新发送` : '重新发送验证码'}
           </button>
-        )}
 
-        {resendStatus?.type === 'success' && (
-          <p className="auth-success" role="status">
-            {resendStatus.message}
-          </p>
-        )}
-
-        {resendStatus?.type === 'error' && (
-          <p className="auth-error" role="alert">
-            {resendStatus.message}
-          </p>
-        )}
-
-        <button type="submit" className="auth-button" disabled={loading}>
-          {loading ? '处理中...' : isLogin ? '登录' : '注册'}
-        </button>
-      </form>
+          <button type="submit" className="auth-button" disabled={loading}>
+            {loading ? '处理中...' : '完成注册'}
+          </button>
+        </form>
+      )}
 
       {allowModeSwitch && (
         <p className="auth-toggle">
           {isLogin ? '还没有账号？' : '已有账号？'}
-          <button type="button" onClick={() => setIsLogin((v) => !v)}>
+          <button type="button" onClick={() => handleModeSwitch(!isLogin)}>
             {isLogin ? '去注册' : '去登录'}
           </button>
         </p>

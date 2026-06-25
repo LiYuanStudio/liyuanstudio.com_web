@@ -50,7 +50,6 @@ export default defineConfig({
         papyrusdesktop: resolve(__dirname, 'products/papyrusdesktop/index.html'),
         login: resolve(__dirname, 'login/index.html'),
         register: resolve(__dirname, 'register/index.html'),
-        verifyEmail: resolve(__dirname, 'verify-email/index.html'),
         forgotPassword: resolve(__dirname, 'forgot-password/index.html'),
         resetPassword: resolve(__dirname, 'reset-password/index.html'),
       },

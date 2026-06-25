@@ -1,23 +1,31 @@
+import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
+import { PendingRegistrationModel } from '../models/pending-registration.js';
 import { signToken } from '../middleware/auth.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email.js';
+import { sendPasswordResetEmail, sendRegistrationCodeEmail } from '../lib/email.js';
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 vi.mock('../lib/db.js', () => ({
   connectDB: vi.fn().mockResolvedValue({}),
 }));
 vi.mock('../models/user.js');
+vi.mock('../models/pending-registration.js');
 vi.mock('../lib/email.js', () => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
-  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+  sendRegistrationCodeEmail: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('bcryptjs');
 
 const mockUserModel = vi.mocked(UserModel);
+const mockPendingRegistrationModel = vi.mocked(PendingRegistrationModel);
 const mockBcrypt = vi.mocked(bcrypt);
 const mockSendPasswordResetEmail = vi.mocked(sendPasswordResetEmail);
-const mockSendVerificationEmail = vi.mocked(sendVerificationEmail);
+const mockSendRegistrationCodeEmail = vi.mocked(sendRegistrationCodeEmail);
 
 const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
 
@@ -29,6 +37,18 @@ async function makeApp() {
   vi.stubEnv('APP_URL', 'https://liyuanstudio.com');
   const { createApp } = await import('../app.js');
   return createApp('/api');
+}
+
+function pendingDoc(overrides: Record<string, unknown> = {}) {
+  return {
+    _id: { toString: () => 'pending-1' },
+    email: 'hello@liyuanstudio.com',
+    displayName: 'Hello User',
+    passwordHash: 'hashed-password',
+    codeHash: 'hashed-code',
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    ...overrides,
+  };
 }
 
 function userDoc(overrides: Record<string, unknown> = {}) {
@@ -53,86 +73,188 @@ describe('auth routes', () => {
     mockUserModel.findById.mockReset();
     mockUserModel.findByIdAndUpdate.mockReset();
     mockUserModel.create.mockReset();
+    mockPendingRegistrationModel.findOne.mockReset();
+    mockPendingRegistrationModel.findOneAndUpdate.mockReset();
+    mockPendingRegistrationModel.create.mockReset();
+    mockPendingRegistrationModel.deleteOne.mockReset();
     mockBcrypt.hash.mockReset();
     mockBcrypt.compare.mockReset();
     mockSendPasswordResetEmail.mockReset();
     mockSendPasswordResetEmail.mockResolvedValue(undefined);
-    mockSendVerificationEmail.mockReset();
-    mockSendVerificationEmail.mockResolvedValue(undefined);
+    mockSendRegistrationCodeEmail.mockReset();
+    mockSendRegistrationCodeEmail.mockResolvedValue(undefined);
   });
 
-  it('POST /api/auth/register creates an unverified user and sends verification email', async () => {
-    const app = await makeApp();
-    mockUserModel.findOne.mockResolvedValue(null);
-    mockUserModel.create.mockResolvedValue(userDoc({ emailVerified: false }) as never);
-    mockBcrypt.hash.mockResolvedValue('hashed-password' as never);
+  describe('POST /api/auth/register/send-code', () => {
+    it('sends a registration code for a new email', async () => {
+      const app = await makeApp();
+      mockUserModel.findOne.mockResolvedValue(null);
+      mockPendingRegistrationModel.findOne.mockResolvedValue(null);
+      mockPendingRegistrationModel.findOneAndUpdate.mockResolvedValue(pendingDoc() as never);
+      mockBcrypt.hash.mockResolvedValueOnce('hashed-password' as never);
 
-    const res = await app.request('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'HELLO@liyuanstudio.com',
-        password: 'password123',
-        displayName: 'Hello User',
-        role: 'admin',
-      }),
-    });
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'HELLO@liyuanstudio.com',
+          password: 'password123',
+          displayName: 'Hello User',
+          role: 'admin',
+        }),
+      });
 
-    expect(res.status).toBe(201);
-    expect(mockUserModel.create).toHaveBeenCalledWith(expect.objectContaining({
-      email: 'hello@liyuanstudio.com',
-      displayName: 'Hello User',
-      role: 'user',
-      emailVerified: false,
-      passwordHash: 'hashed-password',
-      emailVerifyTokenHash: expect.any(String),
-      emailVerifyExpiresAt: expect.any(Date),
-    }));
-    expect(mockSendVerificationEmail).toHaveBeenCalledWith(expect.objectContaining({
-      email: 'hello@liyuanstudio.com',
-      displayName: 'Hello User',
-      token: expect.any(String),
-    }));
-    const json = await res.json();
-    expect(json.token).toBeUndefined();
-    expect(json.user).toEqual({
-      id: 'user-1',
-      email: 'hello@liyuanstudio.com',
-      displayName: 'Hello User',
-      role: 'user',
-      emailVerified: false,
-      avatar: 'preset-avatar',
-    });
-  });
-
-  it('POST /api/auth/register rejects invalid input', async () => {
-    const app = await makeApp();
-
-    const res = await app.request('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'not-an-email', password: '123', displayName: '' }),
-    });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/auth/register returns 409 for duplicate email', async () => {
-    const app = await makeApp();
-    mockUserModel.findOne.mockResolvedValue({ _id: 'existing' } as never);
-
-    const res = await app.request('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.message).toBe('验证码已发送，请查收邮箱。');
+      expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { email: 'hello@liyuanstudio.com' },
+        expect.objectContaining({
+          email: 'hello@liyuanstudio.com',
+          displayName: 'Hello User',
+          passwordHash: 'hashed-password',
+          codeHash: expect.any(String),
+          expiresAt: expect.any(Date),
+        }),
+        { upsert: true, new: true },
+      );
+      expect(mockSendRegistrationCodeEmail).toHaveBeenCalledWith({
         email: 'hello@liyuanstudio.com',
-        password: 'password123',
         displayName: 'Hello User',
-      }),
+        code: expect.any(String),
+      });
     });
 
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: '该邮箱已被注册' });
+    it('rejects invalid input', async () => {
+      const app = await makeApp();
+
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'not-an-email', password: '123', displayName: '' }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 409 for duplicate email', async () => {
+      const app = await makeApp();
+      mockUserModel.findOne.mockResolvedValue({ _id: 'existing' } as never);
+
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'hello@liyuanstudio.com',
+          password: 'password123',
+          displayName: 'Hello User',
+        }),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: '该邮箱已被注册' });
+    });
+
+    it('updates existing pending registration via upsert', async () => {
+      const app = await makeApp();
+      mockUserModel.findOne.mockResolvedValue(null);
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pendingDoc() as never);
+      mockPendingRegistrationModel.findOneAndUpdate.mockResolvedValue(pendingDoc() as never);
+      mockBcrypt.hash.mockResolvedValueOnce('new-password-hash' as never);
+
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'hello@liyuanstudio.com',
+          password: 'password123',
+          displayName: 'Hello User',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { email: 'hello@liyuanstudio.com' },
+        expect.objectContaining({
+          email: 'hello@liyuanstudio.com',
+          displayName: 'Hello User',
+          passwordHash: 'new-password-hash',
+          codeHash: expect.any(String),
+          expiresAt: expect.any(Date),
+        }),
+        { upsert: true, new: true },
+      );
+    });
+  });
+
+  describe('POST /api/auth/register/verify', () => {
+    it('creates verified user and returns token on valid code', async () => {
+      const app = await makeApp();
+      const pending = pendingDoc({ codeHash: hashToken('123456') });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockUserModel.findOne.mockResolvedValue(null);
+      mockUserModel.create.mockResolvedValue(userDoc({ emailVerified: true }) as never);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '123456' }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockUserModel.create).toHaveBeenCalledWith(expect.objectContaining({
+        email: 'hello@liyuanstudio.com',
+        displayName: 'Hello User',
+        role: 'user',
+        emailVerified: true,
+        passwordHash: 'hashed-password',
+      }));
+      expect(mockPendingRegistrationModel.deleteOne).toHaveBeenCalledWith({ email: 'hello@liyuanstudio.com' });
+      const json = await res.json();
+      expect(json.user.emailVerified).toBe(true);
+      expect(typeof json.token).toBe('string');
+    });
+
+    it('rejects invalid code', async () => {
+      const app = await makeApp();
+      const pending = pendingDoc({ codeHash: hashToken('999999') });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '000000' }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: '验证码错误' });
+    });
+
+    it('rejects missing or expired pending registration', async () => {
+      const app = await makeApp();
+      mockPendingRegistrationModel.findOne.mockResolvedValue(null);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '123456' }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: '验证码无效或已过期' });
+    });
+
+    it('rejects invalid input', async () => {
+      const app = await makeApp();
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'not-an-email', code: 'short' }),
+      });
+
+      expect(res.status).toBe(400);
+    });
   });
 
   it('POST /api/auth/login returns a token for verified credentials', async () => {
@@ -167,32 +289,6 @@ describe('auth routes', () => {
     expect(await res.json()).toEqual({ error: '邮箱或密码错误' });
   });
 
-  it('POST /api/auth/login rejects unverified users and resends verification email', async () => {
-    const app = await makeApp();
-    const doc = userDoc({ emailVerified: false });
-    mockUserModel.findOne.mockResolvedValue(doc as never);
-    mockBcrypt.compare.mockResolvedValue(true as never);
-
-    const res = await app.request('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
-    });
-
-    expect(res.status).toBe(403);
-    expect(doc.emailVerifyTokenHash).toEqual(expect.any(String));
-    expect(doc.emailVerifyExpiresAt).toEqual(expect.any(Date));
-    expect(doc.save).toHaveBeenCalled();
-    expect(mockSendVerificationEmail).toHaveBeenCalledWith({
-      email: 'hello@liyuanstudio.com',
-      displayName: 'Hello User',
-      token: expect.any(String),
-    });
-    expect(await res.json()).toEqual({
-      error: '邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。',
-    });
-  });
-
   it('GET /api/auth/me returns the current user', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(userDoc() as never);
@@ -213,38 +309,6 @@ describe('auth routes', () => {
         avatar: 'preset-avatar',
       },
     });
-  });
-
-  it('GET /api/auth/verify-email verifies a valid token', async () => {
-    const app = await makeApp();
-    const doc = userDoc({ emailVerified: false });
-    mockUserModel.findOne.mockResolvedValue(doc as never);
-
-    const res = await app.request('/api/auth/verify-email?token=plain-token');
-
-    expect(res.status).toBe(200);
-    expect(mockUserModel.findOne).toHaveBeenCalledWith({
-      emailVerifyTokenHash: expect.any(String),
-      emailVerifyExpiresAt: { $gt: expect.any(Date) },
-    });
-    expect(doc.emailVerified).toBe(true);
-    expect(doc.emailVerifyTokenHash).toBeUndefined();
-    expect(doc.emailVerifyExpiresAt).toBeUndefined();
-    expect(doc.save).toHaveBeenCalled();
-  });
-
-  it('POST /api/auth/resend-verification returns generic success for unknown emails', async () => {
-    const app = await makeApp();
-    mockUserModel.findOne.mockResolvedValue(null);
-
-    const res = await app.request('/api/auth/resend-verification', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'missing@example.com' }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(mockSendVerificationEmail).not.toHaveBeenCalled();
   });
 
   it('POST /api/auth/forgot-password sends a reset email for an existing user', async () => {

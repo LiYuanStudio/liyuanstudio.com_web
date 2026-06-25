@@ -16,7 +16,8 @@ describe('AuthForm', () => {
   const unauthMock = (overrides: Record<string, unknown> = {}) => ({
     state: { status: 'unauthenticated' as const },
     login: vi.fn().mockResolvedValue(undefined),
-    register: vi.fn().mockResolvedValue(undefined),
+    sendRegistrationCode: vi.fn().mockResolvedValue(undefined),
+    verifyRegistrationCode: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn(),
     updateAvatar: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -41,7 +42,7 @@ describe('AuthForm', () => {
     await user.click(screen.getByRole('button', { name: '去注册' }));
 
     expect(screen.getByRole('heading', { name: '注册' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '注册' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '获取验证码' })).toBeInTheDocument();
   });
 
   it('submits login and calls onSuccess', async () => {
@@ -61,10 +62,10 @@ describe('AuthForm', () => {
     });
   });
 
-  it('submits register and shows the verification waiting screen', async () => {
-    const register = vi.fn().mockResolvedValue(undefined);
+  it('submits register code form and shows code verification step', async () => {
+    const sendRegistrationCode = vi.fn().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue(
-      unauthMock({ register }) as ReturnType<typeof useAuth>,
+      unauthMock({ sendRegistrationCode }) as ReturnType<typeof useAuth>,
     );
     render(<AuthForm />);
     const user = userEvent.setup();
@@ -73,21 +74,42 @@ describe('AuthForm', () => {
     await user.type(screen.getByLabelText('显示名称'), 'New User');
     await user.type(screen.getByLabelText('邮箱'), 'new@example.com');
     await user.type(screen.getByLabelText('密码'), 'password123');
-    await user.click(screen.getByRole('button', { name: '注册' }));
+    await user.click(screen.getByRole('button', { name: '获取验证码' }));
 
     await waitFor(() => {
-      expect(register).toHaveBeenCalledWith('new@example.com', 'password123', 'New User');
-      expect(screen.getByRole('heading', { name: '请查收邮箱' })).toBeInTheDocument();
-      expect(screen.getByRole('status')).toHaveTextContent('new@example.com');
+      expect(sendRegistrationCode).toHaveBeenCalledWith('new@example.com', 'password123', 'New User');
+      expect(screen.getByLabelText('验证码')).toBeInTheDocument();
+      expect(screen.getByText(/验证码已发送至 new@example.com/)).toBeInTheDocument();
+    });
+  });
+
+  it('submits verification code and calls onSuccess', async () => {
+    const sendRegistrationCode = vi.fn().mockResolvedValue(undefined);
+    const verifyRegistrationCode = vi.fn().mockResolvedValue(undefined);
+    const onSuccess = vi.fn();
+    mockUseAuth.mockReturnValue(
+      unauthMock({ sendRegistrationCode, verifyRegistrationCode }) as ReturnType<typeof useAuth>,
+    );
+    render(<AuthForm onSuccess={onSuccess} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '去注册' }));
+    await user.type(screen.getByLabelText('显示名称'), 'New User');
+    await user.type(screen.getByLabelText('邮箱'), 'new@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    await user.click(screen.getByRole('button', { name: '获取验证码' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('验证码')).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login/');
+    await user.type(screen.getByLabelText('验证码'), '123456');
+    await user.click(screen.getByRole('button', { name: '完成注册' }));
 
-    await user.click(screen.getByRole('button', { name: '修改邮箱' }));
-
-    expect(screen.getByRole('heading', { name: '注册' })).toBeInTheDocument();
-    expect(screen.getByLabelText('邮箱')).toHaveValue('new@example.com');
-    expect(screen.getByLabelText('密码')).toHaveValue('');
+    await waitFor(() => {
+      expect(verifyRegistrationCode).toHaveBeenCalledWith('new@example.com', '123456');
+      expect(onSuccess).toHaveBeenCalled();
+    });
   });
 
   it('displays error message on failure', async () => {
@@ -103,23 +125,6 @@ describe('AuthForm', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials');
     });
-  });
-
-  it('shows resend verification button when login fails due to unverified email', async () => {
-    const login = vi.fn().mockRejectedValue(new Error('邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。'));
-    mockUseAuth.mockReturnValue(unauthMock({ login }) as ReturnType<typeof useAuth>);
-    render(<AuthForm />);
-    const user = userEvent.setup();
-
-    await user.type(screen.getByLabelText('邮箱'), 'hello@example.com');
-    await user.type(screen.getByLabelText('密码'), 'password123');
-    await user.click(screen.getByRole('button', { name: '登录' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('邮箱未验证');
-    });
-
-    expect(screen.getByRole('button', { name: '重新发送验证邮件' })).toBeInTheDocument();
   });
 
   it('shows loading state while submitting', async () => {
@@ -159,9 +164,3 @@ describe('AuthForm', () => {
     expect(screen.getByText('Me')).toBeInTheDocument();
   });
 });
-
-
-
-
-
-

@@ -3,15 +3,21 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email.js';
+import { PendingRegistrationModel } from '../models/pending-registration.js';
+import {
+  sendPasswordResetEmail,
+  sendRegistrationCodeEmail,
+} from '../lib/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import type { AuthVariables } from '../middleware/auth.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
-const EMAIL_VERIFY_TTL_MS = 30 * 60 * 1000;
+const EMAIL_VERIFY_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
-const GENERIC_VERIFICATION_MESSAGE = '如果该账号需要验证，验证邮件已发送。';
 const GENERIC_PASSWORD_RESET_MESSAGE = '如果该邮箱已注册，我们已发送重置密码链接。';
+
+const REGISTRATION_RATE_LIMIT_MS = 60 * 1000;
+const registrationRateLimits = new Map<string, number>();
 
 type UserForResponse = {
   _id: { toString: () => string };
@@ -47,13 +53,11 @@ function validateDisplayName(displayName: unknown): string {
   return displayName.trim();
 }
 
-function createEmailVerifyToken() {
-  const token = randomBytes(32).toString('base64url');
-  return {
-    token,
-    tokenHash: hashToken(token),
-    expiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
-  };
+function validateCode(code: unknown): string {
+  if (typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+    throw new Error('验证码必须是 6 位数字');
+  }
+  return code;
 }
 
 function createPasswordResetToken() {
@@ -84,7 +88,17 @@ function badRequest(c: Context, error: unknown) {
   return c.json({ error: error instanceof Error ? error.message : '请求无效' }, 400);
 }
 
-app.post('/register', async (c) => {
+function createRegistrationCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function isRateLimited(email: string): boolean {
+  const lastSent = registrationRateLimits.get(email);
+  if (!lastSent) return false;
+  return Date.now() - lastSent < REGISTRATION_RATE_LIMIT_MS;
+}
+
+app.post('/register/send-code', async (c) => {
   let email: string;
   let password: string;
   let displayName: string;
@@ -98,36 +112,92 @@ app.post('/register', async (c) => {
     return badRequest(c, error);
   }
 
-  const existing = await UserModel.findOne({ email });
-  if (existing) {
+  const existingUser = await UserModel.findOne({ email });
+  if (existingUser) {
     return c.json({ error: '该邮箱已被注册' }, 409);
   }
 
+  if (isRateLimited(email)) {
+    return c.json({ error: '验证码发送过于频繁，请稍后再试' }, 429);
+  }
+
+  const code = createRegistrationCode();
+  const codeHash = hashToken(code);
   const passwordHash = await bcrypt.hash(password, 10);
-  const verification = createEmailVerifyToken();
-  const user = await UserModel.create({
-    email,
-    passwordHash,
-    displayName,
-    role: 'user',
-    emailVerified: false,
-    emailVerifyTokenHash: verification.tokenHash,
-    emailVerifyExpiresAt: verification.expiresAt,
-  });
+
+  await PendingRegistrationModel.findOneAndUpdate(
+    { email },
+    {
+      email,
+      displayName,
+      passwordHash,
+      codeHash,
+      expiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
+    },
+    { upsert: true, new: true },
+  );
 
   try {
-    await sendVerificationEmail({ email, displayName, token: verification.token });
+    await sendRegistrationCodeEmail({ email, displayName, code });
+    registrationRateLimits.set(email, Date.now());
   } catch (error) {
+    await PendingRegistrationModel.deleteOne({ email });
     return c.json(
       {
-        error: '验证邮件发送失败',
+        error: '验证码邮件发送失败',
         detail: error instanceof Error ? error.message : '未知邮件错误',
       },
       502,
     );
   }
 
-  return c.json({ message: '请查看邮箱完成验证。', user: serializeUser(user) }, 201);
+  return c.json({ message: '验证码已发送，请查收邮箱。' });
+});
+
+app.post('/register/verify', async (c) => {
+  let email: string;
+  let code: string;
+
+  try {
+    const body = await c.req.json();
+    email = validateEmail(body.email);
+    code = validateCode(body.code);
+  } catch (error) {
+    return badRequest(c, error);
+  }
+
+  const pending = await PendingRegistrationModel.findOne({ email });
+  if (!pending || pending.expiresAt < new Date()) {
+    return c.json({ error: '验证码无效或已过期' }, 400);
+  }
+
+  if (pending.codeHash !== hashToken(code)) {
+    return c.json({ error: '验证码错误' }, 400);
+  }
+
+  const existingUser = await UserModel.findOne({ email });
+  if (existingUser) {
+    await PendingRegistrationModel.deleteOne({ email });
+    return c.json({ error: '该邮箱已被注册' }, 409);
+  }
+
+  const user = await UserModel.create({
+    email: pending.email,
+    passwordHash: pending.passwordHash,
+    displayName: pending.displayName,
+    role: 'user',
+    emailVerified: true,
+  });
+
+  await PendingRegistrationModel.deleteOne({ email });
+
+  const token = await signToken({
+    id: user._id.toString(),
+    email: user.email,
+    role: user.role,
+  });
+
+  return c.json({ token, user: serializeUser(user) }, 201);
 });
 
 app.post('/login', async (c) => {
@@ -152,34 +222,6 @@ app.post('/login', async (c) => {
     return c.json({ error: '邮箱或密码错误' }, 401);
   }
 
-  if (!user.emailVerified) {
-    const verification = createEmailVerifyToken();
-    user.emailVerifyTokenHash = verification.tokenHash;
-    user.emailVerifyExpiresAt = verification.expiresAt;
-    await user.save();
-
-    try {
-      await sendVerificationEmail({
-        email: user.email,
-        displayName: user.displayName,
-        token: verification.token,
-      });
-    } catch (error) {
-      return c.json(
-        {
-          error: '验证邮件发送失败',
-          detail: error instanceof Error ? error.message : '未知邮件错误',
-        },
-        502,
-      );
-    }
-
-    return c.json(
-      { error: '邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。' },
-      403,
-    );
-  }
-
   const token = await signToken({
     id: user._id.toString(),
     email: user.email,
@@ -194,68 +236,6 @@ app.get('/me', requireAuth, async (c) => {
     return c.json({ error: '用户不存在' }, 404);
   }
   return c.json({ user: serializeUser(user) });
-});
-
-app.get('/verify-email', async (c) => {
-  const token = c.req.query('token');
-  if (!token) {
-    return c.json({ error: '缺少验证令牌' }, 400);
-  }
-
-  const user = await UserModel.findOne({
-    emailVerifyTokenHash: hashToken(token),
-    emailVerifyExpiresAt: { $gt: new Date() },
-  });
-
-  if (!user) {
-    return c.json({ error: '验证链接无效或已过期' }, 400);
-  }
-
-  user.emailVerified = true;
-  user.emailVerifyTokenHash = undefined;
-  user.emailVerifyExpiresAt = undefined;
-  await user.save();
-
-  return c.json({ message: '邮箱验证成功。' });
-});
-
-app.post('/resend-verification', async (c) => {
-  let email: string;
-
-  try {
-    const body = await c.req.json();
-    email = validateEmail(body.email);
-  } catch (error) {
-    return badRequest(c, error);
-  }
-
-  const user = await UserModel.findOne({ email });
-  if (!user || user.emailVerified) {
-    return c.json({ message: GENERIC_VERIFICATION_MESSAGE });
-  }
-
-  const verification = createEmailVerifyToken();
-  user.emailVerifyTokenHash = verification.tokenHash;
-  user.emailVerifyExpiresAt = verification.expiresAt;
-  await user.save();
-
-  try {
-    await sendVerificationEmail({
-      email: user.email,
-      displayName: user.displayName,
-      token: verification.token,
-    });
-  } catch (error) {
-    return c.json(
-      {
-        error: '验证邮件发送失败',
-        detail: error instanceof Error ? error.message : '未知邮件错误',
-      },
-      502,
-    );
-  }
-
-  return c.json({ message: GENERIC_VERIFICATION_MESSAGE });
 });
 
 app.post('/forgot-password', async (c) => {

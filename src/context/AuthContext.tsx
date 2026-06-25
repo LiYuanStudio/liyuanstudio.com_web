@@ -10,7 +10,8 @@ import {
   fetchMe,
   getStoredToken,
   login as apiLogin,
-  register as apiRegister,
+  sendRegistrationCode as apiSendRegistrationCode,
+  verifyRegistrationCode as apiVerifyRegistrationCode,
   setStoredToken,
   updateAvatar as apiUpdateAvatar,
 } from '../api/auth.js';
@@ -24,7 +25,8 @@ type AuthState =
 interface AuthContextValue {
   state: AuthState;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
+  sendRegistrationCode: (email: string, password: string, displayName: string) => Promise<void>;
+  verifyRegistrationCode: (email: string, code: string) => Promise<void>;
   logout: () => void;
   updateAvatar: (avatarUrl: string) => Promise<void>;
 }
@@ -67,14 +69,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ status: 'authenticated', user });
   }, []);
 
-  const register = useCallback(async (
+  const sendRegistrationCode = useCallback(async (
     email: string,
     password: string,
     displayName: string,
   ) => {
-    await apiRegister(email, password, displayName);
-    setStoredToken(null);
-    setState({ status: 'unauthenticated' });
+    await apiSendRegistrationCode(email, password, displayName);
+  }, []);
+
+  const verifyRegistrationCode = useCallback(async (email: string, code: string) => {
+    const { token, user } = await apiVerifyRegistrationCode(email, code);
+    setStoredToken(token);
+    setState({ status: 'authenticated', user });
   }, []);
 
   const logout = useCallback(() => {
@@ -88,8 +94,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ state, login, register, logout, updateAvatar }),
-    [state, login, register, logout, updateAvatar],
+    () => ({
+      state,
+      login,
+      sendRegistrationCode,
+      verifyRegistrationCode,
+      logout,
+      updateAvatar,
+    }),
+    [state, login, sendRegistrationCode, verifyRegistrationCode, logout, updateAvatar],
   );
 
   return (
