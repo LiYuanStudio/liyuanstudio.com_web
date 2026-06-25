@@ -55,8 +55,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     res.end();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const relevant = Object.keys(process.env).filter(
+      (k) =>
+        k.includes('CORS') ||
+        k.includes('MONGO') ||
+        k.includes('API_KEY') ||
+        k.includes('JWT') ||
+        k.includes('RESEND') ||
+        k.includes('EMAIL') ||
+        k.includes('APP_URL'),
+    );
     res.statusCode = 500;
     res.setHeader('content-type', 'text/plain; charset=utf-8');
-    res.end('Handler error: ' + message);
+    res.end(
+      'Handler error: ' +
+        message +
+        '\nCORS_ORIGIN=' +
+        (process.env.CORS_ORIGIN ?? 'undefined') +
+        '\nKeys: ' +
+        relevant.join(', '),
+    );
   }
 }

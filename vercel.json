@@ -4,9 +4,12 @@
   "installCommand": "npm install && npm run build:api",
   "buildCommand": "npm run build",
   "functions": {
-    "api/[...path].ts": {
+    "api/index.ts": {
       "maxDuration": 10,
       "includeFiles": "server/dist/**"
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" }
+  ]
 }
