@@ -43,6 +43,22 @@
   border-color: #0071e3;
 }
 
+.auth-inline-link {
+  color: #0071e3;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.auth-inline-link:hover {
+  text-decoration: underline;
+}
+
+.auth-forgot-link {
+  align-self: flex-end;
+  margin-top: -8px;
+}
+
 .auth-error {
   margin: 0;
   color: #ff3b30;
@@ -122,4 +138,37 @@
 .auth-link-button {
   width: 100%;
   margin-top: 24px;
+}
+
+.auth-verification-card {
+  text-align: center;
+}
+
+.auth-verification-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: rgba(19, 115, 51, 0.1);
+  color: #137333;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.auth-secondary-button {
+  margin-top: 14px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #0071e3;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-secondary-button:hover {
+  text-decoration: underline;
 }

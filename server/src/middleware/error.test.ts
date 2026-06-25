@@ -31,7 +31,7 @@ describe('errorHandler', () => {
     const body = await res.json<{ error: string; message?: string }>();
 
     expect(res.status).toBe(500);
-    expect(body.error).toBe('Internal Server Error');
+    expect(body.error).toBe('服务器内部错误');
     expect(body.message).toBeUndefined();
   });
 
@@ -46,7 +46,7 @@ describe('errorHandler', () => {
     const body = await res.json<{ error: string; message?: string }>();
 
     expect(res.status).toBe(500);
-    expect(body.error).toBe('Internal Server Error');
+    expect(body.error).toBe('服务器内部错误');
     expect(body.message).toBe('debug detail');
   });
 

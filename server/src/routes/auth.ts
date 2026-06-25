@@ -3,13 +3,15 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
-import { sendVerificationEmail } from '../lib/email.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import type { AuthVariables } from '../middleware/auth.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 const EMAIL_VERIFY_TTL_MS = 30 * 60 * 1000;
-const GENERIC_VERIFICATION_MESSAGE = 'If the account needs verification, a verification email has been sent.';
+const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
+const GENERIC_VERIFICATION_MESSAGE = '如果该账号需要验证，验证邮件已发送。';
+const GENERIC_PASSWORD_RESET_MESSAGE = '如果该邮箱已注册，我们已发送重置密码链接。';
 
 type UserForResponse = {
   _id: { toString: () => string };
@@ -22,25 +24,25 @@ type UserForResponse = {
 
 function validateEmail(email: unknown): string {
   if (typeof email !== 'string' || email.trim().length === 0) {
-    throw new Error('Email is required');
+    throw new Error('邮箱不能为空');
   }
   const trimmed = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-    throw new Error('Invalid email');
+    throw new Error('邮箱格式不正确');
   }
   return trimmed;
 }
 
 function validatePassword(password: unknown): string {
   if (typeof password !== 'string' || password.length < 8) {
-    throw new Error('Password must be at least 8 characters');
+    throw new Error('密码至少需要 8 位');
   }
   return password;
 }
 
 function validateDisplayName(displayName: unknown): string {
   if (typeof displayName !== 'string' || displayName.trim().length === 0) {
-    throw new Error('Display name is required');
+    throw new Error('显示名称不能为空');
   }
   return displayName.trim();
 }
@@ -51,6 +53,15 @@ function createEmailVerifyToken() {
     token,
     tokenHash: hashToken(token),
     expiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
+  };
+}
+
+function createPasswordResetToken() {
+  const token = randomBytes(32).toString('base64url');
+  return {
+    token,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
   };
 }
 
@@ -70,7 +81,7 @@ function serializeUser(user: UserForResponse) {
 }
 
 function badRequest(c: Context, error: unknown) {
-  return c.json({ error: error instanceof Error ? error.message : 'Invalid request' }, 400);
+  return c.json({ error: error instanceof Error ? error.message : '请求无效' }, 400);
 }
 
 app.post('/register', async (c) => {
@@ -89,7 +100,7 @@ app.post('/register', async (c) => {
 
   const existing = await UserModel.findOne({ email });
   if (existing) {
-    return c.json({ error: 'Email already registered' }, 409);
+    return c.json({ error: '该邮箱已被注册' }, 409);
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -109,14 +120,14 @@ app.post('/register', async (c) => {
   } catch (error) {
     return c.json(
       {
-        error: 'Failed to send verification email',
-        detail: error instanceof Error ? error.message : 'Unknown email error',
+        error: '验证邮件发送失败',
+        detail: error instanceof Error ? error.message : '未知邮件错误',
       },
       502,
     );
   }
 
-  return c.json({ message: 'Please check your email to complete verification.', user: serializeUser(user) }, 201);
+  return c.json({ message: '请查看邮箱完成验证。', user: serializeUser(user) }, 201);
 });
 
 app.post('/login', async (c) => {
@@ -133,16 +144,40 @@ app.post('/login', async (c) => {
 
   const user = await UserModel.findOne({ email });
   if (!user) {
-    return c.json({ error: 'Invalid email or password' }, 401);
+    return c.json({ error: '邮箱或密码错误' }, 401);
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
-    return c.json({ error: 'Invalid email or password' }, 401);
+    return c.json({ error: '邮箱或密码错误' }, 401);
   }
 
   if (!user.emailVerified) {
-    return c.json({ error: 'Please verify your email before logging in.' }, 403);
+    const verification = createEmailVerifyToken();
+    user.emailVerifyTokenHash = verification.tokenHash;
+    user.emailVerifyExpiresAt = verification.expiresAt;
+    await user.save();
+
+    try {
+      await sendVerificationEmail({
+        email: user.email,
+        displayName: user.displayName,
+        token: verification.token,
+      });
+    } catch (error) {
+      return c.json(
+        {
+          error: '验证邮件发送失败',
+          detail: error instanceof Error ? error.message : '未知邮件错误',
+        },
+        502,
+      );
+    }
+
+    return c.json(
+      { error: '邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。' },
+      403,
+    );
   }
 
   const token = await signToken({
@@ -156,7 +191,7 @@ app.post('/login', async (c) => {
 app.get('/me', requireAuth, async (c) => {
   const user = await UserModel.findById(c.get('userId'));
   if (!user) {
-    return c.json({ error: 'User not found' }, 404);
+    return c.json({ error: '用户不存在' }, 404);
   }
   return c.json({ user: serializeUser(user) });
 });
@@ -164,7 +199,7 @@ app.get('/me', requireAuth, async (c) => {
 app.get('/verify-email', async (c) => {
   const token = c.req.query('token');
   if (!token) {
-    return c.json({ error: 'Verification token is required' }, 400);
+    return c.json({ error: '缺少验证令牌' }, 400);
   }
 
   const user = await UserModel.findOne({
@@ -173,7 +208,7 @@ app.get('/verify-email', async (c) => {
   });
 
   if (!user) {
-    return c.json({ error: 'Invalid or expired verification token' }, 400);
+    return c.json({ error: '验证链接无效或已过期' }, 400);
   }
 
   user.emailVerified = true;
@@ -181,7 +216,7 @@ app.get('/verify-email', async (c) => {
   user.emailVerifyExpiresAt = undefined;
   await user.save();
 
-  return c.json({ message: 'Email verified successfully.' });
+  return c.json({ message: '邮箱验证成功。' });
 });
 
 app.post('/resend-verification', async (c) => {
@@ -213,8 +248,8 @@ app.post('/resend-verification', async (c) => {
   } catch (error) {
     return c.json(
       {
-        error: 'Failed to send verification email',
-        detail: error instanceof Error ? error.message : 'Unknown email error',
+        error: '验证邮件发送失败',
+        detail: error instanceof Error ? error.message : '未知邮件错误',
       },
       502,
     );
@@ -223,10 +258,79 @@ app.post('/resend-verification', async (c) => {
   return c.json({ message: GENERIC_VERIFICATION_MESSAGE });
 });
 
+app.post('/forgot-password', async (c) => {
+  let email: string;
+
+  try {
+    const body = await c.req.json();
+    email = validateEmail(body.email);
+  } catch (error) {
+    return badRequest(c, error);
+  }
+
+  const user = await UserModel.findOne({ email });
+  if (user) {
+    const reset = createPasswordResetToken();
+    user.passwordResetTokenHash = reset.tokenHash;
+    user.passwordResetExpiresAt = reset.expiresAt;
+    await user.save();
+
+    try {
+      await sendPasswordResetEmail({
+        email: user.email,
+        displayName: user.displayName,
+        token: reset.token,
+      });
+    } catch (error) {
+      return c.json(
+        {
+          error: '重置邮件发送失败',
+          detail: error instanceof Error ? error.message : '未知邮件错误',
+        },
+        502,
+      );
+    }
+  }
+
+  return c.json({ message: GENERIC_PASSWORD_RESET_MESSAGE });
+});
+
+app.post('/reset-password', async (c) => {
+  let token: string;
+  let password: string;
+
+  try {
+    const body = await c.req.json();
+    if (typeof body.token !== 'string' || body.token.length === 0) {
+      throw new Error('缺少重置令牌');
+    }
+    token = body.token;
+    password = validatePassword(body.password);
+  } catch (error) {
+    return badRequest(c, error);
+  }
+
+  const user = await UserModel.findOne({
+    passwordResetTokenHash: hashToken(token),
+    passwordResetExpiresAt: { $gt: new Date() },
+  });
+
+  if (!user) {
+    return c.json({ error: '重置链接无效或已过期' }, 400);
+  }
+
+  user.passwordHash = await bcrypt.hash(password, 10);
+  user.passwordResetTokenHash = undefined;
+  user.passwordResetExpiresAt = undefined;
+  await user.save();
+
+  return c.json({ message: '密码已重置，请使用新密码登录。' });
+});
+
 app.patch('/me/avatar', requireAuth, async (c) => {
   const body = await c.req.json();
   if (typeof body.avatar !== 'string' || body.avatar.trim().length === 0) {
-    return c.json({ error: 'Avatar URL is required' }, 400);
+    return c.json({ error: '头像链接不能为空' }, 400);
   }
 
   const user = await UserModel.findByIdAndUpdate(
@@ -235,11 +339,10 @@ app.patch('/me/avatar', requireAuth, async (c) => {
     { new: true },
   );
   if (!user) {
-    return c.json({ error: 'User not found' }, 404);
+    return c.json({ error: '用户不存在' }, 404);
   }
 
   return c.json({ user: serializeUser(user) });
 });
 
 export default app;
-

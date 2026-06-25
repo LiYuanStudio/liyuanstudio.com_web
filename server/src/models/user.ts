@@ -11,6 +11,8 @@ export interface User {
   emailVerified: boolean;
   emailVerifyTokenHash?: string;
   emailVerifyExpiresAt?: Date;
+  passwordResetTokenHash?: string;
+  passwordResetExpiresAt?: Date;
   avatar: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -30,6 +32,8 @@ const UserSchema = new mongoose.Schema<User>(
     emailVerified: { type: Boolean, required: true, default: false },
     emailVerifyTokenHash: { type: String },
     emailVerifyExpiresAt: { type: Date },
+    passwordResetTokenHash: { type: String },
+    passwordResetExpiresAt: { type: Date },
     avatar: { type: String, required: true, default: DEFAULT_AVATAR },
   },
   { timestamps: true },

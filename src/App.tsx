@@ -6,9 +6,8 @@ import React, {
   useState,
 } from 'react';
 import { IconGithub } from '@arco-design/web-react/icon';
-import { fetchBlogPosts, fetchNews } from './api.js';
 import { useAuth } from './context/AuthContext.js';
-import type { BlogPost, GlowPosition, NewsUpdate } from './types.js';
+import type { GlowPosition } from './types.js';
 import {
   MouseFollower,
   clamp,
@@ -70,30 +69,6 @@ export const News = React.forwardRef<
   HTMLElement,
   { glowRef: React.RefObject<GlowPosition | null> }
 >(({ glowRef }, forwardedRef) => {
-  const [updates, setUpdates] = useState<NewsUpdate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchNews()
-      .then((data) => {
-        if (cancelled) return;
-        setUpdates(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : '加载失败');
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return (
     <section
       ref={forwardedRef}
@@ -107,30 +82,7 @@ export const News = React.forwardRef<
       <p className="news-lead">
         产品更新、品牌动向与团队成长的一线消息。
       </p>
-
-      {loading ? (
-        <p className="news-lead">加载中…</p>
-      ) : error ? (
-        <p className="news-lead" role="alert">{error}</p>
-      ) : (
-        <div className="news-grid">
-          {updates.map((update) => (
-            <article key={update._id ?? update.slug} className="news-card">
-              <div className="news-card-hero">
-                <h4>{update.tag}</h4>
-              </div>
-              <div className="news-card-content">
-                <h3>{update.title}</h3>
-                <p>{update.description}</p>
-                <div className="news-card-footer">
-                  <span className="news-tag">动态</span>
-                  <span className="news-date">{update.date}</span>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
+      <p className="news-lead">敬请期待</p>
     </section>
   );
 });
@@ -139,30 +91,6 @@ export const Blog = React.forwardRef<
   HTMLElement,
   { glowRef: React.RefObject<GlowPosition | null> }
 >(({ glowRef }, forwardedRef) => {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchBlogPosts()
-      .then((data) => {
-        if (cancelled) return;
-        setPosts(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : '加载失败');
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return (
     <section
       ref={forwardedRef}
@@ -176,30 +104,7 @@ export const Blog = React.forwardRef<
       <p className="blog-lead">
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
-
-      {loading ? (
-        <p className="blog-lead">加载中…</p>
-      ) : error ? (
-        <p className="blog-lead" role="alert">{error}</p>
-      ) : (
-        <div className="blog-grid">
-          {posts.map((post) => (
-            <article key={post._id ?? post.slug} className="blog-card">
-              <div className="blog-card-hero">
-                <h4>{post.category}</h4>
-              </div>
-              <div className="blog-card-content">
-                <h3>{post.title}</h3>
-                <p>{post.excerpt}</p>
-                <div className="blog-card-footer">
-                  <span className="blog-tag">博客</span>
-                  <span className="blog-date">{post.date}</span>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
+      <p className="blog-lead">敬请期待</p>
     </section>
   );
 });
@@ -349,7 +254,6 @@ export function App() {
         </section>
 
         <News ref={newsRef} glowRef={glowRef} />
-
         <Blog ref={blogRef} glowRef={glowRef} />
       </main>
 

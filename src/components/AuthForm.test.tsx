@@ -30,6 +30,7 @@ describe('AuthForm', () => {
     expect(screen.getByLabelText('邮箱')).toBeInTheDocument();
     expect(screen.getByLabelText('密码')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '忘记密码？' })).toHaveAttribute('href', '/forgot-password/');
   });
 
   it('toggles to register mode', async () => {
@@ -60,7 +61,7 @@ describe('AuthForm', () => {
     });
   });
 
-  it('submits register and shows verification message', async () => {
+  it('submits register and shows the verification waiting screen', async () => {
     const register = vi.fn().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue(
       unauthMock({ register }) as ReturnType<typeof useAuth>,
@@ -76,8 +77,17 @@ describe('AuthForm', () => {
 
     await waitFor(() => {
       expect(register).toHaveBeenCalledWith('new@example.com', 'password123', 'New User');
-      expect(screen.getByRole('status')).toHaveTextContent('注册成功，请检查邮箱完成验证。');
+      expect(screen.getByRole('heading', { name: '请查收邮箱' })).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('new@example.com');
     });
+
+    expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login/');
+
+    await user.click(screen.getByRole('button', { name: '修改邮箱' }));
+
+    expect(screen.getByRole('heading', { name: '注册' })).toBeInTheDocument();
+    expect(screen.getByLabelText('邮箱')).toHaveValue('new@example.com');
+    expect(screen.getByLabelText('密码')).toHaveValue('');
   });
 
   it('displays error message on failure', async () => {
@@ -93,6 +103,23 @@ describe('AuthForm', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials');
     });
+  });
+
+  it('shows resend verification button when login fails due to unverified email', async () => {
+    const login = vi.fn().mockRejectedValue(new Error('邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。'));
+    mockUseAuth.mockReturnValue(unauthMock({ login }) as ReturnType<typeof useAuth>);
+    render(<AuthForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('邮箱'), 'hello@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    await user.click(screen.getByRole('button', { name: '登录' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('邮箱未验证');
+    });
+
+    expect(screen.getByRole('button', { name: '重新发送验证邮件' })).toBeInTheDocument();
   });
 
   it('shows loading state while submitting', async () => {

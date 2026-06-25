@@ -23,7 +23,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const app = createApp('/api');
 
     const url = `http://${req.headers.host || 'localhost'}${req.url}`;
-
     const requestInit: RequestInit & { duplex?: 'half' } = {
       method: req.method,
       headers: req.headers as Record<string, string>,

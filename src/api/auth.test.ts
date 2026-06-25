@@ -125,6 +125,63 @@ describe('auth api helpers', () => {
     });
   });
 
+  it('resendVerification sends a POST request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: '如果该账号需要验证，验证邮件已发送。' }),
+    } as Response));
+
+    const { resendVerification } = await importAuthApi();
+    await expect(resendVerification('hello@example.com')).resolves.toEqual({
+      message: '如果该账号需要验证，验证邮件已发送。',
+    });
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@example.com' }),
+    });
+  });
+
+  it('requestPasswordReset sends a POST request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: '如果该邮箱已注册，我们已发送重置密码链接。' }),
+    } as Response));
+
+    const { requestPasswordReset } = await importAuthApi();
+    await expect(requestPasswordReset('hello@example.com')).resolves.toEqual({
+      message: '如果该邮箱已注册，我们已发送重置密码链接。',
+    });
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@example.com' }),
+    });
+  });
+
+  it('resetPassword sends a token and new password', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: '密码已重置。' }),
+    } as Response));
+
+    const { resetPassword } = await importAuthApi();
+    await expect(resetPassword('abc 123', 'newpassword123')).resolves.toEqual({
+      message: '密码已重置。',
+    });
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'abc 123', password: 'newpassword123' }),
+    });
+  });
+
   it('updateAvatar sends a PATCH request', async () => {
     localStorage.setItem('liyuan_auth_token', 'my-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

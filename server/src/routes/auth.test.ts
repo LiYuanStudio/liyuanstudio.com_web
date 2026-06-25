@@ -2,19 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
 import { signToken } from '../middleware/auth.js';
-import { sendVerificationEmail } from '../lib/email.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email.js';
 
 vi.mock('../lib/db.js', () => ({
   connectDB: vi.fn().mockResolvedValue({}),
 }));
 vi.mock('../models/user.js');
 vi.mock('../lib/email.js', () => ({
+  sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
   sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('bcryptjs');
 
 const mockUserModel = vi.mocked(UserModel);
 const mockBcrypt = vi.mocked(bcrypt);
+const mockSendPasswordResetEmail = vi.mocked(sendPasswordResetEmail);
 const mockSendVerificationEmail = vi.mocked(sendVerificationEmail);
 
 const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
@@ -53,6 +55,8 @@ describe('auth routes', () => {
     mockUserModel.create.mockReset();
     mockBcrypt.hash.mockReset();
     mockBcrypt.compare.mockReset();
+    mockSendPasswordResetEmail.mockReset();
+    mockSendPasswordResetEmail.mockResolvedValue(undefined);
     mockSendVerificationEmail.mockReset();
     mockSendVerificationEmail.mockResolvedValue(undefined);
   });
@@ -128,7 +132,7 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: 'Email already registered' });
+    expect(await res.json()).toEqual({ error: '该邮箱已被注册' });
   });
 
   it('POST /api/auth/login returns a token for verified credentials', async () => {
@@ -160,12 +164,13 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: 'Invalid email or password' });
+    expect(await res.json()).toEqual({ error: '邮箱或密码错误' });
   });
 
-  it('POST /api/auth/login rejects unverified users', async () => {
+  it('POST /api/auth/login rejects unverified users and resends verification email', async () => {
     const app = await makeApp();
-    mockUserModel.findOne.mockResolvedValue(userDoc({ emailVerified: false }) as never);
+    const doc = userDoc({ emailVerified: false });
+    mockUserModel.findOne.mockResolvedValue(doc as never);
     mockBcrypt.compare.mockResolvedValue(true as never);
 
     const res = await app.request('/api/auth/login', {
@@ -175,6 +180,17 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(403);
+    expect(doc.emailVerifyTokenHash).toEqual(expect.any(String));
+    expect(doc.emailVerifyExpiresAt).toEqual(expect.any(Date));
+    expect(doc.save).toHaveBeenCalled();
+    expect(mockSendVerificationEmail).toHaveBeenCalledWith({
+      email: 'hello@liyuanstudio.com',
+      displayName: 'Hello User',
+      token: expect.any(String),
+    });
+    expect(await res.json()).toEqual({
+      error: '邮箱未验证，验证邮件已重新发送，请查收邮箱完成验证。',
+    });
   });
 
   it('GET /api/auth/me returns the current user', async () => {
@@ -229,6 +245,116 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(200);
     expect(mockSendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/auth/forgot-password sends a reset email for an existing user', async () => {
+    const app = await makeApp();
+    const doc = userDoc();
+    mockUserModel.findOne.mockResolvedValue(doc as never);
+
+    const res = await app.request('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'HELLO@liyuanstudio.com' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUserModel.findOne).toHaveBeenCalledWith({ email: 'hello@liyuanstudio.com' });
+    expect(doc.passwordResetTokenHash).toEqual(expect.any(String));
+    expect(doc.passwordResetExpiresAt).toEqual(expect.any(Date));
+    expect(doc.save).toHaveBeenCalled();
+    expect(mockSendPasswordResetEmail).toHaveBeenCalledWith({
+      email: 'hello@liyuanstudio.com',
+      displayName: 'Hello User',
+      token: expect.any(String),
+    });
+    expect(await res.json()).toEqual({
+      message: '如果该邮箱已注册，我们已发送重置密码链接。',
+    });
+  });
+
+  it('POST /api/auth/forgot-password returns generic success for unknown emails', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(null);
+
+    const res = await app.request('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'missing@example.com' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockSendPasswordResetEmail).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({
+      message: '如果该邮箱已注册，我们已发送重置密码链接。',
+    });
+  });
+
+  it('POST /api/auth/forgot-password rejects invalid email', async () => {
+    const app = await makeApp();
+
+    const res = await app.request('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email' }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/auth/reset-password updates the password and clears reset fields', async () => {
+    const app = await makeApp();
+    const doc = userDoc({
+      passwordResetTokenHash: 'old-hash',
+      passwordResetExpiresAt: new Date(Date.now() + 10_000),
+    });
+    mockUserModel.findOne.mockResolvedValue(doc as never);
+    mockBcrypt.hash.mockResolvedValue('new-hashed-password' as never);
+
+    const res = await app.request('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'plain-token', password: 'newpassword123' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUserModel.findOne).toHaveBeenCalledWith({
+      passwordResetTokenHash: expect.any(String),
+      passwordResetExpiresAt: { $gt: expect.any(Date) },
+    });
+    expect(mockBcrypt.hash).toHaveBeenCalledWith('newpassword123', 10);
+    expect(doc.passwordHash).toBe('new-hashed-password');
+    expect(doc.passwordResetTokenHash).toBeUndefined();
+    expect(doc.passwordResetExpiresAt).toBeUndefined();
+    expect(doc.save).toHaveBeenCalled();
+    expect(await res.json()).toEqual({ message: '密码已重置，请使用新密码登录。' });
+  });
+
+  it('POST /api/auth/reset-password rejects an invalid or expired token', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(null);
+
+    const res = await app.request('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'expired-token', password: 'newpassword123' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: '重置链接无效或已过期' });
+  });
+
+  it('POST /api/auth/reset-password rejects short passwords', async () => {
+    const app = await makeApp();
+
+    const res = await app.request('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'plain-token', password: 'short' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockUserModel.findOne).not.toHaveBeenCalled();
   });
 
   it('PATCH /api/auth/me/avatar updates the avatar', async () => {
