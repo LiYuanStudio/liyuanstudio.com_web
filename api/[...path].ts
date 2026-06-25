@@ -25,44 +25,56 @@ function getBody(req: IncomingMessage): ReadableStream<Uint8Array> | undefined {
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  if (initError) {
-    res.statusCode = 500;
-    res.setHeader('content-type', 'text/plain; charset=utf-8');
-    res.end('Init error: ' + initError.message);
-    return;
-  }
-
-  if (!app) {
-    res.statusCode = 500;
-    res.setHeader('content-type', 'text/plain; charset=utf-8');
-    res.end('App not initialized');
-    return;
-  }
-
-  const url = `http://${req.headers.host || 'localhost'}${req.url}`;
-
-  const request = new Request(url, {
-    method: req.method,
-    headers: new Headers(req.headers as Record<string, string>),
-    body: getBody(req),
-    duplex: 'half',
-  } as RequestInit);
-
-  const response = await app.fetch(request);
-
-  res.statusCode = response.status;
-  response.headers.forEach((value, key) => {
-    res.setHeader(key, value);
-  });
-
-  if (response.body) {
-    const reader = response.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) res.write(value);
+  try {
+    if (initError) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'text/plain; charset=utf-8');
+      res.end('Init error: ' + initError.message);
+      return;
     }
-  }
 
-  res.end();
+    if (!app) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'text/plain; charset=utf-8');
+      res.end('App not initialized');
+      return;
+    }
+
+    const url = `http://${req.headers.host || 'localhost'}${req.url}`;
+
+    const requestInit: RequestInit & { duplex?: 'half' } = {
+      method: req.method,
+      headers: req.headers as Record<string, string>,
+    };
+
+    const body = getBody(req);
+    if (body) {
+      requestInit.body = body;
+      requestInit.duplex = 'half';
+    }
+
+    const request = new Request(url, requestInit);
+    const response = await app.fetch(request);
+
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) res.write(value);
+      }
+    }
+
+    res.end();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.statusCode = 500;
+    res.setHeader('content-type', 'text/plain; charset=utf-8');
+    res.end('Handler error: ' + message);
+  }
 }
