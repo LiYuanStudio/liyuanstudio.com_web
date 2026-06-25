@@ -3,10 +3,11 @@ import type { Context, ErrorHandler } from 'hono';
 export const errorHandler: ErrorHandler = (err, c: Context) => {
   console.error(err);
 
+  const isDev = process.env.NODE_ENV !== 'production';
   return c.json(
     {
       error: 'Internal Server Error',
-      message: err.message,
+      ...(isDev ? { message: err.message } : {}),
     },
     500,
   );
