@@ -57,8 +57,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const message = err instanceof Error ? err.message : String(err);
     res.statusCode = 500;
     res.setHeader('content-type', 'text/plain; charset=utf-8');
-    res.end('Internal Server Error');
-    // eslint-disable-next-line no-console
-    console.error(message);
+    res.end('Handler error: ' + message);
   }
 }
