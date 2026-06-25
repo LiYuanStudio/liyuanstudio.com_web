@@ -26,11 +26,13 @@ describe('App', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com');
     mockFetchNews.mockReset().mockResolvedValue([]);
     mockFetchBlogPosts.mockReset().mockResolvedValue([]);
+    localStorage.clear();
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it('renders the hero, products, news and blog sections', () => {
@@ -63,6 +65,32 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '动态' }));
     await user.click(screen.getByRole('button', { name: '博客' }));
     expect(scrollIntoView).toHaveBeenCalledTimes(3);
+  });
+
+  it('shows admin link for authenticated admin users', async () => {
+    mockFetchNews.mockResolvedValue([]);
+    mockFetchBlogPosts.mockResolvedValue([]);
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: {
+          id: '1',
+          email: 'admin@example.com',
+          displayName: 'Admin',
+          role: 'admin',
+          emailVerified: true,
+        },
+      }),
+    } as Response));
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: '后台' })).toBeInTheDocument();
+    });
+    expect(screen.getByText('Admin')).toBeInTheDocument();
   });
 });
 
