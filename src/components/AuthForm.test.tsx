@@ -60,7 +60,7 @@ describe('AuthForm', () => {
     });
   });
 
-  it('submits register and shows verification message', async () => {
+  it('submits register and shows the verification waiting screen', async () => {
     const register = vi.fn().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue(
       unauthMock({ register }) as ReturnType<typeof useAuth>,
@@ -76,8 +76,17 @@ describe('AuthForm', () => {
 
     await waitFor(() => {
       expect(register).toHaveBeenCalledWith('new@example.com', 'password123', 'New User');
-      expect(screen.getByRole('status')).toHaveTextContent('注册成功，请检查邮箱完成验证。');
+      expect(screen.getByRole('heading', { name: '请查收邮箱' })).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('new@example.com');
     });
+
+    expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login/');
+
+    await user.click(screen.getByRole('button', { name: '修改邮箱' }));
+
+    expect(screen.getByRole('heading', { name: '注册' })).toBeInTheDocument();
+    expect(screen.getByLabelText('邮箱')).toHaveValue('new@example.com');
+    expect(screen.getByLabelText('密码')).toHaveValue('');
   });
 
   it('displays error message on failure', async () => {

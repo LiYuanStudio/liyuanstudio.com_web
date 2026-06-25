@@ -19,7 +19,7 @@ export function AuthForm({
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (state.status === 'authenticated') {
@@ -37,7 +37,6 @@ export function AuthForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccess(null);
     setLoading(true);
 
     try {
@@ -46,7 +45,8 @@ export function AuthForm({
         onSuccess?.();
       } else {
         await register(email, password, displayName);
-        setSuccess('注册成功，请检查邮箱完成验证。');
+        setRegisteredEmail(email);
+        setPassword('');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
@@ -54,6 +54,34 @@ export function AuthForm({
       setLoading(false);
     }
   };
+
+  if (registeredEmail && !isLogin) {
+    return (
+      <div className="auth-card auth-verification-card">
+        <div className="auth-verification-icon" aria-hidden="true">
+          ✓
+        </div>
+        <h2>请查收邮箱</h2>
+        <p className="auth-lead" role="status">
+          验证链接已发送至 {registeredEmail}，请打开邮件完成验证。
+        </p>
+        <a className="auth-button auth-link-button" href="/login/">
+          去登录
+        </a>
+        <button
+          type="button"
+          className="auth-secondary-button"
+          onClick={() => {
+            setRegisteredEmail(null);
+            setPassword('');
+            setError(null);
+          }}
+        >
+          修改邮箱
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-card">
@@ -98,12 +126,6 @@ export function AuthForm({
         {error && (
           <p className="auth-error" role="alert">
             {error}
-          </p>
-        )}
-
-        {success && (
-          <p className="auth-success" role="status">
-            {success}
           </p>
         )}
 
