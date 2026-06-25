@@ -315,7 +315,7 @@ describe('auth routes', () => {
     expect(doc.passwordResetTokenHash).toBeUndefined();
     expect(doc.passwordResetExpiresAt).toBeUndefined();
     expect(doc.save).toHaveBeenCalled();
-    expect(await res.json()).toEqual({ message: '密码已重置。' });
+    expect(await res.json()).toEqual({ message: '密码已重置，请使用新密码登录。' });
   });
 
   it('POST /api/auth/reset-password rejects an invalid or expired token', async () => {

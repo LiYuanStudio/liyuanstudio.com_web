@@ -245,29 +245,27 @@ app.post('/forgot-password', async (c) => {
   }
 
   const user = await UserModel.findOne({ email });
-  if (!user) {
-    return c.json({ message: GENERIC_PASSWORD_RESET_MESSAGE });
-  }
+  if (user) {
+    const reset = createPasswordResetToken();
+    user.passwordResetTokenHash = reset.tokenHash;
+    user.passwordResetExpiresAt = reset.expiresAt;
+    await user.save();
 
-  const reset = createPasswordResetToken();
-  user.passwordResetTokenHash = reset.tokenHash;
-  user.passwordResetExpiresAt = reset.expiresAt;
-  await user.save();
-
-  try {
-    await sendPasswordResetEmail({
-      email: user.email,
-      displayName: user.displayName,
-      token: reset.token,
-    });
-  } catch (error) {
-    return c.json(
-      {
-        error: '重置密码邮件发送失败',
-        detail: error instanceof Error ? error.message : '未知邮件错误',
-      },
-      502,
-    );
+    try {
+      await sendPasswordResetEmail({
+        email: user.email,
+        displayName: user.displayName,
+        token: reset.token,
+      });
+    } catch (error) {
+      return c.json(
+        {
+          error: '重置邮件发送失败',
+          detail: error instanceof Error ? error.message : '未知邮件错误',
+        },
+        502,
+      );
+    }
   }
 
   return c.json({ message: GENERIC_PASSWORD_RESET_MESSAGE });
@@ -279,8 +277,8 @@ app.post('/reset-password', async (c) => {
 
   try {
     const body = await c.req.json();
-    if (typeof body.token !== 'string' || body.token.trim().length === 0) {
-      throw new Error('重置令牌不能为空');
+    if (typeof body.token !== 'string' || body.token.length === 0) {
+      throw new Error('缺少重置令牌');
     }
     token = body.token;
     password = validatePassword(body.password);
@@ -302,7 +300,7 @@ app.post('/reset-password', async (c) => {
   user.passwordResetExpiresAt = undefined;
   await user.save();
 
-  return c.json({ message: '密码已重置。' });
+  return c.json({ message: '密码已重置，请使用新密码登录。' });
 });
 
 app.patch('/me/avatar', requireAuth, async (c) => {

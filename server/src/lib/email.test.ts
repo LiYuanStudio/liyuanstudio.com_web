@@ -35,7 +35,7 @@ describe('email helpers', () => {
     });
 
     expect(log).toHaveBeenCalledWith(
-      '[email:mock] Reset password hello@example.com: https://liyuanstudio.com/app/reset-password/?token=plain-token',
+      '[email:mock] 重置密码 hello@example.com: https://liyuanstudio.com/app/reset-password/?token=plain-token',
     );
   });
 
@@ -61,7 +61,7 @@ describe('email helpers', () => {
         Authorization: 'Bearer resend-key',
         'Content-Type': 'application/json',
       },
-      body: expect.stringContaining('Reset your LiYuan Studio password'),
+      body: expect.stringContaining('重置你的 LiYuan Studio 密码'),
     }));
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
     expect(body.to).toBe('hello@example.com');
