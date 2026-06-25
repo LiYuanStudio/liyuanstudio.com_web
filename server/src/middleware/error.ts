@@ -6,7 +6,7 @@ export const errorHandler: ErrorHandler = (err, c: Context) => {
   const isDev = process.env.NODE_ENV !== 'production';
   return c.json(
     {
-      error: 'Internal Server Error',
+      error: '服务器内部错误',
       ...(isDev ? { message: err.message } : {}),
     },
     500,

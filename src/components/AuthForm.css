@@ -43,6 +43,22 @@
   border-color: #0071e3;
 }
 
+.auth-inline-link {
+  color: #0071e3;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.auth-inline-link:hover {
+  text-decoration: underline;
+}
+
+.auth-forgot-link {
+  align-self: flex-end;
+  margin-top: -8px;
+}
+
 .auth-error {
   margin: 0;
   color: #ff3b30;

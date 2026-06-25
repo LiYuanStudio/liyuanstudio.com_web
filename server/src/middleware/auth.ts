@@ -41,7 +41,7 @@ export async function verifyToken(token: string): Promise<TokenUser> {
     typeof payload.email !== 'string' ||
     (payload.role !== 'user' && payload.role !== 'admin')
   ) {
-    throw new Error('Invalid token payload');
+    throw new Error('无效的令牌内容');
   }
 
   return {
@@ -57,7 +57,7 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
     const [scheme, token] = header.split(' ');
 
     if (scheme?.toLowerCase() !== 'bearer' || !token) {
-      return c.json({ error: 'Unauthorized' }, 401);
+      return c.json({ error: '未授权，请先登录' }, 401);
     }
 
     try {
@@ -66,7 +66,7 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
       c.set('authUser', user);
       await next();
     } catch {
-      return c.json({ error: 'Unauthorized' }, 401);
+      return c.json({ error: '未授权，请先登录' }, 401);
     }
   },
 );
@@ -75,7 +75,7 @@ export const requireAdmin = createMiddleware<{ Variables: AuthVariables }>(
   async (c, next) => {
     const user = c.get('authUser');
     if (!user || user.role !== 'admin') {
-      return c.json({ error: 'Forbidden' }, 403);
+      return c.json({ error: '没有权限' }, 403);
     }
     await next();
   },

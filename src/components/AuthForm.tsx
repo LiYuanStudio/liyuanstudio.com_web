@@ -123,6 +123,12 @@ export function AuthForm({
           autoComplete={isLogin ? 'current-password' : 'new-password'}
         />
 
+        {isLogin && (
+          <a className="auth-inline-link auth-forgot-link" href="/forgot-password/">
+            忘记密码？
+          </a>
+        )}
+
         {error && (
           <p className="auth-error" role="alert">
             {error}
