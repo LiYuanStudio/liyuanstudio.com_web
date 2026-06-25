@@ -1,7 +1,5 @@
-import { getRequestListener } from '@hono/node-server';
-import { Hono } from 'hono';
-
-const app = new Hono();
-app.get('/', (c) => c.text('hello'));
-
-export default getRequestListener(app.fetch);
+export default function handler(req: any, res: any) {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/plain');
+  res.end('hello');
+}
