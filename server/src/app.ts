@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { env } from './config/env.js';
 import { connectDB } from './lib/db.js';
 import { errorHandler } from './middleware/error.js';
+import { requestIdMiddleware } from './middleware/request-id.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import newsRoutes from './routes/news.js';
@@ -12,12 +13,13 @@ import blogRoutes from './routes/blog.js';
 export function createApp(basePath?: string) {
   const app = basePath ? new Hono().basePath(basePath) : new Hono();
 
+  app.use(requestIdMiddleware);
   app.use(logger());
   app.use(
     cors({
       origin: env.CORS_ORIGIN,
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'X-API-Key', 'Authorization'],
+      allowHeaders: ['Content-Type', 'X-API-Key', 'Authorization', 'X-Request-Id'],
       credentials: false,
     }),
   );

@@ -44,7 +44,7 @@ describe('adminAuth middleware', () => {
     const res = await app.request('/api/protected', { method: 'POST' });
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: '未授权' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权' }));
   });
 
   it('rejects requests with an incorrect API key', async () => {
@@ -56,7 +56,7 @@ describe('adminAuth middleware', () => {
     });
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: '未授权' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权' }));
   });
 
   it('rejects requests with an API key of different length', async () => {
@@ -86,7 +86,7 @@ describe('adminAuth middleware', () => {
         headers: { 'X-API-Key': key },
       });
       expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({ error: '未授权' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权' }));
     }
   });
 });

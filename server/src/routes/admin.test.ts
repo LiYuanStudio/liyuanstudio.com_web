@@ -88,7 +88,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: '没有权限' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '没有权限' }));
     });
 
     it('rejects unauthenticated requests', async () => {
@@ -97,7 +97,7 @@ describe('admin routes', () => {
       const res = await app.request('/api/admin/users');
 
       expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权，请先登录' }));
     });
     it('looks up the current user before allowing admin access', async () => {
       const app = await makeApp();
@@ -126,7 +126,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: '没有权限' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '没有权限' }));
     });
 
     it('rejects admin access when tokenVersion does not match', async () => {
@@ -139,7 +139,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权，请先登录' }));
     });
   });
 
@@ -184,7 +184,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: '只能修改用户角色' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '只能修改用户角色' }));
       expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
     });
 
@@ -202,7 +202,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: '用户 ID 格式不正确' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '用户 ID 格式不正确' }));
     });
 
     it('returns 400 when role is missing', async () => {
@@ -219,7 +219,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: '只能修改用户角色' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '只能修改用户角色' }));
     });
 
     it('returns 404 for missing user', async () => {
@@ -237,7 +237,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ error: '用户不存在' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
     });
   });
 
@@ -268,7 +268,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: '不能删除当前登录的管理员账号' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '不能删除当前登录的管理员账号' }));
       expect(mockUserModel.findByIdAndDelete).not.toHaveBeenCalled();
     });
 
@@ -283,7 +283,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ error: '用户不存在' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
     });
   });
 });

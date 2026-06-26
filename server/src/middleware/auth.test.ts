@@ -68,7 +68,7 @@ describe('auth middleware', () => {
     const res = await app.request('/me');
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权，请先登录' }));
   });
 
   it('rejects requests with wrong scheme', async () => {

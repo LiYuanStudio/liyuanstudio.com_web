@@ -10,6 +10,7 @@ import {
   sendRegistrationCodeEmail,
 } from '../lib/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
+import { getRequestId, jsonError } from '../middleware/request-id.js';
 import type { AuthVariables } from '../middleware/auth.js';
 import { isAdminEmail } from '../config/env.js';
 
@@ -31,6 +32,51 @@ const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
 const FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
 const registrationRateLimits = new Map<string, number>();
 
+type LogLevel = 'warn' | 'error';
+
+function maskEmail(email: string): string {
+  const [local = '', domain = ''] = email.split('@');
+  const maskedLocal = local.length <= 2 ? `${local.slice(0, 1)}***` : `${local.slice(0, 2)}***`;
+  return domain ? `${maskedLocal}@${domain}` : maskedLocal;
+}
+
+function getErrorSummary(error: unknown) {
+  if (!(error instanceof Error)) {
+    return { message: String(error) };
+  }
+  return {
+    name: error.name,
+    message: error.message,
+    code: (error as Error & { code?: unknown }).code,
+  };
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 11000
+  );
+}
+
+function logAuthEvent(
+  c: Context,
+  level: LogLevel,
+  event: string,
+  details: Record<string, unknown> = {},
+) {
+  const log = level === 'error' ? console.error : console.warn;
+  log(JSON.stringify({
+    level,
+    event,
+    requestId: getRequestId(c),
+    method: c.req.method,
+    path: c.req.path,
+    ...details,
+  }));
+}
+
 type UserForResponse = {
   _id: { toString: () => string };
   email: string;
@@ -40,6 +86,7 @@ type UserForResponse = {
   emailVerified: boolean;
   avatar?: string;
   bio?: string;
+  tokenVersion?: number;
   save?: () => Promise<unknown>;
 };
 
@@ -145,15 +192,40 @@ async function createUniqueUsername(primary: string, fallback: string, ownId?: s
   return `user${randomBytes(4).toString('hex')}`;
 }
 
-async function ensureUsername(user: UserForResponse): Promise<UserForResponse> {
+async function ensureUsername(
+  c: Context,
+  user: UserForResponse,
+  stage: string,
+): Promise<UserForResponse> {
   if (user.username) {
     return user;
   }
 
-  user.username = await createUniqueUsername(user.displayName, user.email, user._id.toString());
-  if (user.save) {
-    await user.save();
+  const userId = user._id.toString();
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      user.username = await createUniqueUsername(user.displayName, user.email, userId);
+      if (user.save) {
+        await user.save();
+      }
+      return user;
+    } catch (error) {
+      logAuthEvent(c, 'error', 'auth.username_backfill_failed', {
+        stage,
+        attempt,
+        userId,
+        email: maskEmail(user.email),
+        duplicateKey: isDuplicateKeyError(error),
+        ...getErrorSummary(error),
+      });
+
+      user.username = undefined;
+      if (!isDuplicateKeyError(error)) {
+        return user;
+      }
+    }
   }
+
   return user;
 }
 
@@ -171,7 +243,7 @@ function serializeUser(user: UserForResponse) {
 }
 
 function badRequest(c: Context, error: unknown) {
-  return c.json({ error: error instanceof Error ? error.message : '请求无效' }, 400);
+  return jsonError(c, error instanceof Error ? error.message : '请求无效', 400);
 }
 
 function createRegistrationCode(): string {
@@ -275,11 +347,11 @@ app.post('/register/send-code', async (c) => {
 
   const existingUser = await UserModel.findOne({ email });
   if (existingUser) {
-    return c.json({ error: '该邮箱已被注册' }, 409);
+    return jsonError(c, '该邮箱已被注册', 409);
   }
 
   if (isRateLimited(email)) {
-    return c.json({ error: '验证码发送过于频繁，请稍后再试' }, 429);
+    return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
   }
 
   const code = createRegistrationCode();
@@ -305,13 +377,9 @@ app.post('/register/send-code', async (c) => {
     registrationRateLimits.set(email, Date.now());
   } catch (error) {
     await PendingRegistrationModel.deleteOne({ email });
-    return c.json(
-      {
-        error: '验证码邮件发送失败',
-        detail: error instanceof Error ? error.message : '未知邮件错误',
-      },
-      502,
-    );
+    return jsonError(c, '验证码邮件发送失败', 502, {
+      detail: error instanceof Error ? error.message : '未知邮件错误',
+    });
   }
 
   return c.json({ message: '验证码已发送，请查收邮箱。' });
@@ -331,12 +399,12 @@ app.post('/register/verify', async (c) => {
 
   const pending = await PendingRegistrationModel.findOne({ email });
   if (!pending || pending.expiresAt < new Date()) {
-    return c.json({ error: '验证码无效或已过期' }, 400);
+    return jsonError(c, '验证码无效或已过期', 400);
   }
 
   const now = new Date();
   if (isActiveDate(pending.lockedUntil, now)) {
-    return c.json({ error: '验证码错误次数过多，请稍后再试' }, 429);
+    return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
   }
 
   if (pending.codeHash !== hashToken(code)) {
@@ -344,16 +412,16 @@ app.post('/register/verify', async (c) => {
     if (pending.failedAttempts >= REGISTRATION_VERIFY_MAX_ATTEMPTS) {
       pending.lockedUntil = new Date(now.getTime() + REGISTRATION_VERIFY_LOCK_MS);
       await pending.save();
-      return c.json({ error: '验证码错误次数过多，请稍后再试' }, 429);
+      return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
     }
     await pending.save();
-    return c.json({ error: '验证码错误' }, 400);
+    return jsonError(c, '验证码错误', 400);
   }
 
   const existingUser = await UserModel.findOne({ email });
   if (existingUser) {
     await PendingRegistrationModel.deleteOne({ email });
-    return c.json({ error: '该邮箱已被注册' }, 409);
+    return jsonError(c, '该邮箱已被注册', 409);
   }
 
   const username = await createUniqueUsername(pending.displayName, pending.email);
@@ -393,45 +461,97 @@ app.post('/login', async (c) => {
 
   const loginThrottleKeys = [`login:email:${email}`, `login:ip:${getClientIp(c)}`];
   const now = new Date();
-  if (await hasLockedThrottle(loginThrottleKeys, now)) {
-    return c.json({ error: '登录尝试过于频繁，请稍后再试' }, 429);
+  try {
+    if (await hasLockedThrottle(loginThrottleKeys, now)) {
+      return jsonError(c, '登录尝试过于频繁，请稍后再试', 429);
+    }
+  } catch (error) {
+    logAuthEvent(c, 'error', 'auth.login_throttle_read_failed', {
+      email: maskEmail(email),
+      ...getErrorSummary(error),
+    });
+    throw error;
   }
 
-  const user = await UserModel.findOne({ email });
+  let user: (UserForResponse & { passwordHash: string; tokenVersion?: number }) | null;
+  try {
+    user = await UserModel.findOne({ email }) as (UserForResponse & { passwordHash: string; tokenVersion?: number }) | null;
+  } catch (error) {
+    logAuthEvent(c, 'error', 'auth.login_user_lookup_failed', {
+      email: maskEmail(email),
+      ...getErrorSummary(error),
+    });
+    throw error;
+  }
+
   if (!user) {
-    const locked = await Promise.all(
-      loginThrottleKeys.map((key) => recordLoginFailure(key, now)),
-    );
-    if (locked.some(Boolean)) {
-      return c.json({ error: '登录尝试过于频繁，请稍后再试' }, 429);
+    let locked: boolean[];
+    try {
+      locked = await Promise.all(loginThrottleKeys.map((key) => recordLoginFailure(key, now)));
+    } catch (error) {
+      logAuthEvent(c, 'error', 'auth.login_throttle_write_failed', {
+        email: maskEmail(email),
+        ...getErrorSummary(error),
+      });
+      throw error;
     }
-    return c.json({ error: '邮箱或密码错误' }, 401);
+    if (locked.some(Boolean)) {
+      return jsonError(c, '登录尝试过于频繁，请稍后再试', 429);
+    }
+    return jsonError(c, '邮箱或密码错误', 401);
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
-    const locked = await Promise.all(
-      loginThrottleKeys.map((key) => recordLoginFailure(key, now)),
-    );
-    if (locked.some(Boolean)) {
-      return c.json({ error: '登录尝试过于频繁，请稍后再试' }, 429);
+    let locked: boolean[];
+    try {
+      locked = await Promise.all(loginThrottleKeys.map((key) => recordLoginFailure(key, now)));
+    } catch (error) {
+      logAuthEvent(c, 'error', 'auth.login_throttle_write_failed', {
+        userId: user._id.toString(),
+        email: maskEmail(email),
+        ...getErrorSummary(error),
+      });
+      throw error;
     }
-    return c.json({ error: '邮箱或密码错误' }, 401);
+    if (locked.some(Boolean)) {
+      return jsonError(c, '登录尝试过于频繁，请稍后再试', 429);
+    }
+    return jsonError(c, '邮箱或密码错误', 401);
   }
 
-  await clearThrottleKeys(loginThrottleKeys);
+  try {
+    await clearThrottleKeys(loginThrottleKeys);
+  } catch (error) {
+    logAuthEvent(c, 'warn', 'auth.login_throttle_clear_failed', {
+      userId: user._id.toString(),
+      email: maskEmail(email),
+      ...getErrorSummary(error),
+    });
+  }
 
   let shouldSave = false;
   if (user.role !== 'admin' && isAdminEmail(user.email)) {
     user.role = 'admin';
     shouldSave = true;
   }
-  if (!user.username) {
-    user.username = await createUniqueUsername(user.displayName, user.email, user._id.toString());
+  if (user.tokenVersion === undefined) {
+    user.tokenVersion = 0;
     shouldSave = true;
   }
-  if (shouldSave) {
-    await user.save();
+  if (!user.username) {
+    await ensureUsername(c, user, 'login');
+  }
+  if (shouldSave && user.save) {
+    try {
+      await user.save();
+    } catch (error) {
+      logAuthEvent(c, 'error', 'auth.login_user_migration_failed', {
+        userId: user._id.toString(),
+        email: maskEmail(user.email),
+        ...getErrorSummary(error),
+      });
+    }
   }
 
   const token = await signToken({
@@ -446,9 +566,9 @@ app.post('/login', async (c) => {
 app.get('/me', requireAuth, async (c) => {
   const user = await UserModel.findById(c.get('userId'));
   if (!user) {
-    return c.json({ error: '用户不存在' }, 404);
+    return jsonError(c, '用户不存在', 404);
   }
-  return c.json({ user: serializeUser(await ensureUsername(user)) });
+  return c.json({ user: serializeUser(await ensureUsername(c, user, 'me')) });
 });
 
 app.post('/forgot-password', async (c) => {
@@ -485,13 +605,9 @@ app.post('/forgot-password', async (c) => {
       user.passwordResetTokenHash = undefined;
       user.passwordResetExpiresAt = undefined;
       await user.save();
-      return c.json(
-        {
-          error: '重置邮件发送失败',
-          detail: error instanceof Error ? error.message : '未知邮件错误',
-        },
-        502,
-      );
+      return jsonError(c, '重置邮件发送失败', 502, {
+        detail: error instanceof Error ? error.message : '未知邮件错误',
+      });
     }
   }
 
@@ -519,7 +635,7 @@ app.post('/reset-password', async (c) => {
   });
 
   if (!user) {
-    return c.json({ error: '重置链接无效或已过期' }, 400);
+    return jsonError(c, '重置链接无效或已过期', 400);
   }
 
   user.passwordHash = await bcrypt.hash(password, 10);
@@ -547,7 +663,7 @@ app.patch('/me/profile', requireAuth, async (c) => {
 
   const user = await UserModel.findById(c.get('userId'));
   if (!user) {
-    return c.json({ error: '用户不存在' }, 404);
+    return jsonError(c, '用户不存在', 404);
   }
 
   user.displayName = displayName;
@@ -576,10 +692,10 @@ app.patch('/me/avatar', requireAuth, async (c) => {
     { new: true },
   );
   if (!user) {
-    return c.json({ error: '用户不存在' }, 404);
+    return jsonError(c, '用户不存在', 404);
   }
 
-  return c.json({ user: serializeUser(await ensureUsername(user)) });
+  return c.json({ user: serializeUser(await ensureUsername(c, user, 'avatar')) });
 });
 
 export default app;

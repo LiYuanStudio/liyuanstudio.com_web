@@ -165,7 +165,7 @@ describe('auth routes', () => {
       });
 
       expect(res.status).toBe(409);
-      expect(await res.json()).toEqual({ error: '该邮箱已被注册' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '该邮箱已被注册' }));
     });
 
     it('updates existing pending registration via upsert', async () => {
@@ -241,7 +241,7 @@ describe('auth routes', () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: '验证码错误' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '验证码错误' }));
     });
 
     it('rejects missing or expired pending registration', async () => {
@@ -255,7 +255,7 @@ describe('auth routes', () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: '验证码无效或已过期' });
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '验证码无效或已过期' }));
     });
 
     it('rejects invalid input', async () => {
@@ -374,7 +374,7 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: '邮箱或密码错误' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '邮箱或密码错误' }));
   });
 
   it('POST /api/auth/login promotes ADMIN_EMAILS users to admin', async () => {
@@ -412,6 +412,24 @@ describe('auth routes', () => {
     await expect(verifyToken(json.token)).resolves.toMatchObject({ tokenVersion: 3 });
   });
 
+  it('POST /api/auth/login backfills missing tokenVersion for legacy users', async () => {
+    const app = await makeApp();
+    const doc = userDoc({ tokenVersion: undefined });
+    mockUserModel.findOne.mockResolvedValue(doc as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(doc.tokenVersion).toBe(0);
+    expect(doc.save).toHaveBeenCalled();
+    const json = await res.json();
+    await expect(verifyToken(json.token)).resolves.toMatchObject({ tokenVersion: 0 });
+  });
   it('POST /api/auth/login returns 429 after repeated failures', async () => {
     const app = await makeApp();
     const emailThrottle = {
@@ -513,7 +531,7 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权，请先登录' }));
   });
 
   it('GET /api/auth/me returns 401 when the token user no longer exists', async () => {
@@ -526,7 +544,7 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权，请先登录' }));
   });
   it('POST /api/auth/forgot-password sends a reset email for an existing user', async () => {
     const app = await makeApp();
@@ -663,7 +681,7 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: '重置链接无效或已过期' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '重置链接无效或已过期' }));
   });
 
   it('POST /api/auth/reset-password rejects short passwords', async () => {
@@ -696,6 +714,96 @@ describe('auth routes', () => {
     expect(doc.save).toHaveBeenCalled();
   });
 
+  it('includes requestId in auth error responses', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(null);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-Id': 'test-request-123',
+      },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get('X-Request-Id')).toBe('test-request-123');
+    expect(await res.json()).toEqual(expect.objectContaining({
+      error: '邮箱或密码错误',
+      requestId: 'test-request-123',
+    }));
+  });
+
+  it('GET /api/auth/me returns the user when username backfill save fails', async () => {
+    const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const doc = userDoc({
+      username: undefined,
+      save: vi.fn().mockRejectedValue(new Error('write failed')),
+    });
+    mockUserModel.findById.mockResolvedValue(doc as never);
+    mockUserModel.findOne.mockResolvedValue(null);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.user.email).toBe('hello@liyuanstudio.com');
+    expect(json.user.username).toBeUndefined();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.username_backfill_failed'));
+    errorSpy.mockRestore();
+  });
+
+  it('GET /api/auth/me retries username backfill after duplicate key errors', async () => {
+    const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const duplicateError = Object.assign(new Error('duplicate username'), { code: 11000 });
+    const doc = userDoc({
+      username: undefined,
+      save: vi.fn()
+        .mockRejectedValueOnce(duplicateError)
+        .mockResolvedValueOnce(undefined),
+    });
+    mockUserModel.findById.mockResolvedValue(doc as never);
+    mockUserModel.findOne.mockResolvedValue(null);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(doc.save).toHaveBeenCalledTimes(2);
+    expect((await res.json()).user.username).toBe('Hello-User');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('duplicateKey'));
+    errorSpy.mockRestore();
+  });
+
+  it('POST /api/auth/login logs migration save failures without failing login', async () => {
+    const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const doc = userDoc({
+      username: undefined,
+      save: vi.fn().mockRejectedValue(new Error('save failed')),
+    });
+    mockUserModel.findOne.mockResolvedValue(doc as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).user.email).toBe('hello@liyuanstudio.com');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.username_backfill_failed'));
+    errorSpy.mockRestore();
+  });
   it('PATCH /api/auth/me/profile updates display name, avatar and bio', async () => {
     const app = await makeApp();
     const doc = userDoc();

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { BlogModel } from '../models/blog.js';
 import { adminAuth } from '../middleware/admin.js';
+import { jsonError } from '../middleware/request-id.js';
 
 const app = new Hono();
 
@@ -12,7 +13,7 @@ app.get('/', async (c) => {
 app.get('/:slug', async (c) => {
   const item = await BlogModel.findOne({ slug: c.req.param('slug') }).lean();
   if (!item) {
-    return c.json({ error: '未找到' }, 404);
+    return jsonError(c, '未找到', 404);
   }
   return c.json(item);
 });
@@ -29,7 +30,7 @@ app.patch('/:id', adminAuth, async (c) => {
     new: true,
   }).lean();
   if (!doc) {
-    return c.json({ error: '未找到' }, 404);
+    return jsonError(c, '未找到', 404);
   }
   return c.json(doc);
 });
@@ -37,7 +38,7 @@ app.patch('/:id', adminAuth, async (c) => {
 app.delete('/:id', adminAuth, async (c) => {
   const doc = await BlogModel.findByIdAndDelete(c.req.param('id')).lean();
   if (!doc) {
-    return c.json({ error: '未找到' }, 404);
+    return jsonError(c, '未找到', 404);
   }
   return c.json({ ok: true });
 });

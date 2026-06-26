@@ -241,15 +241,55 @@ describe('auth api helpers', () => {
     });
   });
 
-  it('throws an error with message on non-ok response', async () => {
+  it('throws an error with message and requestId on non-ok response', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
       statusText: 'Unauthorized',
-      json: async () => ({ error: '邮箱或密码错误' }),
+      headers: new Headers(),
+      json: async () => ({ error: '邮箱或密码错误', requestId: 'req-123' }),
     } as Response));
 
-    const { login } = await importAuthApi();
-    await expect(login('a@b.com', 'password123')).rejects.toThrow('邮箱或密码错误');
+    const { login, ApiError } = await importAuthApi();
+    let caught: unknown;
+    try {
+      await login('a@b.com', 'password123');
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    expect(caught).toMatchObject({ status: 401, requestId: 'req-123' });
+    expect(caught).toEqual(expect.objectContaining({
+      message: '邮箱或密码错误（调试 ID: req-123）',
+    }));
+    expect(consoleSpy).toHaveBeenCalledWith('Auth API request failed', {
+      path: '/auth/login',
+      status: 401,
+      requestId: 'req-123',
+      error: '邮箱或密码错误',
+    });
+    consoleSpy.mockRestore();
+  });
+
+  it('uses X-Request-Id response header when error body has no requestId', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      headers: new Headers({ 'X-Request-Id': 'header-req-1' }),
+      json: async () => ({ error: '服务器内部错误' }),
+    } as Response));
+
+    const { fetchMe } = await importAuthApi();
+    await expect(fetchMe()).rejects.toThrow('服务器内部错误（调试 ID: header-req-1）');
+    expect(consoleSpy).toHaveBeenCalledWith('Auth API request failed', expect.objectContaining({
+      path: '/auth/me',
+      status: 500,
+      requestId: 'header-req-1',
+    }));
+    consoleSpy.mockRestore();
   });
 });

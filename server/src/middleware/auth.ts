@@ -1,7 +1,10 @@
+import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../config/env.js';
 import { UserModel } from '../models/user.js';
+import { getRequestId, jsonError } from './request-id.js';
+import type { RequestVariables } from './request-id.js';
 
 const SECRET = new TextEncoder().encode(env.JWT_SECRET);
 const ISSUER = 'liyuanstudio';
@@ -16,7 +19,7 @@ export interface TokenUser {
   tokenVersion: number;
 }
 
-export type AuthVariables = {
+export type AuthVariables = RequestVariables & {
   userId: string;
   authUser: TokenUser;
 };
@@ -60,25 +63,40 @@ export async function verifyToken(token: string): Promise<TokenUser> {
   };
 }
 
+function logAuthFailure(c: Context, reason: string, error?: unknown) {
+  const details = error instanceof Error ? { name: error.name, message: error.message } : {};
+  console.warn(JSON.stringify({
+    level: 'warn',
+    event: 'auth.require_auth_failed',
+    requestId: getRequestId(c),
+    method: c.req.method,
+    path: c.req.path,
+    reason,
+    ...details,
+  }));
+}
+
 export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
   async (c, next) => {
     const header = c.req.header('authorization') ?? '';
     const [scheme, token] = header.split(' ');
 
     if (scheme?.toLowerCase() !== 'bearer' || !token) {
-      return c.json({ error: '未授权，请先登录' }, 401);
+      return jsonError(c, '未授权，请先登录', 401);
     }
 
     try {
       const tokenUser = await verifyToken(token);
       const dbUser = await UserModel.findById(tokenUser.id);
       if (!dbUser) {
-        return c.json({ error: '未授权，请先登录' }, 401);
+        logAuthFailure(c, 'user_not_found');
+        return jsonError(c, '未授权，请先登录', 401);
       }
 
       const dbTokenVersion = dbUser.tokenVersion ?? 0;
       if (dbTokenVersion !== tokenUser.tokenVersion) {
-        return c.json({ error: '未授权，请先登录' }, 401);
+        logAuthFailure(c, 'token_version_mismatch');
+        return jsonError(c, '未授权，请先登录', 401);
       }
 
       const user: TokenUser = {
@@ -90,8 +108,9 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
       c.set('userId', user.id);
       c.set('authUser', user);
       await next();
-    } catch {
-      return c.json({ error: '未授权，请先登录' }, 401);
+    } catch (error) {
+      logAuthFailure(c, 'token_verification_failed', error);
+      return jsonError(c, '未授权，请先登录', 401);
     }
   },
 );
@@ -100,7 +119,7 @@ export const requireAdmin = createMiddleware<{ Variables: AuthVariables }>(
   async (c, next) => {
     const user = c.get('authUser');
     if (!user || user.role !== 'admin') {
-      return c.json({ error: '没有权限' }, 403);
+      return jsonError(c, '没有权限', 403);
     }
     await next();
   },

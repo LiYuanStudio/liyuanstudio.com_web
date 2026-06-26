@@ -33,6 +33,15 @@ describe('createApp', () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
+  it('sets and forwards X-Request-Id', async () => {
+    const app = await makeApp('/api');
+    const res = await app.request('/api/health', {
+      headers: { 'X-Request-Id': 'request-test-1' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-Id')).toBe('request-test-1');
+  });
   it('sets CORS headers for allowed origin', async () => {
     const app = await makeApp('/api');
     const res = await app.request('/api/health', {

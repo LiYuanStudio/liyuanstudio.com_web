@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { UserModel } from '../models/user.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import type { AuthVariables } from '../middleware/auth.js';
+import { jsonError } from '../middleware/request-id.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -49,12 +50,12 @@ app.get('/users', async (c) => {
 app.patch('/users/:id', async (c) => {
   const id = c.req.param('id');
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    return c.json({ error: '用户 ID 格式不正确' }, 400);
+    return jsonError(c, '用户 ID 格式不正确', 400);
   }
 
   const body = await c.req.json();
   if (body.role === undefined) {
-    return c.json({ error: '只能修改用户角色' }, 400);
+    return jsonError(c, '只能修改用户角色', 400);
   }
 
   const user = await UserModel.findByIdAndUpdate(
@@ -63,7 +64,7 @@ app.patch('/users/:id', async (c) => {
     { new: true, projection: USER_PROJECTION },
   );
   if (!user) {
-    return c.json({ error: '用户不存在' }, 404);
+    return jsonError(c, '用户不存在', 404);
   }
 
   return c.json({ user: serializeUser(user) });
@@ -72,16 +73,16 @@ app.patch('/users/:id', async (c) => {
 app.delete('/users/:id', async (c) => {
   const id = c.req.param('id');
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    return c.json({ error: '用户 ID 格式不正确' }, 400);
+    return jsonError(c, '用户 ID 格式不正确', 400);
   }
 
   if (id === c.get('userId')) {
-    return c.json({ error: '不能删除当前登录的管理员账号' }, 403);
+    return jsonError(c, '不能删除当前登录的管理员账号', 403);
   }
 
   const user = await UserModel.findByIdAndDelete(id);
   if (!user) {
-    return c.json({ error: '用户不存在' }, 404);
+    return jsonError(c, '用户不存在', 404);
   }
 
   return c.json({ ok: true });

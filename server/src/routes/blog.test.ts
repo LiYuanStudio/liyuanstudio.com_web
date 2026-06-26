@@ -60,7 +60,7 @@ describe('blog routes', () => {
 
     const res = await app.request('/api/blog/missing');
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: '未找到' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '未找到' }));
   });
 
   it('POST /api/blog requires API key', async () => {
