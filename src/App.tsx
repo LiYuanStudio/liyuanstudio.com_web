@@ -110,7 +110,7 @@ export const Blog = React.forwardRef<
 });
 
 function getProfilePath(username: string | undefined, displayName: string) {
-  return `/~/${encodeURIComponent(username || displayName)}`;
+  return `/${encodeURIComponent(username || displayName)}`;
 }
 
 function AuthNav() {

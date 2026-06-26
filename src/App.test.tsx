@@ -91,7 +91,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: '后台' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/~/LA');
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/LA');
   });
 });
 

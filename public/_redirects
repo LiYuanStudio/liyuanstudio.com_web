@@ -1,4 +1,9 @@
 /blog /blog/ 301
 /login /login/ 301
 /register /register/ 301
-/~/* /profile/ 200
+/forgot-password /forgot-password/ 301
+/reset-password /reset-password/ 301
+/admin /admin/ 301
+/profile /profile/ 301
+/products /products/papyrusdesktop/ 301
+/:username /profile/ 200

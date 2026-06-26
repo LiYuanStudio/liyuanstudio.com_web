@@ -40,8 +40,41 @@ function backendHealthCheck(): Plugin {
   };
 }
 
+const NON_PROFILE_SEGMENTS = new Set([
+  '',
+  'login',
+  'register',
+  'forgot-password',
+  'reset-password',
+  'admin',
+  'profile',
+  'products',
+  'blog',
+]);
+
+function isProfilePath(url: string): boolean {
+  const [path] = url.split('?');
+  if (path.includes('.')) return false;
+  const segment = path.split('/')[1];
+  return Boolean(segment && !NON_PROFILE_SEGMENTS.has(segment));
+}
+
+function profileRewrite(): Plugin {
+  return {
+    name: 'profile-rewrite',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url && isProfilePath(req.url)) {
+          req.url = '/profile/';
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), backendHealthCheck()],
+  plugins: [react(), backendHealthCheck(), profileRewrite()],
   base: '/',
   build: {
     rollupOptions: {
@@ -66,5 +99,3 @@ export default defineConfig({
     },
   },
 });
-
-

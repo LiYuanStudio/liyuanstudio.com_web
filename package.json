@@ -32,7 +32,8 @@
     "@hono/node-server": "^1.19.14",
     "hono": "^4.12.27",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-easy-crop": "^6.0.2"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
