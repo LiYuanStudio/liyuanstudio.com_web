@@ -76,4 +76,29 @@ describe('server env', () => {
     const { env } = await import('./env.js');
     expect(env.CORS_ORIGIN).toEqual(['https://a.com', 'https://b.com']);
   });
+
+  it('parses ADMIN_EMAILS and matches case-insensitively', async () => {
+    vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
+    vi.stubEnv('API_KEY', 'secret-key');
+    vi.stubEnv('JWT_SECRET', 'test-secret-must-be-at-least-32-characters');
+    vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
+    vi.stubEnv('ADMIN_EMAILS', 'Admin@Example.com, user@example.com');
+
+    const { env, isAdminEmail } = await import('./env.js');
+    expect(env.ADMIN_EMAILS).toEqual(['admin@example.com', 'user@example.com']);
+    expect(isAdminEmail('ADMIN@EXAMPLE.COM')).toBe(true);
+    expect(isAdminEmail('other@example.com')).toBe(false);
+  });
+
+  it('handles missing ADMIN_EMAILS', async () => {
+    vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
+    vi.stubEnv('API_KEY', 'secret-key');
+    vi.stubEnv('JWT_SECRET', 'test-secret-must-be-at-least-32-characters');
+    vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
+    vi.stubEnv('ADMIN_EMAILS', '');
+
+    const { env, isAdminEmail } = await import('./env.js');
+    expect(env.ADMIN_EMAILS).toEqual([]);
+    expect(isAdminEmail('admin@example.com')).toBe(false);
+  });
 });

@@ -10,6 +10,7 @@ import {
 } from '../lib/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import type { AuthVariables } from '../middleware/auth.js';
+import { isAdminEmail } from '../config/env.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 const EMAIL_VERIFY_TTL_MS = 10 * 60 * 1000;
@@ -185,7 +186,7 @@ app.post('/register/verify', async (c) => {
     email: pending.email,
     passwordHash: pending.passwordHash,
     displayName: pending.displayName,
-    role: 'user',
+    role: isAdminEmail(pending.email) ? 'admin' : 'user',
     emailVerified: true,
   });
 
@@ -220,6 +221,11 @@ app.post('/login', async (c) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     return c.json({ error: '邮箱或密码错误' }, 401);
+  }
+
+  if (user.role !== 'admin' && isAdminEmail(user.email)) {
+    user.role = 'admin';
+    await user.save();
   }
 
   const token = await signToken({

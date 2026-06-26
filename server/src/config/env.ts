@@ -23,4 +23,12 @@ export const env = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  ADMIN_EMAILS: (process.env.ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
 };
+
+export function isAdminEmail(email: string): boolean {
+  return env.ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}

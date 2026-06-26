@@ -24,6 +24,7 @@
     "build:api": "npm run build --workspace=server",
     "start:api": "npm run start --workspace=server",
     "seed:api": "npm run seed --workspace=server",
+    "promote-admins:api": "npm run promote-admins --workspace=server",
     "check:secrets": "tsx scripts/check-secrets.ts"
   },
   "dependencies": {

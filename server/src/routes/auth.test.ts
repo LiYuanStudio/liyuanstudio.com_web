@@ -255,6 +255,28 @@ describe('auth routes', () => {
 
       expect(res.status).toBe(400);
     });
+
+    it('assigns admin role to emails in ADMIN_EMAILS', async () => {
+      vi.stubEnv('ADMIN_EMAILS', 'hello@liyuanstudio.com');
+      const app = await makeApp();
+      const pending = pendingDoc({ codeHash: hashToken('123456') });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockUserModel.findOne.mockResolvedValue(null);
+      mockUserModel.create.mockResolvedValue(userDoc({ emailVerified: true, role: 'admin' }) as never);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '123456' }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockUserModel.create).toHaveBeenCalledWith(expect.objectContaining({
+        role: 'admin',
+      }));
+      const json = await res.json();
+      expect(json.user.role).toBe('admin');
+    });
   });
 
   it('POST /api/auth/login returns a token for verified credentials', async () => {
@@ -287,6 +309,26 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: '邮箱或密码错误' });
+  });
+
+  it('POST /api/auth/login promotes ADMIN_EMAILS users to admin', async () => {
+    vi.stubEnv('ADMIN_EMAILS', 'hello@liyuanstudio.com');
+    const app = await makeApp();
+    const doc = userDoc();
+    mockUserModel.findOne.mockResolvedValue(doc as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(doc.role).toBe('admin');
+    expect(doc.save).toHaveBeenCalled();
+    const json = await res.json();
+    expect(json.user.role).toBe('admin');
   });
 
   it('GET /api/auth/me returns the current user', async () => {
