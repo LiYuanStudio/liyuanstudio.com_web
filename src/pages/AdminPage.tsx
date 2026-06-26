@@ -9,7 +9,7 @@ export function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Record<string, { displayName: string; role: UserRole }>>({});
+  const [roles, setRoles] = useState<Record<string, UserRole>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
 
   const loadUsers = useCallback(async () => {
@@ -18,11 +18,7 @@ export function AdminPage() {
     try {
       const { users: list } = await fetchUsers();
       setUsers(list);
-      setEditing(
-        Object.fromEntries(
-          list.map((user) => [user.id, { displayName: user.displayName, role: user.role }]),
-        ),
-      );
+      setRoles(Object.fromEntries(list.map((user) => [user.id, user.role])));
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -36,34 +32,19 @@ export function AdminPage() {
     }
   }, [state, loadUsers]);
 
-  const handleEditChange = (id: string, field: 'displayName' | 'role', value: string) => {
-    setEditing((prev) => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        [field]: value,
-      },
-    }));
+  const handleRoleChange = (id: string, value: UserRole) => {
+    setRoles((prev) => ({ ...prev, [id]: value }));
   };
 
   const handleSave = async (id: string) => {
-    const changes = editing[id];
     const original = users.find((u) => u.id === id);
-    if (!original || !changes) return;
-
-    const updates: { displayName?: string; role?: UserRole } = {};
-    if (changes.displayName !== original.displayName) {
-      updates.displayName = changes.displayName;
-    }
-    if (changes.role !== original.role) {
-      updates.role = changes.role;
-    }
-    if (Object.keys(updates).length === 0) return;
+    const newRole = roles[id];
+    if (!original || !newRole || newRole === original.role) return;
 
     setSaving((prev) => ({ ...prev, [id]: true }));
     setError(null);
     try {
-      const { user } = await updateUser(id, updates);
+      const { user } = await updateUser(id, newRole);
       setUsers((prev) => prev.map((u) => (u.id === id ? user : u)));
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
@@ -163,18 +144,11 @@ export function AdminPage() {
                 {users.map((user) => (
                   <tr key={user.id}>
                     <td>{user.email}</td>
-                    <td>
-                      <input
-                        type="text"
-                        value={editing[user.id]?.displayName ?? user.displayName}
-                        onChange={(e) => handleEditChange(user.id, 'displayName', e.target.value)}
-                        className="admin-input"
-                      />
-                    </td>
+                    <td>{user.displayName}</td>
                     <td>
                       <select
-                        value={editing[user.id]?.role ?? user.role}
-                        onChange={(e) => handleEditChange(user.id, 'role', e.target.value)}
+                        value={roles[user.id] ?? user.role}
+                        onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
                         className="admin-select"
                       >
                         <option value="user">user</option>

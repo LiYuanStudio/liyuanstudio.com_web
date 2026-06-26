@@ -77,13 +77,13 @@ describe('AdminPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
+      expect(screen.getByText('Alice')).toBeInTheDocument();
     });
     expect(screen.getByText('a@b.com')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Bob')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
   });
 
-  it('saves user changes', async () => {
+  it('saves role changes', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
       '/auth/me': () => ({
@@ -102,7 +102,7 @@ describe('AdminPage', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          user: { id: '1', email: 'a@b.com', displayName: 'Alice Updated', role: 'admin', emailVerified: true },
+          user: { id: '1', email: 'a@b.com', displayName: 'Alice', role: 'admin', emailVerified: true },
         }),
       }),
     });
@@ -111,12 +111,8 @@ describe('AdminPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
+      expect(screen.getByText('Alice')).toBeInTheDocument();
     });
-
-    const nameInput = screen.getByDisplayValue('Alice');
-    await user.clear(nameInput);
-    await user.type(nameInput, 'Alice Updated');
 
     const roleSelect = screen.getByRole('combobox');
     await user.selectOptions(roleSelect, 'admin');
@@ -124,7 +120,7 @@ describe('AdminPage', () => {
     await user.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('Alice Updated')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveValue('admin');
     });
   });
 
@@ -154,13 +150,13 @@ describe('AdminPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
+      expect(screen.getByText('Alice')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: '删除' }));
 
     await waitFor(() => {
-      expect(screen.queryByDisplayValue('Alice')).not.toBeInTheDocument();
+      expect(screen.queryByText('Alice')).not.toBeInTheDocument();
     });
   });
 

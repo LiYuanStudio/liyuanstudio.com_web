@@ -33,10 +33,10 @@ export function fetchUsers(): Promise<{ users: User[] }> {
   return fetchJson<{ users: User[] }>('/admin/users');
 }
 
-export function updateUser(id: string, updates: { displayName?: string; role?: UserRole }): Promise<{ user: User }> {
+export function updateUser(id: string, role: UserRole): Promise<{ user: User }> {
   return fetchJson<{ user: User }>(`/admin/users/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(updates),
+    body: JSON.stringify({ role }),
   });
 }
 

@@ -90,11 +90,9 @@ describe('admin routes', () => {
   });
 
   describe('PATCH /api/admin/users/:id', () => {
-    it('updates displayName and role for admin', async () => {
+    it('updates role for admin', async () => {
       const app = await makeApp();
-      mockUserModel.findByIdAndUpdate.mockResolvedValue(
-        userDoc({ displayName: 'Updated User', role: 'admin' }) as never,
-      );
+      mockUserModel.findByIdAndUpdate.mockResolvedValue(userDoc({ role: 'admin' }) as never);
 
       const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
@@ -103,20 +101,37 @@ describe('admin routes', () => {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ displayName: 'Updated User', role: 'admin' }),
+        body: JSON.stringify({ role: 'admin' }),
       });
 
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.user.id).toBe('user-1');
       expect(json.user).not.toHaveProperty('_id');
-      expect(json.user.displayName).toBe('Updated User');
       expect(json.user.role).toBe('admin');
       expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
         '507f1f77bcf86cd799439011',
-        { displayName: 'Updated User', role: 'admin' },
+        { role: 'admin' },
         { new: true, projection: expect.any(Object) },
       );
+    });
+
+    it('rejects displayName updates', async () => {
+      const app = await makeApp();
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+
+      const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ displayName: 'Updated User' }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: '只能修改用户角色' });
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
     });
 
     it('returns 400 for invalid user id', async () => {
@@ -129,14 +144,14 @@ describe('admin routes', () => {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ displayName: 'Updated User' }),
+        body: JSON.stringify({ role: 'admin' }),
       });
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: '用户 ID 格式不正确' });
     });
 
-    it('returns 400 when no update fields provided', async () => {
+    it('returns 400 when role is missing', async () => {
       const app = await makeApp();
       const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
 
@@ -150,7 +165,7 @@ describe('admin routes', () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: '没有可更新的字段' });
+      expect(await res.json()).toEqual({ error: '只能修改用户角色' });
     });
 
     it('returns 404 for missing user', async () => {
@@ -164,7 +179,7 @@ describe('admin routes', () => {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ displayName: 'Updated User' }),
+        body: JSON.stringify({ role: 'admin' }),
       });
 
       expect(res.status).toBe(404);

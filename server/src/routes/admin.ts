@@ -14,13 +14,6 @@ const USER_PROJECTION = {
   passwordResetExpiresAt: 0,
 };
 
-function validateDisplayName(displayName: unknown): string {
-  if (typeof displayName !== 'string' || displayName.trim().length === 0) {
-    throw new Error('显示名称不能为空');
-  }
-  return displayName.trim();
-}
-
 function validateRole(role: unknown): 'user' | 'admin' {
   if (role !== 'user' && role !== 'admin') {
     throw new Error('角色必须是 user 或 admin');
@@ -60,20 +53,15 @@ app.patch('/users/:id', async (c) => {
   }
 
   const body = await c.req.json();
-  const updates: { displayName?: string; role?: 'user' | 'admin' } = {};
-
-  if (body.displayName !== undefined) {
-    updates.displayName = validateDisplayName(body.displayName);
-  }
-  if (body.role !== undefined) {
-    updates.role = validateRole(body.role);
+  if (body.role === undefined) {
+    return c.json({ error: '只能修改用户角色' }, 400);
   }
 
-  if (Object.keys(updates).length === 0) {
-    return c.json({ error: '没有可更新的字段' }, 400);
-  }
-
-  const user = await UserModel.findByIdAndUpdate(id, updates, { new: true, projection: USER_PROJECTION });
+  const user = await UserModel.findByIdAndUpdate(
+    id,
+    { role: validateRole(body.role) },
+    { new: true, projection: USER_PROJECTION },
+  );
   if (!user) {
     return c.json({ error: '用户不存在' }, 404);
   }

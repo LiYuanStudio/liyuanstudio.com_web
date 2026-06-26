@@ -30,20 +30,20 @@ describe('admin api', () => {
     expect(result.users).toHaveLength(1);
   });
 
-  it('updateUser sends a PATCH request', async () => {
+  it('updateUser sends a PATCH request with role only', async () => {
     localStorage.setItem('liyuan_auth_token', 'test-token');
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ user: { id: '1', email: 'a@b.com', displayName: 'B', role: 'admin', emailVerified: true } }),
     } as unknown as Response);
 
-    await updateUser('1', { displayName: 'B', role: 'admin' });
+    await updateUser('1', 'admin');
 
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/admin/users/1',
       expect.objectContaining({
         method: 'PATCH',
-        body: JSON.stringify({ displayName: 'B', role: 'admin' }),
+        body: JSON.stringify({ role: 'admin' }),
       }),
     );
   });
