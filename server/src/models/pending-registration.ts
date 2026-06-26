@@ -5,6 +5,8 @@ export interface PendingRegistration {
   displayName: string;
   passwordHash: string;
   codeHash: string;
+  failedAttempts?: number;
+  lockedUntil?: Date;
   expiresAt: Date;
   createdAt?: Date;
   updatedAt?: Date;
@@ -23,6 +25,8 @@ const PendingRegistrationSchema = new mongoose.Schema<PendingRegistration>(
     displayName: { type: String, required: true, trim: true },
     passwordHash: { type: String, required: true },
     codeHash: { type: String, required: true },
+    failedAttempts: { type: Number, required: true, default: 0 },
+    lockedUntil: { type: Date },
     expiresAt: { type: Date, required: true },
   },
   { timestamps: true },

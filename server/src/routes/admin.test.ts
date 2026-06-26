@@ -28,6 +28,7 @@ function userDoc(overrides: Record<string, unknown> = {}) {
     email: 'hello@liyuanstudio.com',
     displayName: 'Hello User',
     role: 'user',
+    tokenVersion: 0,
     emailVerified: true,
     avatar: 'preset-avatar',
     createdAt: new Date('2025-01-01T00:00:00Z'),
@@ -36,11 +37,21 @@ function userDoc(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function adminAuthDoc(overrides: Record<string, unknown> = {}) {
+  return userDoc({
+    _id: { toString: () => 'admin-1' },
+    email: 'admin@liyuanstudio.com',
+    role: 'admin',
+    ...overrides,
+  });
+}
 describe('admin routes', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();
     mockUserModel.find.mockReset();
+    mockUserModel.findById.mockReset();
+    mockUserModel.findById.mockResolvedValue(adminAuthDoc() as never);
     mockUserModel.findByIdAndUpdate.mockReset();
     mockUserModel.findByIdAndDelete.mockReset();
   });
@@ -54,7 +65,7 @@ describe('admin routes', () => {
         }),
       } as never);
 
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -69,7 +80,8 @@ describe('admin routes', () => {
 
     it('rejects non-admin users', async () => {
       const app = await makeApp();
-      const token = await signToken({ id: 'user-1', email: 'user@liyuanstudio.com', role: 'user' });
+      mockUserModel.findById.mockResolvedValue(userDoc({ _id: { toString: () => 'user-1' }, role: 'user' }) as never);
+      const token = await signToken({ id: 'user-1', email: 'user@liyuanstudio.com', role: 'user', tokenVersion: 0 });
 
       const res = await app.request('/api/admin/users', {
         headers: { Authorization: `Bearer ${token}` },
@@ -87,6 +99,48 @@ describe('admin routes', () => {
       expect(res.status).toBe(401);
       expect(await res.json()).toEqual({ error: '未授权，请先登录' });
     });
+    it('looks up the current user before allowing admin access', async () => {
+      const app = await makeApp();
+      mockUserModel.find.mockReturnValue({
+        sort: vi.fn().mockReturnValue({
+          lean: vi.fn().mockResolvedValue([] as never),
+        }),
+      } as never);
+
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
+      const res = await app.request('/api/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockUserModel.findById).toHaveBeenCalledWith('admin-1');
+    });
+
+    it('rejects when token role is admin but database role is user', async () => {
+      const app = await makeApp();
+      mockUserModel.findById.mockResolvedValue(adminAuthDoc({ role: 'user' }) as never);
+
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
+      const res = await app.request('/api/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: '没有权限' });
+    });
+
+    it('rejects admin access when tokenVersion does not match', async () => {
+      const app = await makeApp();
+      mockUserModel.findById.mockResolvedValue(adminAuthDoc({ tokenVersion: 2 }) as never);
+
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 1 });
+      const res = await app.request('/api/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+    });
   });
 
   describe('PATCH /api/admin/users/:id', () => {
@@ -94,7 +148,7 @@ describe('admin routes', () => {
       const app = await makeApp();
       mockUserModel.findByIdAndUpdate.mockResolvedValue(userDoc({ role: 'admin' }) as never);
 
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
         method: 'PATCH',
         headers: {
@@ -111,14 +165,14 @@ describe('admin routes', () => {
       expect(json.user.role).toBe('admin');
       expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
         '507f1f77bcf86cd799439011',
-        { role: 'admin' },
+        { role: 'admin', $inc: { tokenVersion: 1 } },
         { new: true, projection: expect.any(Object) },
       );
     });
 
     it('rejects displayName updates', async () => {
       const app = await makeApp();
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
 
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
         method: 'PATCH',
@@ -136,7 +190,7 @@ describe('admin routes', () => {
 
     it('returns 400 for invalid user id', async () => {
       const app = await makeApp();
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
 
       const res = await app.request('/api/admin/users/not-an-id', {
         method: 'PATCH',
@@ -153,7 +207,7 @@ describe('admin routes', () => {
 
     it('returns 400 when role is missing', async () => {
       const app = await makeApp();
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
 
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
         method: 'PATCH',
@@ -172,7 +226,7 @@ describe('admin routes', () => {
       const app = await makeApp();
       mockUserModel.findByIdAndUpdate.mockResolvedValue(null);
 
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
         method: 'PATCH',
         headers: {
@@ -192,7 +246,7 @@ describe('admin routes', () => {
       const app = await makeApp();
       mockUserModel.findByIdAndDelete.mockResolvedValue(userDoc() as never);
 
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -205,7 +259,8 @@ describe('admin routes', () => {
     it('prevents admin from deleting themselves', async () => {
       const app = await makeApp();
       const adminId = '507f1f77bcf86cd799439011';
-      const token = await signToken({ id: adminId, email: 'admin@liyuanstudio.com', role: 'admin' });
+      mockUserModel.findById.mockResolvedValue(adminAuthDoc({ _id: { toString: () => adminId } }) as never);
+      const token = await signToken({ id: adminId, email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
 
       const res = await app.request(`/api/admin/users/${adminId}`, {
         method: 'DELETE',
@@ -221,7 +276,7 @@ describe('admin routes', () => {
       const app = await makeApp();
       mockUserModel.findByIdAndDelete.mockResolvedValue(null);
 
-      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin' });
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },

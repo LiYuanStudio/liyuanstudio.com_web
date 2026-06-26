@@ -1,15 +1,32 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
+import { UserModel } from '../models/user.js';
 import { signToken, verifyToken, requireAuth, requireAdmin } from './auth.js';
 
+vi.mock('../models/user.js');
+
+const mockUserModel = vi.mocked(UserModel);
+
+function authUserDoc(overrides: Record<string, unknown> = {}) {
+  return {
+    _id: { toString: () => 'user-123' },
+    email: 'user@example.com',
+    role: 'user',
+    tokenVersion: 0,
+    ...overrides,
+  };
+}
 describe('auth middleware', () => {
   let token: string;
 
   beforeEach(async () => {
+    mockUserModel.findById.mockReset();
+    mockUserModel.findById.mockResolvedValue(authUserDoc() as never);
     token = await signToken({
       id: 'user-123',
       email: 'user@example.com',
       role: 'user',
+      tokenVersion: 0,
     });
   });
 
@@ -19,6 +36,7 @@ describe('auth middleware', () => {
       id: 'user-123',
       email: 'user@example.com',
       role: 'user',
+      tokenVersion: 0,
     });
   });
 
@@ -38,7 +56,7 @@ describe('auth middleware', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       userId: 'user-123',
-      user: { id: 'user-123', email: 'user@example.com', role: 'user' },
+      user: { id: 'user-123', email: 'user@example.com', role: 'user', tokenVersion: 0 },
     });
   });
 
@@ -70,7 +88,9 @@ describe('auth middleware', () => {
       id: 'admin-1',
       email: 'admin@example.com',
       role: 'admin',
+      tokenVersion: 0,
     });
+    mockUserModel.findById.mockResolvedValue(authUserDoc({ _id: { toString: () => 'admin-1' }, email: 'admin@example.com', role: 'admin' }) as never);
     const app = new Hono();
     app.use('/admin', requireAuth, requireAdmin);
     app.get('/admin', (c) => c.json({ ok: true }));

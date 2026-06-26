@@ -8,7 +8,13 @@ type ResetState =
   | { status: 'error'; message: string };
 
 export function ResetPasswordPage() {
-  const token = useMemo(() => new URLSearchParams(window.location.search).get('token') ?? '', []);
+  const token = useMemo(() => {
+    const resetToken = new URLSearchParams(window.location.search).get('token') ?? '';
+    if (resetToken) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    return resetToken;
+  }, []);
   const [password, setPassword] = useState('');
   const [state, setState] = useState<ResetState>(
     token ? { status: 'idle' } : { status: 'error', message: '重置链接缺少 token。' },

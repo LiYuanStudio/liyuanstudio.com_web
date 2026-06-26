@@ -59,7 +59,7 @@ app.patch('/users/:id', async (c) => {
 
   const user = await UserModel.findByIdAndUpdate(
     id,
-    { role: validateRole(body.role) },
+    { role: validateRole(body.role), $inc: { tokenVersion: 1 } },
     { new: true, projection: USER_PROJECTION },
   );
   if (!user) {

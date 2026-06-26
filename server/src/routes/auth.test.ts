@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
 import { PendingRegistrationModel } from '../models/pending-registration.js';
-import { signToken } from '../middleware/auth.js';
+import { AuthThrottleModel } from '../models/auth-throttle.js';
+import { signToken, verifyToken } from '../middleware/auth.js';
 import { sendPasswordResetEmail, sendRegistrationCodeEmail } from '../lib/email.js';
 
 function hashToken(token: string): string {
@@ -15,6 +16,7 @@ vi.mock('../lib/db.js', () => ({
 }));
 vi.mock('../models/user.js');
 vi.mock('../models/pending-registration.js');
+vi.mock('../models/auth-throttle.js');
 vi.mock('../lib/email.js', () => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
   sendRegistrationCodeEmail: vi.fn().mockResolvedValue(undefined),
@@ -23,6 +25,7 @@ vi.mock('bcryptjs');
 
 const mockUserModel = vi.mocked(UserModel);
 const mockPendingRegistrationModel = vi.mocked(PendingRegistrationModel);
+const mockAuthThrottleModel = vi.mocked(AuthThrottleModel);
 const mockBcrypt = vi.mocked(bcrypt);
 const mockSendPasswordResetEmail = vi.mocked(sendPasswordResetEmail);
 const mockSendRegistrationCodeEmail = vi.mocked(sendRegistrationCodeEmail);
@@ -47,6 +50,7 @@ function pendingDoc(overrides: Record<string, unknown> = {}) {
     passwordHash: 'hashed-password',
     codeHash: 'hashed-code',
     expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    save: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -59,6 +63,7 @@ function userDoc(overrides: Record<string, unknown> = {}) {
     displayName: 'Hello User',
     username: 'Hello-User',
     role: 'user',
+    tokenVersion: 0,
     emailVerified: true,
     avatar: 'preset-avatar',
     bio: '',
@@ -79,6 +84,12 @@ describe('auth routes', () => {
     mockPendingRegistrationModel.findOneAndUpdate.mockReset();
     mockPendingRegistrationModel.create.mockReset();
     mockPendingRegistrationModel.deleteOne.mockReset();
+    mockAuthThrottleModel.findOne.mockReset();
+    mockAuthThrottleModel.findOne.mockResolvedValue(null);
+    mockAuthThrottleModel.findOneAndUpdate.mockReset();
+    mockAuthThrottleModel.findOneAndUpdate.mockResolvedValue(null as never);
+    mockAuthThrottleModel.deleteMany.mockReset();
+    mockAuthThrottleModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
     mockBcrypt.hash.mockReset();
     mockBcrypt.compare.mockReset();
     mockSendPasswordResetEmail.mockReset();
@@ -280,6 +291,58 @@ describe('auth routes', () => {
       const json = await res.json();
       expect(json.user.role).toBe('admin');
     });
+    it('increments failedAttempts when registration code is wrong', async () => {
+      const app = await makeApp();
+      const pending = pendingDoc({ codeHash: hashToken('999999'), failedAttempts: 0 });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '000000' }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(pending.failedAttempts).toBe(1);
+      expect(pending.save).toHaveBeenCalled();
+    });
+
+    it('locks registration verification after too many wrong codes', async () => {
+      const app = await makeApp();
+      const pending = pendingDoc({ codeHash: hashToken('999999'), failedAttempts: 4 });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '000000' }),
+      });
+
+      expect(res.status).toBe(429);
+      expect(pending.failedAttempts).toBe(5);
+      expect(pending.lockedUntil).toEqual(expect.any(Date));
+      expect(pending.save).toHaveBeenCalled();
+    });
+
+    it('returns 429 when registration verification is still locked', async () => {
+      const app = await makeApp();
+      const pending = pendingDoc({
+        codeHash: hashToken('123456'),
+        failedAttempts: 5,
+        lockedUntil: new Date(Date.now() + 60_000),
+      });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '123456' }),
+      });
+
+      expect(res.status).toBe(429);
+      expect(pending.save).not.toHaveBeenCalled();
+      expect(mockUserModel.create).not.toHaveBeenCalled();
+    });
   });
 
   it('POST /api/auth/login returns a token for verified credentials', async () => {
@@ -333,11 +396,77 @@ describe('auth routes', () => {
     const json = await res.json();
     expect(json.user.role).toBe('admin');
   });
+  it('POST /api/auth/login signs tokens with tokenVersion', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(userDoc({ tokenVersion: 3 }) as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    await expect(verifyToken(json.token)).resolves.toMatchObject({ tokenVersion: 3 });
+  });
+
+  it('POST /api/auth/login returns 429 after repeated failures', async () => {
+    const app = await makeApp();
+    const emailThrottle = {
+      attempts: 4,
+      expiresAt: new Date(Date.now() + 60_000),
+      lockedUntil: undefined as Date | undefined,
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    const ipThrottle = {
+      attempts: 4,
+      expiresAt: new Date(Date.now() + 60_000),
+      lockedUntil: undefined as Date | undefined,
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    mockAuthThrottleModel.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(emailThrottle as never)
+      .mockResolvedValueOnce(ipThrottle as never);
+    mockUserModel.findOne.mockResolvedValue(null);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(emailThrottle.attempts).toBe(5);
+    expect(ipThrottle.attempts).toBe(5);
+    expect(emailThrottle.lockedUntil).toEqual(expect.any(Date));
+    expect(ipThrottle.lockedUntil).toEqual(expect.any(Date));
+  });
+
+  it('POST /api/auth/login clears throttles after successful login', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(userDoc() as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockAuthThrottleModel.deleteMany).toHaveBeenCalledWith({
+      key: { $in: ['login:email:hello@liyuanstudio.com', 'login:ip:203.0.113.10'] },
+    });
+  });
 
   it('GET /api/auth/me returns the current user', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(userDoc() as never);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -358,6 +487,47 @@ describe('auth routes', () => {
     });
   });
 
+  it('GET /api/auth/me looks up the token user from the database', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(userDoc() as never);
+    const token = await signToken({ id: 'user-1', email: 'token@example.com', role: 'admin', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUserModel.findById).toHaveBeenCalledWith('user-1');
+    const json = await res.json();
+    expect(json.user.email).toBe('hello@liyuanstudio.com');
+    expect(json.user.role).toBe('user');
+  });
+
+  it('GET /api/auth/me returns 401 when tokenVersion does not match', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(userDoc({ tokenVersion: 2 }) as never);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 1 });
+
+    const res = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+  });
+
+  it('GET /api/auth/me returns 401 when the token user no longer exists', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(null);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: '未授权，请先登录' });
+  });
   it('POST /api/auth/forgot-password sends a reset email for an existing user', async () => {
     const app = await makeApp();
     const doc = userDoc();
@@ -401,6 +571,46 @@ describe('auth routes', () => {
     });
   });
 
+  it('POST /api/auth/forgot-password returns generic success during cooldown', async () => {
+    const app = await makeApp();
+    mockAuthThrottleModel.findOne
+      .mockResolvedValueOnce({
+        attempts: 1,
+        lockedUntil: new Date(Date.now() + 60_000),
+        expiresAt: new Date(Date.now() + 15 * 60_000),
+      } as never)
+      .mockResolvedValueOnce(null);
+
+    const res = await app.request('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUserModel.findOne).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({
+      message: '如果该邮箱已注册，我们已发送重置密码链接。',
+    });
+  });
+
+  it('POST /api/auth/forgot-password clears reset token fields when email sending fails', async () => {
+    const app = await makeApp();
+    const doc = userDoc();
+    mockUserModel.findOne.mockResolvedValue(doc as never);
+    mockSendPasswordResetEmail.mockRejectedValue(new Error('smtp unavailable'));
+
+    const res = await app.request('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com' }),
+    });
+
+    expect(res.status).toBe(502);
+    expect(doc.passwordResetTokenHash).toBeUndefined();
+    expect(doc.passwordResetExpiresAt).toBeUndefined();
+    expect(doc.save).toHaveBeenCalledTimes(2);
+  });
   it('POST /api/auth/forgot-password rejects invalid email', async () => {
     const app = await makeApp();
 
@@ -437,6 +647,7 @@ describe('auth routes', () => {
     expect(doc.passwordHash).toBe('new-hashed-password');
     expect(doc.passwordResetTokenHash).toBeUndefined();
     expect(doc.passwordResetExpiresAt).toBeUndefined();
+    expect(doc.tokenVersion).toBe(1);
     expect(doc.save).toHaveBeenCalled();
     expect(await res.json()).toEqual({ message: '密码已重置，请使用新密码登录。' });
   });
@@ -473,7 +684,7 @@ describe('auth routes', () => {
     const doc = userDoc({ username: undefined });
     mockUserModel.findById.mockResolvedValue(doc as never);
     mockUserModel.findOne.mockResolvedValue(null);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -489,7 +700,7 @@ describe('auth routes', () => {
     const app = await makeApp();
     const doc = userDoc();
     mockUserModel.findById.mockResolvedValue(doc as never);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/profile', {
       method: 'PATCH',
@@ -516,7 +727,8 @@ describe('auth routes', () => {
 
   it('PATCH /api/auth/me/profile rejects invalid profile input', async () => {
     const app = await makeApp();
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+    mockUserModel.findById.mockResolvedValue(userDoc() as never);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/profile', {
       method: 'PATCH',
@@ -532,15 +744,15 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(400);
-    expect(mockUserModel.findById).not.toHaveBeenCalled();
   });
 
   it('PATCH /api/auth/me/avatar updates the avatar', async () => {
     const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(userDoc() as never);
     mockUserModel.findByIdAndUpdate.mockResolvedValue(
       userDoc({ avatar: 'https://example.com/new-avatar.png' }) as never,
     );
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/avatar', {
       method: 'PATCH',

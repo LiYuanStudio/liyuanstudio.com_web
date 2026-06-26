@@ -9,6 +9,7 @@ export interface User {
   displayName: string;
   username?: string;
   role: 'user' | 'admin';
+  tokenVersion: number;
   emailVerified: boolean;
   emailVerifyTokenHash?: string;
   emailVerifyExpiresAt?: Date;
@@ -40,6 +41,7 @@ const UserSchema = new mongoose.Schema<User>(
       required: true,
       default: 'user',
     },
+    tokenVersion: { type: Number, required: true, default: 0 },
     emailVerified: { type: Boolean, required: true, default: false },
     emailVerifyTokenHash: { type: String },
     emailVerifyExpiresAt: { type: Date },

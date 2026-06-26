@@ -1,6 +1,7 @@
 import { createMiddleware } from 'hono/factory';
 import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../config/env.js';
+import { UserModel } from '../models/user.js';
 
 const SECRET = new TextEncoder().encode(env.JWT_SECRET);
 const ISSUER = 'liyuanstudio';
@@ -12,6 +13,7 @@ export interface TokenUser {
   id: string;
   email: string;
   role: UserRole;
+  tokenVersion: number;
 }
 
 export type AuthVariables = {
@@ -20,7 +22,12 @@ export type AuthVariables = {
 };
 
 export async function signToken(user: TokenUser): Promise<string> {
-  return new SignJWT({ sub: user.id, email: user.email, role: user.role })
+  return new SignJWT({
+    sub: user.id,
+    email: user.email,
+    role: user.role,
+    tokenVersion: user.tokenVersion,
+  })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)
@@ -39,7 +46,8 @@ export async function verifyToken(token: string): Promise<TokenUser> {
   if (
     !payload.sub ||
     typeof payload.email !== 'string' ||
-    (payload.role !== 'user' && payload.role !== 'admin')
+    (payload.role !== 'user' && payload.role !== 'admin') ||
+    (payload.tokenVersion !== undefined && typeof payload.tokenVersion !== 'number')
   ) {
     throw new Error('无效的令牌内容');
   }
@@ -48,6 +56,7 @@ export async function verifyToken(token: string): Promise<TokenUser> {
     id: payload.sub,
     email: payload.email,
     role: payload.role,
+    tokenVersion: payload.tokenVersion ?? 0,
   };
 }
 
@@ -61,7 +70,23 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
     }
 
     try {
-      const user = await verifyToken(token);
+      const tokenUser = await verifyToken(token);
+      const dbUser = await UserModel.findById(tokenUser.id);
+      if (!dbUser) {
+        return c.json({ error: '未授权，请先登录' }, 401);
+      }
+
+      const dbTokenVersion = dbUser.tokenVersion ?? 0;
+      if (dbTokenVersion !== tokenUser.tokenVersion) {
+        return c.json({ error: '未授权，请先登录' }, 401);
+      }
+
+      const user: TokenUser = {
+        id: dbUser._id.toString(),
+        email: dbUser.email,
+        role: dbUser.role,
+        tokenVersion: dbTokenVersion,
+      };
       c.set('userId', user.id);
       c.set('authUser', user);
       await next();

@@ -1,9 +1,10 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
 import { PendingRegistrationModel } from '../models/pending-registration.js';
+import { AuthThrottleModel } from '../models/auth-throttle.js';
 import {
   sendPasswordResetEmail,
   sendRegistrationCodeEmail,
@@ -20,6 +21,14 @@ const BIO_MAX_LENGTH = 120;
 const USERNAME_MAX_BASE_LENGTH = 24;
 
 const REGISTRATION_RATE_LIMIT_MS = 60 * 1000;
+const REGISTRATION_VERIFY_MAX_ATTEMPTS = 5;
+const REGISTRATION_VERIFY_LOCK_MS = 10 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCK_MS = 10 * 60 * 1000;
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const FORGOT_PASSWORD_COOLDOWN_MS = 60 * 1000;
+const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
+const FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
 const registrationRateLimits = new Map<string, number>();
 
 type UserForResponse = {
@@ -166,13 +175,88 @@ function badRequest(c: Context, error: unknown) {
 }
 
 function createRegistrationCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(randomInt(100000, 1000000));
 }
 
 function isRateLimited(email: string): boolean {
   const lastSent = registrationRateLimits.get(email);
   if (!lastSent) return false;
   return Date.now() - lastSent < REGISTRATION_RATE_LIMIT_MS;
+}
+
+function getClientIp(c: Context): string {
+  const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || c.req.header('cf-connecting-ip') || 'unknown';
+}
+
+function isActiveDate(date: Date | undefined, now: Date): boolean {
+  return Boolean(date && date > now);
+}
+
+async function hasLockedThrottle(keys: string[], now: Date): Promise<boolean> {
+  const throttles = await Promise.all(keys.map((key) => AuthThrottleModel.findOne({ key })));
+  return throttles.some((throttle) => isActiveDate(throttle?.lockedUntil, now));
+}
+
+async function recordLoginFailure(key: string, now: Date): Promise<boolean> {
+  const throttle = await AuthThrottleModel.findOne({ key });
+  if (!throttle || throttle.expiresAt <= now) {
+    const lockedUntil = LOGIN_MAX_ATTEMPTS <= 1 ? new Date(now.getTime() + LOGIN_LOCK_MS) : undefined;
+    await AuthThrottleModel.findOneAndUpdate(
+      { key },
+      {
+        key,
+        attempts: 1,
+        lockedUntil,
+        expiresAt: new Date(now.getTime() + LOGIN_WINDOW_MS),
+      },
+      { upsert: true, new: true },
+    );
+    return Boolean(lockedUntil);
+  }
+
+  throttle.attempts = (throttle.attempts ?? 0) + 1;
+  throttle.expiresAt = new Date(now.getTime() + LOGIN_WINDOW_MS);
+  if (throttle.attempts >= LOGIN_MAX_ATTEMPTS) {
+    throttle.lockedUntil = new Date(now.getTime() + LOGIN_LOCK_MS);
+  }
+  await throttle.save();
+  return isActiveDate(throttle.lockedUntil, now);
+}
+
+async function clearThrottleKeys(keys: string[]): Promise<void> {
+  await AuthThrottleModel.deleteMany({ key: { $in: keys } });
+}
+
+async function isForgotPasswordLimited(keys: string[], now: Date): Promise<boolean> {
+  const throttles = await Promise.all(keys.map((key) => AuthThrottleModel.findOne({ key })));
+  return throttles.some((throttle) => {
+    if (!throttle || throttle.expiresAt <= now) {
+      return false;
+    }
+    return isActiveDate(throttle.lockedUntil, now) || throttle.attempts >= FORGOT_PASSWORD_MAX_ATTEMPTS;
+  });
+}
+
+async function recordForgotPasswordAttempt(key: string, now: Date): Promise<void> {
+  const throttle = await AuthThrottleModel.findOne({ key });
+  if (!throttle || throttle.expiresAt <= now) {
+    await AuthThrottleModel.findOneAndUpdate(
+      { key },
+      {
+        key,
+        attempts: 1,
+        lockedUntil: new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS),
+        expiresAt: new Date(now.getTime() + FORGOT_PASSWORD_WINDOW_MS),
+      },
+      { upsert: true, new: true },
+    );
+    return;
+  }
+
+  throttle.attempts = (throttle.attempts ?? 0) + 1;
+  throttle.lockedUntil = new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS);
+  await throttle.save();
 }
 
 app.post('/register/send-code', async (c) => {
@@ -209,6 +293,8 @@ app.post('/register/send-code', async (c) => {
       displayName,
       passwordHash,
       codeHash,
+      failedAttempts: 0,
+      lockedUntil: undefined,
       expiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
     },
     { upsert: true, new: true },
@@ -248,7 +334,19 @@ app.post('/register/verify', async (c) => {
     return c.json({ error: '验证码无效或已过期' }, 400);
   }
 
+  const now = new Date();
+  if (isActiveDate(pending.lockedUntil, now)) {
+    return c.json({ error: '验证码错误次数过多，请稍后再试' }, 429);
+  }
+
   if (pending.codeHash !== hashToken(code)) {
+    pending.failedAttempts = (pending.failedAttempts ?? 0) + 1;
+    if (pending.failedAttempts >= REGISTRATION_VERIFY_MAX_ATTEMPTS) {
+      pending.lockedUntil = new Date(now.getTime() + REGISTRATION_VERIFY_LOCK_MS);
+      await pending.save();
+      return c.json({ error: '验证码错误次数过多，请稍后再试' }, 429);
+    }
+    await pending.save();
     return c.json({ error: '验证码错误' }, 400);
   }
 
@@ -265,6 +363,7 @@ app.post('/register/verify', async (c) => {
     displayName: pending.displayName,
     username,
     role: isAdminEmail(pending.email) ? 'admin' : 'user',
+    tokenVersion: 0,
     emailVerified: true,
   });
 
@@ -274,6 +373,7 @@ app.post('/register/verify', async (c) => {
     id: user._id.toString(),
     email: user.email,
     role: user.role,
+    tokenVersion: user.tokenVersion ?? 0,
   });
 
   return c.json({ token, user: serializeUser(user) }, 201);
@@ -291,15 +391,35 @@ app.post('/login', async (c) => {
     return badRequest(c, error);
   }
 
+  const loginThrottleKeys = [`login:email:${email}`, `login:ip:${getClientIp(c)}`];
+  const now = new Date();
+  if (await hasLockedThrottle(loginThrottleKeys, now)) {
+    return c.json({ error: '登录尝试过于频繁，请稍后再试' }, 429);
+  }
+
   const user = await UserModel.findOne({ email });
   if (!user) {
+    const locked = await Promise.all(
+      loginThrottleKeys.map((key) => recordLoginFailure(key, now)),
+    );
+    if (locked.some(Boolean)) {
+      return c.json({ error: '登录尝试过于频繁，请稍后再试' }, 429);
+    }
     return c.json({ error: '邮箱或密码错误' }, 401);
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
+    const locked = await Promise.all(
+      loginThrottleKeys.map((key) => recordLoginFailure(key, now)),
+    );
+    if (locked.some(Boolean)) {
+      return c.json({ error: '登录尝试过于频繁，请稍后再试' }, 429);
+    }
     return c.json({ error: '邮箱或密码错误' }, 401);
   }
+
+  await clearThrottleKeys(loginThrottleKeys);
 
   let shouldSave = false;
   if (user.role !== 'admin' && isAdminEmail(user.email)) {
@@ -318,6 +438,7 @@ app.post('/login', async (c) => {
     id: user._id.toString(),
     email: user.email,
     role: user.role,
+    tokenVersion: user.tokenVersion ?? 0,
   });
   return c.json({ token, user: serializeUser(user) });
 });
@@ -340,6 +461,13 @@ app.post('/forgot-password', async (c) => {
     return badRequest(c, error);
   }
 
+  const forgotThrottleKeys = [`forgot:email:${email}`, `forgot:ip:${getClientIp(c)}`];
+  const now = new Date();
+  if (await isForgotPasswordLimited(forgotThrottleKeys, now)) {
+    return c.json({ message: GENERIC_PASSWORD_RESET_MESSAGE });
+  }
+  await Promise.all(forgotThrottleKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+
   const user = await UserModel.findOne({ email });
   if (user) {
     const reset = createPasswordResetToken();
@@ -354,6 +482,9 @@ app.post('/forgot-password', async (c) => {
         token: reset.token,
       });
     } catch (error) {
+      user.passwordResetTokenHash = undefined;
+      user.passwordResetExpiresAt = undefined;
+      await user.save();
       return c.json(
         {
           error: '重置邮件发送失败',
@@ -394,6 +525,7 @@ app.post('/reset-password', async (c) => {
   user.passwordHash = await bcrypt.hash(password, 10);
   user.passwordResetTokenHash = undefined;
   user.passwordResetExpiresAt = undefined;
+  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
 
   return c.json({ message: '密码已重置，请使用新密码登录。' });
