@@ -57,9 +57,11 @@ function userDoc(overrides: Record<string, unknown> = {}) {
     email: 'hello@liyuanstudio.com',
     passwordHash: 'hashed-password',
     displayName: 'Hello User',
+    username: 'Hello-User',
     role: 'user',
     emailVerified: true,
     avatar: 'preset-avatar',
+    bio: '',
     save: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -208,6 +210,7 @@ describe('auth routes', () => {
         role: 'user',
         emailVerified: true,
         passwordHash: 'hashed-password',
+        username: 'Hello-User',
       }));
       expect(mockPendingRegistrationModel.deleteOne).toHaveBeenCalledWith({ email: 'hello@liyuanstudio.com' });
       const json = await res.json();
@@ -349,6 +352,8 @@ describe('auth routes', () => {
         role: 'user',
         emailVerified: true,
         avatar: 'preset-avatar',
+        username: 'Hello-User',
+        bio: '',
       },
     });
   });
@@ -461,6 +466,73 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(400);
     expect(mockUserModel.findOne).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/auth/me backfills username for legacy users', async () => {
+    const app = await makeApp();
+    const doc = userDoc({ username: undefined });
+    mockUserModel.findById.mockResolvedValue(doc as never);
+    mockUserModel.findOne.mockResolvedValue(null);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+
+    const res = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.user.username).toBe('Hello-User');
+    expect(doc.save).toHaveBeenCalled();
+  });
+
+  it('PATCH /api/auth/me/profile updates display name, avatar and bio', async () => {
+    const app = await makeApp();
+    const doc = userDoc();
+    mockUserModel.findById.mockResolvedValue(doc as never);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+
+    const res = await app.request('/api/auth/me/profile', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        displayName: 'New Name',
+        avatar: 'https://example.com/new.png',
+        bio: 'Building useful software.',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(doc.displayName).toBe('New Name');
+    expect(doc.avatar).toBe('https://example.com/new.png');
+    expect(doc.bio).toBe('Building useful software.');
+    expect(doc.save).toHaveBeenCalled();
+    const json = await res.json();
+    expect(json.user.displayName).toBe('New Name');
+    expect(json.user.bio).toBe('Building useful software.');
+  });
+
+  it('PATCH /api/auth/me/profile rejects invalid profile input', async () => {
+    const app = await makeApp();
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user' });
+
+    const res = await app.request('/api/auth/me/profile', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        displayName: '',
+        avatar: '',
+        bio: 'x'.repeat(121),
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockUserModel.findById).not.toHaveBeenCalled();
   });
 
   it('PATCH /api/auth/me/avatar updates the avatar', async () => {

@@ -20,6 +20,7 @@ describe('AuthForm', () => {
     verifyRegistrationCode: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn(),
     updateAvatar: vi.fn().mockResolvedValue(undefined),
+    updateProfile: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   });
 

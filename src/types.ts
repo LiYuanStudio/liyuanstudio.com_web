@@ -37,9 +37,17 @@ export interface User {
   id: string;
   email: string;
   displayName: string;
+  username?: string;
   role: UserRole;
   emailVerified: boolean;
   avatar?: string;
+  bio?: string;
+}
+
+export interface ProfileUpdateInput {
+  displayName: string;
+  avatar: string;
+  bio: string;
 }
 
 export interface AuthResponse {

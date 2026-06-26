@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { AuthProvider, useAuth } from './AuthContext.js';
 
 function TestConsumer() {
-  const { state, logout, updateAvatar } = useAuth();
+  const { state, logout, updateAvatar, updateProfile } = useAuth();
 
   if (state.status === 'loading') {
     return <span>Loading</span>;
@@ -14,8 +14,11 @@ function TestConsumer() {
     return (
       <div>
         <span data-testid="email">{state.user.email}</span>
+        <span data-testid="display-name">{state.user.displayName}</span>
+        <span data-testid="bio">{state.user.bio}</span>
         <img data-testid="avatar" src={state.user.avatar} alt="avatar" />
         <button onClick={() => updateAvatar('https://example.com/new.png')}>Update avatar</button>
+        <button onClick={() => updateProfile({ displayName: 'New Name', avatar: 'https://example.com/new.png', bio: 'New bio' })}>Update profile</button>
         <button onClick={logout}>Logout</button>
       </div>
     );
@@ -104,6 +107,46 @@ describe('AuthProvider', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('avatar')).toHaveAttribute('src', 'https://example.com/new.png');
+    });
+  });
+
+  it('updates the profile', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const isProfileUpdate = url.toString().includes('/auth/me/profile');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: {
+            id: '1',
+            email: 'hello@example.com',
+            displayName: isProfileUpdate ? 'New Name' : 'Old Name',
+            username: 'Hello',
+            role: 'user',
+            emailVerified: true,
+            avatar: isProfileUpdate ? 'https://example.com/new.png' : 'avatar.png',
+            bio: isProfileUpdate ? 'New bio' : '',
+          },
+        }),
+      } as Response;
+    }));
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('display-name')).toHaveTextContent('Old Name');
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update profile' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('display-name')).toHaveTextContent('New Name');
+      expect(screen.getByTestId('bio')).toHaveTextContent('New bio');
     });
   });
 

@@ -16,6 +16,8 @@ const app = new Hono<{ Variables: AuthVariables }>();
 const EMAIL_VERIFY_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 const GENERIC_PASSWORD_RESET_MESSAGE = '如果该邮箱已注册，我们已发送重置密码链接。';
+const BIO_MAX_LENGTH = 120;
+const USERNAME_MAX_BASE_LENGTH = 24;
 
 const REGISTRATION_RATE_LIMIT_MS = 60 * 1000;
 const registrationRateLimits = new Map<string, number>();
@@ -24,9 +26,12 @@ type UserForResponse = {
   _id: { toString: () => string };
   email: string;
   displayName: string;
+  username?: string;
   role: 'user' | 'admin';
   emailVerified: boolean;
   avatar?: string;
+  bio?: string;
+  save?: () => Promise<unknown>;
 };
 
 function validateEmail(email: unknown): string {
@@ -54,6 +59,27 @@ function validateDisplayName(displayName: unknown): string {
   return displayName.trim();
 }
 
+function validateAvatar(avatar: unknown): string {
+  if (typeof avatar !== 'string' || avatar.trim().length === 0) {
+    throw new Error('头像链接不能为空');
+  }
+  return avatar.trim();
+}
+
+function validateBio(bio: unknown): string {
+  if (bio === undefined || bio === null) {
+    return '';
+  }
+  if (typeof bio !== 'string') {
+    throw new Error('一句话介绍必须是文本');
+  }
+  const trimmed = bio.trim();
+  if (trimmed.length > BIO_MAX_LENGTH) {
+    throw new Error(`一句话介绍不能超过 ${BIO_MAX_LENGTH} 个字符`);
+  }
+  return trimmed;
+}
+
 function validateCode(code: unknown): string {
   if (typeof code !== 'string' || !/^\d{6}$/.test(code)) {
     throw new Error('验证码必须是 6 位数字');
@@ -74,14 +100,64 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function createUsernameBase(primary: string, fallback: string): string {
+  const fallbackLocalPart = fallback.split('@')[0] ?? fallback;
+  const normalized = (primary || fallbackLocalPart)
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, USERNAME_MAX_BASE_LENGTH);
+
+  if (normalized.length >= 2) {
+    return normalized;
+  }
+
+  const fallbackBase = fallbackLocalPart
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, USERNAME_MAX_BASE_LENGTH);
+
+  return fallbackBase.length >= 2 ? fallbackBase : 'user';
+}
+
+async function createUniqueUsername(primary: string, fallback: string, ownId?: string): Promise<string> {
+  const base = createUsernameBase(primary, fallback);
+
+  for (let index = 0; index < 100; index += 1) {
+    const suffix = index === 0 ? '' : String(index + 1);
+    const candidate = `${base}${suffix}`.slice(0, 32);
+    const existing = await UserModel.findOne({ username: candidate });
+    if (!existing || existing._id.toString() === ownId) {
+      return candidate;
+    }
+  }
+
+  return `user${randomBytes(4).toString('hex')}`;
+}
+
+async function ensureUsername(user: UserForResponse): Promise<UserForResponse> {
+  if (user.username) {
+    return user;
+  }
+
+  user.username = await createUniqueUsername(user.displayName, user.email, user._id.toString());
+  if (user.save) {
+    await user.save();
+  }
+  return user;
+}
+
 function serializeUser(user: UserForResponse) {
   return {
     id: user._id.toString(),
     email: user.email,
     displayName: user.displayName,
+    username: user.username,
     role: user.role,
     emailVerified: user.emailVerified,
     avatar: user.avatar,
+    bio: user.bio ?? '',
   };
 }
 
@@ -182,10 +258,12 @@ app.post('/register/verify', async (c) => {
     return c.json({ error: '该邮箱已被注册' }, 409);
   }
 
+  const username = await createUniqueUsername(pending.displayName, pending.email);
   const user = await UserModel.create({
     email: pending.email,
     passwordHash: pending.passwordHash,
     displayName: pending.displayName,
+    username,
     role: isAdminEmail(pending.email) ? 'admin' : 'user',
     emailVerified: true,
   });
@@ -223,8 +301,16 @@ app.post('/login', async (c) => {
     return c.json({ error: '邮箱或密码错误' }, 401);
   }
 
+  let shouldSave = false;
   if (user.role !== 'admin' && isAdminEmail(user.email)) {
     user.role = 'admin';
+    shouldSave = true;
+  }
+  if (!user.username) {
+    user.username = await createUniqueUsername(user.displayName, user.email, user._id.toString());
+    shouldSave = true;
+  }
+  if (shouldSave) {
     await user.save();
   }
 
@@ -241,7 +327,7 @@ app.get('/me', requireAuth, async (c) => {
   if (!user) {
     return c.json({ error: '用户不存在' }, 404);
   }
-  return c.json({ user: serializeUser(user) });
+  return c.json({ user: serializeUser(await ensureUsername(user)) });
 });
 
 app.post('/forgot-password', async (c) => {
@@ -313,22 +399,55 @@ app.post('/reset-password', async (c) => {
   return c.json({ message: '密码已重置，请使用新密码登录。' });
 });
 
+app.patch('/me/profile', requireAuth, async (c) => {
+  let displayName: string;
+  let avatar: string;
+  let bio: string;
+
+  try {
+    const body = await c.req.json();
+    displayName = validateDisplayName(body.displayName);
+    avatar = validateAvatar(body.avatar);
+    bio = validateBio(body.bio);
+  } catch (error) {
+    return badRequest(c, error);
+  }
+
+  const user = await UserModel.findById(c.get('userId'));
+  if (!user) {
+    return c.json({ error: '用户不存在' }, 404);
+  }
+
+  user.displayName = displayName;
+  user.avatar = avatar;
+  user.bio = bio;
+  if (!user.username) {
+    user.username = await createUniqueUsername(user.displayName, user.email, user._id.toString());
+  }
+  await user.save();
+
+  return c.json({ user: serializeUser(user) });
+});
+
 app.patch('/me/avatar', requireAuth, async (c) => {
-  const body = await c.req.json();
-  if (typeof body.avatar !== 'string' || body.avatar.trim().length === 0) {
-    return c.json({ error: '头像链接不能为空' }, 400);
+  let avatar: string;
+  try {
+    const body = await c.req.json();
+    avatar = validateAvatar(body.avatar);
+  } catch (error) {
+    return badRequest(c, error);
   }
 
   const user = await UserModel.findByIdAndUpdate(
     c.get('userId'),
-    { avatar: body.avatar.trim() },
+    { avatar },
     { new: true },
   );
   if (!user) {
     return c.json({ error: '用户不存在' }, 404);
   }
 
-  return c.json({ user: serializeUser(user) });
+  return c.json({ user: serializeUser(await ensureUsername(user)) });
 });
 
 export default app;

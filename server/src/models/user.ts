@@ -7,6 +7,7 @@ export interface User {
   email: string;
   passwordHash: string;
   displayName: string;
+  username?: string;
   role: 'user' | 'admin';
   emailVerified: boolean;
   emailVerifyTokenHash?: string;
@@ -14,6 +15,7 @@ export interface User {
   passwordResetTokenHash?: string;
   passwordResetExpiresAt?: Date;
   avatar: string;
+  bio: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -23,6 +25,15 @@ const UserSchema = new mongoose.Schema<User>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     displayName: { type: String, required: true, trim: true },
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      match: /^[a-zA-Z0-9_-]+$/,
+      minlength: 2,
+      maxlength: 32,
+    },
     role: {
       type: String,
       enum: ['user', 'admin'],
@@ -35,6 +46,7 @@ const UserSchema = new mongoose.Schema<User>(
     passwordResetTokenHash: { type: String },
     passwordResetExpiresAt: { type: Date },
     avatar: { type: String, required: true, default: DEFAULT_AVATAR },
+    bio: { type: String, required: true, default: '', trim: true, maxlength: 120 },
   },
   { timestamps: true },
 );

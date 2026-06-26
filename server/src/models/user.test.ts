@@ -24,6 +24,18 @@ describe('UserModel', () => {
     expect(user.avatar).toBe('https://example.com/avatar.png');
   });
 
+  it('uses the default bio and optional username', () => {
+    const user = new UserModel({
+      _id: new mongoose.Types.ObjectId(),
+      email: 'test@example.com',
+      passwordHash: 'hash',
+      displayName: 'Test User',
+    });
+
+    expect(user.bio).toBe('');
+    expect(user.username).toBeUndefined();
+  });
+
   it('stores password reset token fields', () => {
     const expiresAt = new Date('2026-06-25T12:00:00.000Z');
     const user = new UserModel({

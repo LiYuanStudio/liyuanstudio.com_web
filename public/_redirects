@@ -1,3 +1,4 @@
 /blog /blog/ 301
 /login /login/ 301
 /register /register/ 301
+/~/* /profile/ 200

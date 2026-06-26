@@ -167,6 +167,48 @@ describe('auth api helpers', () => {
     });
   });
 
+  it('updateProfile sends a PATCH request with profile fields', async () => {
+    localStorage.setItem('liyuan_auth_token', 'my-token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        user: {
+          id: '3',
+          email: 'me@example.com',
+          displayName: 'New Name',
+          username: 'Me',
+          role: 'user',
+          emailVerified: true,
+          avatar: 'new.png',
+          bio: 'Hello there.',
+        },
+      }),
+    } as Response));
+
+    const { updateProfile } = await importAuthApi();
+    const { user } = await updateProfile({
+      displayName: 'New Name',
+      avatar: 'new.png',
+      bio: 'Hello there.',
+    });
+
+    expect(user.bio).toBe('Hello there.');
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/me/profile', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer my-token',
+      },
+      body: JSON.stringify({
+        displayName: 'New Name',
+        avatar: 'new.png',
+        bio: 'Hello there.',
+      }),
+    });
+  });
+
   it('updateAvatar sends a PATCH request', async () => {
     localStorage.setItem('liyuan_auth_token', 'my-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

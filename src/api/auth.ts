@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import type { AuthResponse, MessageResponse, User } from '../types.js';
+import type { AuthResponse, MessageResponse, ProfileUpdateInput, User } from '../types.js';
 
 const TOKEN_KEY = 'liyuan_auth_token';
 
@@ -85,6 +85,13 @@ export function resetPassword(token: string, password: string): Promise<MessageR
   return fetchJson<MessageResponse>('/auth/reset-password', {
     method: 'POST',
     body: JSON.stringify({ token, password }),
+  });
+}
+
+export function updateProfile(profile: ProfileUpdateInput): Promise<{ user: User }> {
+  return fetchJson<{ user: User }>('/auth/me/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(profile),
   });
 }
 

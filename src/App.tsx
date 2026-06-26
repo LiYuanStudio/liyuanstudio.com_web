@@ -109,6 +109,10 @@ export const Blog = React.forwardRef<
   );
 });
 
+function getProfilePath(username: string | undefined, displayName: string) {
+  return `/~/${encodeURIComponent(username || displayName)}`;
+}
+
 function AuthNav() {
   const { state, logout } = useAuth();
 
@@ -118,7 +122,9 @@ function AuthNav() {
         {state.user.role === 'admin' && (
           <a className="nav-item" href="/admin/">后台</a>
         )}
-        <span className="nav-item nav-user">{state.user.displayName}</span>
+        <a className="nav-item nav-user" href={getProfilePath(state.user.username, state.user.displayName)}>
+          {state.user.displayName}
+        </a>
         <button type="button" className="nav-item" onClick={logout}>
           退出
         </button>

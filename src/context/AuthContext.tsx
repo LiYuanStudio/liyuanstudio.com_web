@@ -14,8 +14,9 @@ import {
   verifyRegistrationCode as apiVerifyRegistrationCode,
   setStoredToken,
   updateAvatar as apiUpdateAvatar,
+  updateProfile as apiUpdateProfile,
 } from '../api/auth.js';
-import type { User } from '../types.js';
+import type { ProfileUpdateInput, User } from '../types.js';
 
 type AuthState =
   | { status: 'loading' }
@@ -29,6 +30,7 @@ interface AuthContextValue {
   verifyRegistrationCode: (email: string, code: string) => Promise<void>;
   logout: () => void;
   updateAvatar: (avatarUrl: string) => Promise<void>;
+  updateProfile: (profile: ProfileUpdateInput) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -93,6 +95,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ status: 'authenticated', user });
   }, []);
 
+  const updateProfile = useCallback(async (profile: ProfileUpdateInput) => {
+    const { user } = await apiUpdateProfile(profile);
+    setState({ status: 'authenticated', user });
+  }, []);
+
   const value = useMemo(
     () => ({
       state,
@@ -101,8 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       verifyRegistrationCode,
       logout,
       updateAvatar,
+      updateProfile,
     }),
-    [state, login, sendRegistrationCode, verifyRegistrationCode, logout, updateAvatar],
+    [state, login, sendRegistrationCode, verifyRegistrationCode, logout, updateAvatar, updateProfile],
   );
 
   return (

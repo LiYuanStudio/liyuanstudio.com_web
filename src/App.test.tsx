@@ -79,6 +79,7 @@ describe('App', () => {
           id: '1',
           email: 'admin@example.com',
           displayName: 'Admin',
+          username: 'LA',
           role: 'admin',
           emailVerified: true,
         },
@@ -90,7 +91,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: '后台' })).toBeInTheDocument();
     });
-    expect(screen.getByText('Admin')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/~/LA');
   });
 });
 
