@@ -1,6 +1,5 @@
 import React, {
   StrictMode,
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -13,18 +12,23 @@ import {
   applyBlogSettings,
   readBlogSettings,
 } from './blog-settings.js';
-import type { BlogPost, GlowPosition } from './types.js';
-import {
-  MouseFollower,
-  clamp,
-  GLOW_RADIUS,
-  NAV_SCROLL_OFFSET,
-  PERIOD_SIZE,
-} from './components/MouseFollower.js';
+import type { BlogPost } from './types.js';
 import { MaskedHeading } from './components/MaskedHeading.js';
 import './styles.css';
 
-export { MouseFollower, clamp, lerp, easeInOutCubic } from './components/MouseFollower.js';
+export const NAV_SCROLL_OFFSET = 120;
+
+export function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(n, max));
+}
+
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+export function easeInOutCubic(x: number): number {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
 export { MaskedHeading } from './components/MaskedHeading.js';
 
 export function Footer() {
@@ -71,10 +75,7 @@ export function Footer() {
   );
 }
 
-export const News = React.forwardRef<
-  HTMLElement,
-  { glowRef: React.RefObject<GlowPosition | null> }
->(({ glowRef }, forwardedRef) => {
+export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
   return (
     <section
       ref={forwardedRef}
@@ -82,7 +83,7 @@ export const News = React.forwardRef<
       id="news"
       aria-labelledby="news-title"
     >
-      <MaskedHeading as="h2" id="news-title" glowRef={glowRef}>
+      <MaskedHeading as="h2" id="news-title">
         最新动态
       </MaskedHeading>
       <p className="news-lead">
@@ -93,10 +94,7 @@ export const News = React.forwardRef<
   );
 });
 
-export const Blog = React.forwardRef<
-  HTMLElement,
-  { glowRef: React.RefObject<GlowPosition | null> }
->(({ glowRef }, forwardedRef) => {
+export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
   const [posts, setPosts] = useState<BlogPost[]>(DEMO_BLOG_POSTS);
   const [settings, setSettings] = useState(() => readBlogSettings());
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
@@ -140,7 +138,7 @@ export const Blog = React.forwardRef<
       id="blog"
       aria-labelledby="blog-title"
     >
-      <MaskedHeading as="h2" id="blog-title" glowRef={glowRef}>
+      <MaskedHeading as="h2" id="blog-title">
         博客
       </MaskedHeading>
       <p className="blog-lead">
@@ -217,16 +215,9 @@ function AuthNav() {
 export function App() {
   const navRef = useRef<HTMLElement>(null);
   const heroRef = useRef<HTMLElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
   const productsRef = useRef<HTMLElement>(null);
   const newsRef = useRef<HTMLElement>(null);
   const blogRef = useRef<HTMLElement>(null);
-  const glowRef = useRef<GlowPosition>({
-    x: 0,
-    y: 0,
-    size: PERIOD_SIZE,
-    visible: false,
-  });
 
   useEffect(() => {
     const nav = navRef.current;
@@ -247,12 +238,6 @@ export function App() {
 
   return (
     <>
-      <MouseFollower
-        boundaryRef={navRef}
-        heroRef={heroRef}
-        titleRef={titleRef}
-        glowRef={glowRef}
-      />
       <main className="page-shell">
         <nav ref={navRef} className="nav" aria-label="Primary">
           <div className="nav-inner">
@@ -298,7 +283,7 @@ export function App() {
           className="hero"
           aria-labelledby="hero-title"
         >
-          <MaskedHeading as="h1" id="hero-title" ref={titleRef} glowRef={glowRef}>
+          <MaskedHeading as="h1" id="hero-title" className="fixed-blue-period">
             打造「有生机的科技」
           </MaskedHeading>
         </section>
@@ -309,7 +294,7 @@ export function App() {
           id="products"
           aria-labelledby="products-title"
         >
-          <MaskedHeading as="h2" id="products-title" glowRef={glowRef}>
+          <MaskedHeading as="h2" id="products-title">
             我们的产品
           </MaskedHeading>
           <p className="products-lead">
@@ -336,8 +321,8 @@ export function App() {
           </div>
         </section>
 
-        <News ref={newsRef} glowRef={glowRef} />
-        <Blog ref={blogRef} glowRef={glowRef} />
+        <News ref={newsRef} />
+        <Blog ref={blogRef} />
       </main>
 
       <Footer />

@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MouseFollower } from '../components/MouseFollower.js';
 import { MaskedHeading } from '../components/MaskedHeading.js';
-import type { GlowPosition } from '../types.js';
 import './papyrusdesktop.css';
 
 const REPO = 'PapyrusOR/Papyrus_Desktop';
@@ -277,28 +275,14 @@ const shortcuts = [
 
 export function PapyrusDesktopPage() {
   const navRef = useRef<HTMLElement>(null);
-  const heroRef = useRef<HTMLElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const glowRef = useRef<GlowPosition>({
-    x: 0,
-    y: 0,
-    size: 16,
-    visible: false,
-  });
 
   return (
     <div className="papyrus-page">
-      <MouseFollower
-        boundaryRef={navRef}
-        heroRef={heroRef}
-        titleRef={titleRef}
-        glowRef={glowRef}
-      />
       <PapyrusNav navRef={navRef} />
 
-      <header ref={heroRef} className="papyrus-hero">
+      <header className="papyrus-hero">
         <div className="papyrus-hero-inner">
-          <MaskedHeading as="h1" ref={titleRef} glowRef={glowRef}>
+          <MaskedHeading as="h1" className="fixed-blue-period">
             Papyrus Desktop
           </MaskedHeading>
           <p className="papyrus-lead">由简入深</p>

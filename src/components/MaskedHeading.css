@@ -7,13 +7,13 @@
   color: inherit;
 }
 
-.masked-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: max-content;
-  height: 100%;
-  color: #ffffff;
-  pointer-events: none;
-  user-select: none;
+.fixed-blue-period::after {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 12px;
+  border-radius: 50%;
+  background: #206ccf;
+  vertical-align: baseline;
 }

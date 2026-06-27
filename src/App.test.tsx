@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { App, Footer, News, Blog, MouseFollower, MaskedHeading, clamp, lerp, easeInOutCubic } from './App.js';
+import { App, Footer, News, Blog, MaskedHeading, clamp, lerp, easeInOutCubic } from './App.js';
 import { fetchNews, fetchBlogPosts } from './api.js';
-import type { BlogPost, GlowPosition } from './types.js';
-import { createRef } from 'react';
+import type { BlogPost } from './types.js';
 import { AuthProvider } from './context/AuthContext.js';
 
 vi.mock('./api.js');
@@ -42,6 +41,7 @@ describe('App', () => {
     const { container } = renderApp();
 
     expect(container.querySelector('#hero-title')).toBeInTheDocument();
+    expect(container.querySelector('#hero-title')).toHaveClass('fixed-blue-period');
     expect(container.querySelector('#products-title')).toBeInTheDocument();
     expect(container.querySelector('.product-card-large h3')).toHaveTextContent('Papyrus Desktop');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
@@ -131,7 +131,7 @@ describe('Footer', () => {
 
 describe('News component', () => {
   it('renders heading and placeholder text', () => {
-    render(<News glowRef={{ current: null }} />);
+    render(<News />);
     expect(screen.getByRole('heading', { name: '最新动态' })).toBeInTheDocument();
     expect(screen.getByText('敬请期待')).toBeInTheDocument();
   });
@@ -160,7 +160,7 @@ describe('Blog component', () => {
   it('renders blog posts from the blog API', async () => {
     mockFetchBlogPosts.mockResolvedValue(API_POSTS);
 
-    render(<Blog glowRef={{ current: null }} />);
+    render(<Blog />);
 
     expect(screen.getByRole('heading', { name: '博客' })).toBeInTheDocument();
     await waitFor(() => {
@@ -173,7 +173,7 @@ describe('Blog component', () => {
   it('falls back to demo blog posts when the API fails', async () => {
     mockFetchBlogPosts.mockRejectedValue(new Error('offline'));
 
-    render(<Blog glowRef={{ current: null }} />);
+    render(<Blog />);
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('当前显示前端演示内容。');
@@ -189,7 +189,7 @@ describe('Blog component', () => {
     }));
     mockFetchBlogPosts.mockResolvedValue(API_POSTS);
 
-    render(<Blog glowRef={{ current: null }} />);
+    render(<Blog />);
 
     await waitFor(() => {
       expect(screen.getByText('API blog two')).toBeInTheDocument();
@@ -200,208 +200,31 @@ describe('Blog component', () => {
 });
 
 describe('MaskedHeading', () => {
-  it('renders both base and overlay text', () => {
-    const glowRef = createRef<GlowPosition>();
+  it('renders the heading text once', () => {
     render(
-      <MaskedHeading as="h2" glowRef={glowRef}>
+      <MaskedHeading as="h2">
         Heading
       </MaskedHeading>,
     );
-    expect(screen.getAllByText('Heading')).toHaveLength(2);
+    expect(screen.getAllByText('Heading')).toHaveLength(1);
   });
-});
 
-describe('MouseFollower', () => {
-  it('renders the glow and cursor elements', () => {
-    const boundaryRef = createRef<HTMLElement>();
-    const heroRef = createRef<HTMLElement>();
-    const titleRef = createRef<HTMLHeadingElement>();
-    const glowRef = createRef<GlowPosition>();
-
+  it('supports custom classes for the fixed blue period', () => {
     const { container } = render(
-      <MouseFollower
-        boundaryRef={boundaryRef}
-        heroRef={heroRef}
-        titleRef={titleRef}
-        glowRef={glowRef}
-      />,
-    );
-
-    expect(container.querySelector('.mouse-glow')).toBeInTheDocument();
-    expect(container.querySelector('.mouse-cursor-cross')).toBeInTheDocument();
-    expect(container.querySelector('.mouse-cursor-dot')).toBeInTheDocument();
-  });
-
-  it('works when the shared glow ref is null', () => {
-    const boundaryRef = createRef<HTMLElement>();
-    const heroRef = createRef<HTMLElement>();
-    const titleRef = createRef<HTMLHeadingElement>();
-
-    const { container } = render(
-      <MouseFollower
-        boundaryRef={boundaryRef}
-        heroRef={heroRef}
-        titleRef={titleRef}
-        glowRef={{ current: null }}
-      />,
-    );
-
-    expect(container.querySelector('.mouse-glow')).toBeInTheDocument();
-  });
-
-  it('handles mouse, scroll and resize events without crashing', () => {
-    const boundaryRef = createRef<HTMLElement>();
-    const heroRef = createRef<HTMLElement>();
-    const titleRef = createRef<HTMLHeadingElement>();
-    const glowRef = createRef<GlowPosition>();
-
-    const { container } = render(
-      <MouseFollower
-        boundaryRef={boundaryRef}
-        heroRef={heroRef}
-        titleRef={titleRef}
-        glowRef={glowRef}
-      />,
-    );
-
-    const surface = container.querySelector('.mouse-glow')!;
-    fireEvent.mouseMove(surface, { clientX: 100, clientY: 100 });
-    fireEvent.scroll(window);
-    fireEvent.resize(window);
-    fireEvent.mouseLeave(document.body);
-    fireEvent.mouseEnter(document.body);
-  });
-
-  it('hides the glow when the cursor overlaps the boundary', () => {
-    const boundary = document.createElement('div');
-    const boundaryRef = createRef<HTMLElement>();
-    boundaryRef.current = boundary as unknown as HTMLElement;
-
-    const heroRef = createRef<HTMLElement>();
-    const titleRef = createRef<HTMLHeadingElement>();
-    const glowRef = createRef<GlowPosition>();
-    glowRef.current = { x: 0, y: 0, size: 16, visible: false };
-
-    boundary.getBoundingClientRect = () => ({
-      left: 100,
-      top: 100,
-      right: 200,
-      bottom: 200,
-      width: 100,
-      height: 100,
-      x: 100,
-      y: 100,
-      toJSON: () => {},
-    });
-
-    const { container } = render(
-      <MouseFollower
-        boundaryRef={boundaryRef}
-        heroRef={heroRef}
-        titleRef={titleRef}
-        glowRef={glowRef}
-      />,
-    );
-
-    // Cursor well below the boundary should keep the glow visible.
-    const surface = container.querySelector('.mouse-glow')!;
-    fireEvent.mouseMove(surface, { clientX: 150, clientY: 400 });
-  });
-
-  it('falls back when canvas 2d context is unavailable', async () => {
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext;
-
-    const titleRef = createRef<HTMLHeadingElement>();
-    const glowRef = createRef<GlowPosition>();
-    const baseSpan = document.createElement('span');
-    baseSpan.textContent = 'Title';
-    baseSpan.className = 'masked-base';
-    const title = document.createElement('h1');
-    title.appendChild(baseSpan);
-    titleRef.current = title as unknown as HTMLHeadingElement;
-
-    render(
-      <MouseFollower
-        boundaryRef={createRef<HTMLElement>()}
-        heroRef={createRef<HTMLElement>()}
-        titleRef={titleRef}
-        glowRef={glowRef}
-      />,
-    );
-
-    await new Promise((r) => setTimeout(r, 50));
-    HTMLCanvasElement.prototype.getContext = originalGetContext;
-  });
-});
-
-describe('MaskedHeading', () => {
-  it('renders both base and overlay text', () => {
-    const glowRef = createRef<GlowPosition>();
-    render(
-      <MaskedHeading as="h2" glowRef={glowRef}>
-        Heading
+      <MaskedHeading as="h1" className="fixed-blue-period">
+        Hero
       </MaskedHeading>,
     );
-    expect(screen.getAllByText('Heading')).toHaveLength(2);
-  });
-
-  it('activates the overlay when the glow is near the heading', async () => {
-    const glowRef = createRef<GlowPosition>();
-    glowRef.current = { x: 50, y: 50, size: 300, visible: true };
-
-    const { container } = render(
-      <MaskedHeading as="h2" glowRef={glowRef}>
-        Hover
-      </MaskedHeading>,
-    );
-
-    const overlay = container.querySelector('.masked-overlay') as HTMLElement;
-    expect(overlay).toBeInTheDocument();
-
-    // Wait for the requestAnimationFrame tick to update state.
-    await waitFor(() => {
-      expect(overlay.style.clipPath).not.toBe('circle(0px at -999px -999px)');
-    });
-  });
-
-  it('deactivates the overlay when the glow is far away', async () => {
-    const glowRef = createRef<GlowPosition>();
-    glowRef.current = { x: -1000, y: -1000, size: 16, visible: true };
-
-    const { container } = render(
-      <MaskedHeading as="h2" glowRef={glowRef}>
-        Far
-      </MaskedHeading>,
-    );
-
-    const overlay = container.querySelector('.masked-overlay') as HTMLElement;
-    await waitFor(() => {
-      expect(overlay.style.clipPath).toBe('circle(0px at -999px -999px)');
-    });
+    expect(container.querySelector('.masked-heading')).toHaveClass('fixed-blue-period');
   });
 
   it('supports function refs', () => {
-    const glowRef = createRef<GlowPosition>();
     const fnRef = vi.fn();
     render(
-      <MaskedHeading as="h2" glowRef={glowRef} ref={fnRef}>
+      <MaskedHeading as="h2" ref={fnRef}>
         Function Ref
       </MaskedHeading>,
     );
     expect(fnRef).toHaveBeenCalled();
   });
-
-  it('keeps ticking when heading or glow refs are missing', async () => {
-    render(
-      <MaskedHeading as="h2" glowRef={{ current: null }}>
-        Missing
-      </MaskedHeading>,
-    );
-    // Should not throw even though the glow ref is null.
-    expect(screen.getAllByText('Missing')).toHaveLength(2);
-    // Wait for at least one animation frame tick.
-    await new Promise((r) => requestAnimationFrame(r));
-  });
 });
-
