@@ -93,6 +93,7 @@ describe('App', () => {
       expect(screen.getByRole('link', { name: 'Admin' })).toBeInTheDocument();
     });
     expect(screen.queryByRole('link', { name: '后台' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/LA');
   });
 });

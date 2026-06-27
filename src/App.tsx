@@ -182,16 +182,13 @@ function getAvatarFallback(displayName: string) {
 }
 
 function AuthNav() {
-  const { state, logout } = useAuth();
+  const { state } = useAuth();
 
   if (state.status === 'authenticated') {
     const profilePath = getProfilePath(state.user.username, state.user.displayName);
 
     return (
       <div className="nav-actions">
-        <button type="button" className="nav-item" onClick={logout}>
-          退出
-        </button>
         <a className="nav-user" href={profilePath} aria-label={state.user.displayName}>
           {state.user.avatar ? (
             <img src={state.user.avatar} alt="" />

@@ -129,6 +129,7 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
     });
+    expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
     expect(screen.queryByText('/LA')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '账号后台' })).not.toBeInTheDocument();
 
