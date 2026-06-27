@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App, Footer, News, Blog, MouseFollower, MaskedHeading, clamp, lerp, easeInOutCubic } from './App.js';
 import { fetchNews, fetchBlogPosts } from './api.js';
-import type { GlowPosition } from './types.js';
+import type { BlogPost, GlowPosition } from './types.js';
 import { createRef } from 'react';
 import { AuthProvider } from './context/AuthContext.js';
 
@@ -37,7 +37,7 @@ describe('App', () => {
 
   it('renders the hero, products, news and blog sections', () => {
     mockFetchNews.mockResolvedValue([]);
-    mockFetchBlogPosts.mockResolvedValue([]);
+    mockFetchBlogPosts.mockReturnValue(new Promise(() => {}));
 
     const { container } = renderApp();
 
@@ -46,7 +46,8 @@ describe('App', () => {
     expect(container.querySelector('.product-card-large h3')).toHaveTextContent('Papyrus Desktop');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
-    expect(screen.getAllByText('敬请期待')).toHaveLength(2);
+    expect(screen.getAllByText('敬请期待')).toHaveLength(1);
+    expect(screen.getByText('Papyrus Desktop 的第一阶段设计笔记')).toBeInTheDocument();
   });
 
   it('scrolls to sections when nav buttons are clicked', async () => {
@@ -137,10 +138,64 @@ describe('News component', () => {
 });
 
 describe('Blog component', () => {
-  it('renders heading and placeholder text', () => {
+  const API_POSTS: BlogPost[] = [
+    {
+      title: 'API blog one',
+      excerpt: 'API summary one',
+      category: 'Tech',
+      date: '2026-06-21',
+      readTime: '4 min',
+      slug: 'api-blog-one',
+    },
+    {
+      title: 'API blog two',
+      excerpt: 'API summary two',
+      category: 'Product',
+      date: '2026-06-20',
+      readTime: '3 min',
+      slug: 'api-blog-two',
+    },
+  ];
+
+  it('renders blog posts from the blog API', async () => {
+    mockFetchBlogPosts.mockResolvedValue(API_POSTS);
+
     render(<Blog glowRef={{ current: null }} />);
+
     expect(screen.getByRole('heading', { name: '博客' })).toBeInTheDocument();
-    expect(screen.getByText('敬请期待')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('API blog one')).toBeInTheDocument();
+    });
+    expect(screen.getByText('API summary one')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/blog/api-blog-one/');
+  });
+
+  it('falls back to demo blog posts when the API fails', async () => {
+    mockFetchBlogPosts.mockRejectedValue(new Error('offline'));
+
+    render(<Blog glowRef={{ current: null }} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('当前显示前端演示内容。');
+    });
+    expect(screen.getByText('Papyrus Desktop 的第一阶段设计笔记')).toBeInTheDocument();
+  });
+
+  it('applies blog display settings from local storage', async () => {
+    localStorage.setItem('liyuan_blog_settings', JSON.stringify({
+      visibleCount: 1,
+      featuredSlug: 'api-blog-two',
+      showExcerpt: false,
+    }));
+    mockFetchBlogPosts.mockResolvedValue(API_POSTS);
+
+    render(<Blog glowRef={{ current: null }} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('API blog two')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('API blog one')).not.toBeInTheDocument();
+    expect(screen.queryByText('API summary two')).not.toBeInTheDocument();
   });
 });
 

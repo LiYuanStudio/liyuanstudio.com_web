@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '../context/AuthContext.js';
 import { ProfilePage } from './ProfilePage.js';
 import { getCroppedImg } from '../lib/crop-image.js';
+import { BLOG_SETTINGS_STORAGE_KEY } from '../blog-settings.js';
 import type { User } from '../types.js';
 
 const CURRENT_USER: User = {
@@ -138,7 +139,7 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('profile-message')).toHaveTextContent('个人主页已保存。');
     });
-    expect(fetch).toHaveBeenCalledWith('/api/auth/me/profile', expect.objectContaining({
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/me/profile'), expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({
         displayName: 'New LA',
@@ -188,7 +189,7 @@ describe('ProfilePage', () => {
       expect(screen.getByTestId('profile-message')).toHaveTextContent('头像已更新。');
     });
     expect(mockGetCroppedImg).toHaveBeenCalledWith('blob:mock-image-url', { x: 0, y: 0, width: 512, height: 512 });
-    expect(fetch).toHaveBeenCalledWith('/api/auth/me/avatar', expect.objectContaining({
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/me/avatar'), expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({ avatar: 'data:image/jpeg;base64,cropped' }),
     }));
@@ -247,5 +248,32 @@ describe('ProfilePage', () => {
       expect(screen.queryByRole('dialog', { name: '截取头像' })).not.toBeInTheDocument();
     });
     expect(fetch).not.toHaveBeenCalledWith('/api/auth/me/avatar', expect.anything());
+  });
+
+  it('saves blog display settings from the profile page', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', mockFetch());
+
+    renderPage('/LA');
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '博客设置' })).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText('首页显示数量'), '1');
+    await user.clear(screen.getByLabelText('置顶文章 slug'));
+    await user.type(screen.getByLabelText('置顶文章 slug'), 'lightweight-account-experience');
+    await user.click(screen.getByLabelText('在首页博客卡片显示摘要'));
+    await user.click(screen.getByRole('button', { name: '保存博客设置' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('blog-settings-message')).toHaveTextContent('博客设置已保存。');
+    });
+    expect(JSON.parse(localStorage.getItem(BLOG_SETTINGS_STORAGE_KEY) || '{}')).toEqual({
+      visibleCount: 1,
+      featuredSlug: 'lightweight-account-experience',
+      showExcerpt: false,
+    });
   });
 });

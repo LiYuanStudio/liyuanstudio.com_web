@@ -560,6 +560,13 @@ h1 {
   line-height: 1.5;
 }
 
+.blog-status {
+  margin: 16px 0 0;
+  color: #86868b;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .blog-grid {
   display: grid;
   width: 100%;

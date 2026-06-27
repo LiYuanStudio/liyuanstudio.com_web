@@ -137,6 +137,10 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 }
 
+.profile-card + .profile-card {
+  margin-top: 24px;
+}
+
 .profile-card-narrow {
   max-width: 520px;
   margin: 0 auto;
@@ -193,6 +197,7 @@
 }
 
 .profile-form input,
+.profile-form select,
 .profile-form textarea {
   width: 100%;
   padding: 12px 14px;
@@ -207,9 +212,27 @@
 }
 
 .profile-form input:focus,
+.profile-form select:focus,
 .profile-form textarea:focus {
   border-color: #7be188;
   box-shadow: 0 0 0 3px rgba(123, 225, 136, 0.18);
+}
+
+.profile-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.profile-checkbox-row input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: #1d1d1f;
 }
 
 .profile-button {

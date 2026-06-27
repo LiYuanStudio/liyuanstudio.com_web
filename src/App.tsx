@@ -7,7 +7,13 @@ import React, {
 } from 'react';
 import { IconGithub } from '@arco-design/web-react/icon';
 import { useAuth } from './context/AuthContext.js';
-import type { GlowPosition } from './types.js';
+import { fetchBlogPosts } from './api.js';
+import {
+  DEMO_BLOG_POSTS,
+  applyBlogSettings,
+  readBlogSettings,
+} from './blog-settings.js';
+import type { BlogPost, GlowPosition } from './types.js';
 import {
   MouseFollower,
   clamp,
@@ -91,6 +97,42 @@ export const Blog = React.forwardRef<
   HTMLElement,
   { glowRef: React.RefObject<GlowPosition | null> }
 >(({ glowRef }, forwardedRef) => {
+  const [posts, setPosts] = useState<BlogPost[]>(DEMO_BLOG_POSTS);
+  const [settings, setSettings] = useState(() => readBlogSettings());
+  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchBlogPosts()
+      .then((list) => {
+        if (cancelled) return;
+        setPosts(list.length > 0 ? list : DEMO_BLOG_POSTS);
+        setStatus('ready');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPosts(DEMO_BLOG_POSTS);
+        setStatus('fallback');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleSettingsChange = () => setSettings(readBlogSettings());
+    window.addEventListener('storage', handleSettingsChange);
+    window.addEventListener('liyuan-blog-settings-change', handleSettingsChange);
+    return () => {
+      window.removeEventListener('storage', handleSettingsChange);
+      window.removeEventListener('liyuan-blog-settings-change', handleSettingsChange);
+    };
+  }, []);
+
+  const visiblePosts = applyBlogSettings(posts, settings);
+
   return (
     <section
       ref={forwardedRef}
@@ -104,7 +146,31 @@ export const Blog = React.forwardRef<
       <p className="blog-lead">
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
-      <p className="blog-lead">敬请期待</p>
+      {status === 'fallback' && (
+        <p className="blog-status" role="status">
+          当前显示前端演示内容。
+        </p>
+      )}
+      <div className="blog-grid" aria-busy={status === 'loading'}>
+        {visiblePosts.map((post) => (
+          <article className="blog-card" key={post.slug}>
+            <div className="blog-card-hero" aria-hidden="true">
+              <h4>{post.category}</h4>
+            </div>
+            <div className="blog-card-content">
+              <span className="blog-tag">{post.category}</span>
+              <h3>{post.title}</h3>
+              {settings.showExcerpt && <p>{post.excerpt}</p>}
+              <div className="blog-card-footer">
+                <span className="blog-date">{post.date} · {post.readTime}</span>
+                <a className="product-card-button" href={`/blog/${post.slug}/`}>
+                  阅读
+                </a>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 });
