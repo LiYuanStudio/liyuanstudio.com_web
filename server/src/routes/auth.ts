@@ -177,6 +177,11 @@ function createUsernameBase(primary: string, fallback: string): string {
   return fallbackBase.length >= 2 ? fallbackBase : 'user';
 }
 
+function isValidUsername(username: string | undefined): boolean {
+  return typeof username === 'string' &&
+    /^[a-zA-Z0-9_-]{2,32}$/.test(username);
+}
+
 async function createUniqueUsername(primary: string, fallback: string, ownId?: string): Promise<string> {
   const base = createUsernameBase(primary, fallback);
 
@@ -197,7 +202,7 @@ async function ensureUsername(
   user: UserForResponse,
   stage: string,
 ): Promise<UserForResponse> {
-  if (user.username) {
+  if (isValidUsername(user.username)) {
     return user;
   }
 
@@ -666,15 +671,35 @@ app.patch('/me/profile', requireAuth, async (c) => {
     return jsonError(c, '用户不存在', 404);
   }
 
-  user.displayName = displayName;
-  user.avatar = avatar;
-  user.bio = bio;
-  if (!user.username) {
-    user.username = await createUniqueUsername(user.displayName, user.email, user._id.toString());
-  }
-  await user.save();
+  const userId = user._id.toString();
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    user.displayName = displayName;
+    user.avatar = avatar;
+    user.bio = bio;
+    if (!isValidUsername(user.username)) {
+      user.username = await createUniqueUsername(user.displayName, user.email, userId);
+    }
 
-  return c.json({ user: serializeUser(user) });
+    try {
+      await user.save();
+      return c.json({ user: serializeUser(user) });
+    } catch (error) {
+      logAuthEvent(c, 'error', 'auth.profile_save_failed', {
+        attempt,
+        userId,
+        email: maskEmail(user.email),
+        duplicateKey: isDuplicateKeyError(error),
+        ...getErrorSummary(error),
+      });
+
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+      user.username = undefined;
+    }
+  }
+
+  return jsonError(c, '用户名暂时不可用，请稍后再试', 409);
 });
 
 app.patch('/me/avatar', requireAuth, async (c) => {

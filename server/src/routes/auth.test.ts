@@ -833,6 +833,69 @@ describe('auth routes', () => {
     expect(json.user.bio).toBe('Building useful software.');
   });
 
+  it('PATCH /api/auth/me/profile repairs invalid legacy usernames before saving', async () => {
+    const app = await makeApp();
+    const doc = userDoc({ username: '中文用户名' });
+    mockUserModel.findById.mockResolvedValue(doc as never);
+    mockUserModel.findOne.mockResolvedValue(null);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me/profile', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        displayName: 'New Name',
+        avatar: 'https://example.com/new.png',
+        bio: 'Building useful software.',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(doc.username).toBe('New-Name');
+    expect(doc.save).toHaveBeenCalled();
+    expect((await res.json()).user.username).toBe('New-Name');
+  });
+
+  it('PATCH /api/auth/me/profile retries duplicate username save failures', async () => {
+    const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const duplicateError = Object.assign(new Error('duplicate username'), { code: 11000 });
+    const doc = userDoc({
+      username: undefined,
+      save: vi.fn()
+        .mockRejectedValueOnce(duplicateError)
+        .mockResolvedValueOnce(undefined),
+    });
+    mockUserModel.findById.mockResolvedValue(doc as never);
+    mockUserModel.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ _id: { toString: () => 'other-user' } } as never)
+      .mockResolvedValueOnce(null);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me/profile', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        displayName: 'New Name',
+        avatar: 'https://example.com/new.png',
+        bio: 'Building useful software.',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(doc.save).toHaveBeenCalledTimes(2);
+    expect(doc.username).toBe('New-Name2');
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.profile_save_failed'));
+    expect((await res.json()).user.username).toBe('New-Name2');
+    errorSpy.mockRestore();
+  });
   it('PATCH /api/auth/me/profile rejects invalid profile input', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(userDoc() as never);
