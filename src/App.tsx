@@ -119,9 +119,6 @@ function AuthNav() {
   if (state.status === 'authenticated') {
     return (
       <>
-        {state.user.role === 'admin' && (
-          <a className="nav-item" href="/admin/">后台</a>
-        )}
         <a className="nav-item nav-user" href={getProfilePath(state.user.username, state.user.displayName)}>
           {state.user.displayName}
         </a>

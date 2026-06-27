@@ -220,7 +220,7 @@ export function ProfilePage() {
           <span>LiYuan Studio</span>
         </a>
         <div className="profile-nav-actions">
-          {state.user.role === 'admin' && <a href="/admin/">后台</a>}
+          {state.user.role === 'admin' && <a href="/admin/">账号后台</a>}
           <button type="button" onClick={logout}>退出</button>
         </div>
       </nav>

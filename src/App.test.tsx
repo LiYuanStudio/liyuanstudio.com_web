@@ -67,7 +67,7 @@ describe('App', () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(3);
   });
 
-  it('shows admin link for authenticated admin users', async () => {
+  it('links authenticated admin users to their profile from the homepage', async () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockResolvedValue([]);
     localStorage.setItem('liyuan_auth_token', 'admin-token');
@@ -89,8 +89,9 @@ describe('App', () => {
     renderApp();
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: '后台' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Admin' })).toBeInTheDocument();
     });
+    expect(screen.queryByRole('link', { name: '后台' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/LA');
   });
 });

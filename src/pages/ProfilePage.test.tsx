@@ -16,6 +16,14 @@ const CURRENT_USER = {
   bio: 'Original bio',
 };
 
+const ADMIN_USER = {
+  ...CURRENT_USER,
+  email: 'admin@example.com',
+  displayName: 'Admin',
+  username: 'Admin',
+  role: 'admin' as const,
+};
+
 vi.mock('../lib/crop-image.js', () => ({
   getCroppedImg: vi.fn(),
 }));
@@ -135,6 +143,18 @@ describe('ProfilePage', () => {
         bio: 'Updated bio',
       }),
     }));
+  });
+
+  it('shows the admin backend entry on an admin user profile', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    vi.stubGlobal('fetch', mockFetch(ADMIN_USER));
+
+    renderPage('/Admin');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Admin' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: '账号后台' })).toHaveAttribute('href', '/admin/');
   });
 
   it('opens cropper when avatar image is selected and saves cropped avatar', async () => {
