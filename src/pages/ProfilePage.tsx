@@ -245,7 +245,6 @@ export function ProfilePage() {
             hidden
           />
           <div>
-            <p className="profile-kicker">/{currentUsername}</p>
             <h1 id="profile-title">{form.displayName || state.user.displayName}</h1>
             <p>{form.bio || '一句话介绍还没有填写。'}</p>
           </div>

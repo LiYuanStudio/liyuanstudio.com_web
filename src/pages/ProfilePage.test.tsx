@@ -4,8 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '../context/AuthContext.js';
 import { ProfilePage } from './ProfilePage.js';
 import { getCroppedImg } from '../lib/crop-image.js';
+import type { User } from '../types.js';
 
-const CURRENT_USER = {
+const CURRENT_USER: User = {
   id: '1',
   email: 'hello@example.com',
   displayName: 'LA',
@@ -53,7 +54,7 @@ function renderPage(path = '/LA') {
   );
 }
 
-function mockFetch(userResponse = CURRENT_USER) {
+function mockFetch(userResponse: User = CURRENT_USER) {
   return vi.fn().mockImplementation(async (url: string) => {
     const isProfileUpdate = url.toString().includes('/auth/me/profile');
     const isAvatarUpdate = url.toString().includes('/auth/me/avatar');
@@ -127,6 +128,8 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
     });
+    expect(screen.queryByText('/LA')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '账号后台' })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'New LA' } });
     fireEvent.change(screen.getByLabelText('一句话介绍'), { target: { value: 'Updated bio' } });
