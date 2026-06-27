@@ -56,6 +56,7 @@ function isProfilePath(url: string): boolean {
   const [path] = url.split('?');
   if (path.includes('.')) return false;
   const segment = path.split('/')[1];
+  if (segment?.startsWith('@') || segment?.startsWith('__vite')) return false;
   return Boolean(segment && !NON_PROFILE_SEGMENTS.has(segment));
 }
 
