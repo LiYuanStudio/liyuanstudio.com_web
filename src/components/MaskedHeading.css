@@ -10,10 +10,18 @@
 .fixed-blue-period::after {
   content: '';
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  margin-left: 12px;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
   border-radius: 50%;
   background: #206ccf;
   vertical-align: baseline;
+}
+
+@media (max-width: 760px) {
+  .fixed-blue-period::after {
+    width: 11px;
+    height: 11px;
+    margin-left: 5px;
+  }
 }

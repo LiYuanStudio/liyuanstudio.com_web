@@ -14,33 +14,6 @@ export const DEFAULT_BLOG_SETTINGS: BlogSettings = {
   showExcerpt: true,
 };
 
-export const DEMO_BLOG_POSTS: BlogPost[] = [
-  {
-    title: 'Papyrus Desktop 的第一阶段设计笔记',
-    excerpt: '从本地优先、轻量协作到可持续扩展，记录我们如何拆解桌面端产品的早期体验。',
-    category: '产品',
-    date: '2026-06-20',
-    readTime: '4 min',
-    slug: 'papyrus-desktop-design-notes',
-  },
-  {
-    title: '为什么我们坚持把账号体验做轻',
-    excerpt: '账号系统不应该抢走内容本身的注意力。这里是 LiYuan Studio 对登录、主页和资料设置的取舍。',
-    category: '体验',
-    date: '2026-06-18',
-    readTime: '3 min',
-    slug: 'lightweight-account-experience',
-  },
-  {
-    title: '小团队官网如何渐进接入动态内容',
-    excerpt: '在静态站点里逐步引入新闻、博客和认证能力，同时保留部署简单性与清晰边界。',
-    category: '工程',
-    date: '2026-06-15',
-    readTime: '5 min',
-    slug: 'progressive-dynamic-content',
-  },
-];
-
 function normalizeSettings(value: unknown): BlogSettings {
   if (!value || typeof value !== 'object') return DEFAULT_BLOG_SETTINGS;
 

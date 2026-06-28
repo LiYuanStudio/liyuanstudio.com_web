@@ -8,7 +8,6 @@ import { IconGithub } from '@arco-design/web-react/icon';
 import { useAuth } from './context/AuthContext.js';
 import { fetchBlogPosts } from './api.js';
 import {
-  DEMO_BLOG_POSTS,
   applyBlogSettings,
   readBlogSettings,
 } from './blog-settings.js';
@@ -95,9 +94,9 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
 });
 
 export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
-  const [posts, setPosts] = useState<BlogPost[]>(DEMO_BLOG_POSTS);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
   const [settings, setSettings] = useState(() => readBlogSettings());
-  const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     let cancelled = false;
@@ -105,13 +104,13 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
     fetchBlogPosts()
       .then((list) => {
         if (cancelled) return;
-        setPosts(list.length > 0 ? list : DEMO_BLOG_POSTS);
+        setPosts(list);
         setStatus('ready');
       })
       .catch(() => {
         if (cancelled) return;
-        setPosts(DEMO_BLOG_POSTS);
-        setStatus('fallback');
+        setPosts([]);
+        setStatus('error');
       });
 
     return () => {
@@ -144,9 +143,14 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       <p className="blog-lead">
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
-      {status === 'fallback' && (
+      {status === 'error' && (
         <p className="blog-status" role="status">
-          当前显示前端演示内容。
+          博客内容暂时无法加载。
+        </p>
+      )}
+      {status === 'ready' && visiblePosts.length === 0 && (
+        <p className="blog-status" role="status">
+          暂无博客内容。
         </p>
       )}
       <div className="blog-grid" aria-busy={status === 'loading'}>

@@ -47,7 +47,7 @@ describe('App', () => {
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
     expect(screen.getAllByText('敬请期待')).toHaveLength(1);
-    expect(screen.getByText('Papyrus Desktop 的第一阶段设计笔记')).toBeInTheDocument();
+    expect(container.querySelector('.blog-card')).not.toBeInTheDocument();
   });
 
   it('scrolls to sections when nav buttons are clicked', async () => {
@@ -171,15 +171,26 @@ describe('Blog component', () => {
     expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/blog/api-blog-one/');
   });
 
-  it('falls back to demo blog posts when the API fails', async () => {
+  it('shows an error status without demo posts when the API fails', async () => {
     mockFetchBlogPosts.mockRejectedValue(new Error('offline'));
 
     render(<Blog />);
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('当前显示前端演示内容。');
+      expect(screen.getByRole('status')).toHaveTextContent('博客内容暂时无法加载。');
     });
-    expect(screen.getByText('Papyrus Desktop 的第一阶段设计笔记')).toBeInTheDocument();
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty status when the blog API returns no posts', async () => {
+    mockFetchBlogPosts.mockResolvedValue([]);
+
+    render(<Blog />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('暂无博客内容。');
+    });
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
   });
 
   it('applies blog display settings from local storage', async () => {
