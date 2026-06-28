@@ -14,6 +14,10 @@ export const MaskedHeading = React.forwardRef<
 >(({ as: Tag, className, id, children }, forwardedRef) => {
   const ref = useRef<HTMLHeadingElement>(null);
   const baseRef = useRef<HTMLSpanElement>(null);
+  const normalizedChildren = React.Children.toArray(children).map((child) =>
+    typeof child === 'string' ? child.trim() : child,
+  );
+  const headingChildren = normalizedChildren.length === 1 ? normalizedChildren[0] : normalizedChildren;
 
   const setRefs = useCallback(
     (node: HTMLHeadingElement | null) => {
@@ -34,7 +38,7 @@ export const MaskedHeading = React.forwardRef<
       className={className ? `masked-heading ${className}` : 'masked-heading'}
     >
       <span className="masked-base" ref={baseRef}>
-        {children}
+        {headingChildren}
       </span>
     </Tag>
   );

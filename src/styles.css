@@ -142,10 +142,12 @@ a {
 
 .hero {
   display: flex;
+  width: 100vw;
   min-height: 100vh;
+  margin-left: calc(50% - 50vw);
   align-items: center;
   justify-content: flex-start;
-  padding: 80px 0;
+  padding: 80px 30px;
   text-align: left;
 }
 
