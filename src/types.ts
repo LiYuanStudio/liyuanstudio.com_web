@@ -17,29 +17,52 @@ export interface NewsUpdate {
   updatedAt?: string;
 }
 
+export type BlogStatus = 'draft' | 'published';
+export type BlogVisibility = 'public' | 'unlisted';
+
 export interface BlogPost {
   _id?: string;
   title: string;
-  excerpt: string;
-  category: string;
-  date: string;
-  readTime: string;
-  image?: string;
+  excerpt?: string;
+  category?: string;
+  tags: string[];
   slug: string;
-  content?: string;
+  content: string;
+  image?: string;
+  readTime?: string;
+  authorId?: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  authorAvatar?: string;
+  status: BlogStatus;
+  visibility: BlogVisibility;
+  publishedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface BlogPostInput {
+  title: string;
+  excerpt?: string;
+  category?: string;
+  tags: string[];
+  slug: string;
+  content: string;
+  image?: string;
+  readTime?: string;
+  status: BlogStatus;
+  visibility: BlogVisibility;
 }
 
 export type UserRole = 'user' | 'admin';
 
 export interface User {
   id: string;
-  email: string;
+  email?: string;
   displayName: string;
   username?: string;
   role: UserRole;
-  emailVerified: boolean;
+  emailVerified?: boolean;
   avatar?: string;
   bio?: string;
 }

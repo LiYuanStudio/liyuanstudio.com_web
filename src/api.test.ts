@@ -47,7 +47,7 @@ describe('api helpers', () => {
     const data = await fetchBlogPosts();
     expect(data).toHaveLength(1);
     expect(data[0].title).toBe('Post');
-    expect(fetch).toHaveBeenCalledWith('https://api.example.com/blog');
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/blog', expect.objectContaining({ headers: {} }));
   });
 
   it('throws an error with status text on non-ok response', async () => {
@@ -77,3 +77,4 @@ describe('api helpers', () => {
     expect(fetch).toHaveBeenCalledWith('/api/news');
   });
 });
+

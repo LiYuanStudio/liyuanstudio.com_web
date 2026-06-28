@@ -46,7 +46,7 @@ vi.mock('react-easy-crop', () => ({
   },
 }));
 
-function renderPage(path = '/LA') {
+function renderPage(path = '/profile') {
   window.history.pushState({}, '', path);
   return render(
     <AuthProvider>
@@ -57,8 +57,15 @@ function renderPage(path = '/LA') {
 
 function mockFetch(userResponse: User = CURRENT_USER) {
   return vi.fn().mockImplementation(async (url: string) => {
-    const isProfileUpdate = url.toString().includes('/auth/me/profile');
-    const isAvatarUpdate = url.toString().includes('/auth/me/avatar');
+    const href = url.toString();
+    const isProfileUpdate = href.includes('/auth/me/profile');
+    const isAvatarUpdate = href.includes('/auth/me/avatar');
+    if (href.includes('/blog/user/')) {
+      return { ok: true, status: 200, json: async () => [] } as Response;
+    }
+    if (href.includes('/auth/users/')) {
+      return { ok: true, status: 200, json: async () => ({ user: userResponse }) } as Response;
+    }
     return {
       ok: true,
       status: 200,
@@ -95,35 +102,31 @@ describe('ProfilePage', () => {
   it('prompts unauthenticated users to log in', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('unauthenticated')));
 
-    renderPage('/LA');
+    renderPage('/profile/');
 
     await waitFor(() => {
-      expect(screen.getByText('请先登录后管理你的个人主页。')).toBeInTheDocument();
+      expect(screen.getByText('登录后可以写文章、保存草稿和管理个人主页。')).toBeInTheDocument();
     });
     expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login/');
   });
 
-  it('blocks editing another username in v1', async () => {
+  it('renders another user public profile', async () => {
     localStorage.setItem('liyuan_auth_token', 'token');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ user: CURRENT_USER }),
-    } as Response));
+    vi.stubGlobal('fetch', mockFetch());
 
     renderPage('/SomeoneElse');
 
     await waitFor(() => {
-      expect(screen.getByText('当前版本只能编辑自己的个人主页。')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: '打开我的主页' })).toHaveAttribute('href', '/LA');
+    expect(screen.getByText('暂无公开文章。')).toBeInTheDocument();
   });
 
   it('saves profile changes', async () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', mockFetch());
 
-    renderPage('/LA');
+    renderPage('/profile/');
     const user = userEvent.setup();
 
     await waitFor(() => {
@@ -154,7 +157,7 @@ describe('ProfilePage', () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     vi.stubGlobal('fetch', mockFetch(ADMIN_USER));
 
-    renderPage('/Admin');
+    renderPage('/profile/');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Admin' })).toBeInTheDocument();
@@ -169,7 +172,7 @@ describe('ProfilePage', () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', mockFetch());
 
-    renderPage('/LA');
+    renderPage('/profile/');
     const user = userEvent.setup();
 
     await waitFor(() => {
@@ -204,7 +207,7 @@ describe('ProfilePage', () => {
       json: async () => ({ user: CURRENT_USER }),
     } as Response));
 
-    renderPage('/LA');
+    renderPage('/profile/');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
@@ -228,7 +231,7 @@ describe('ProfilePage', () => {
       json: async () => ({ user: CURRENT_USER }),
     } as Response));
 
-    renderPage('/LA');
+    renderPage('/profile/');
     const user = userEvent.setup();
 
     await waitFor(() => {
@@ -255,7 +258,7 @@ describe('ProfilePage', () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', mockFetch());
 
-    renderPage('/LA');
+    renderPage('/profile/');
     const user = userEvent.setup();
 
     await waitFor(() => {
@@ -278,3 +281,6 @@ describe('ProfilePage', () => {
     });
   });
 });
+
+
+

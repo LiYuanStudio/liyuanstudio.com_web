@@ -6,4 +6,9 @@
 /admin /admin/ 301
 /profile /profile/ 301
 /products /products/papyrusdesktop/ 301
+/me/posts /me/posts/ 301
+/me/posts/new /me/posts/new/ 301
+/me/posts/:id/edit /me/posts/:id/edit/ 301
+/me/posts/* /profile/ 200
+/:username/:slug /profile/ 200
 /:username /profile/ 200

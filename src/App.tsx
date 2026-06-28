@@ -93,6 +93,12 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
   );
 });
 
+function formatPostDate(post: BlogPost): string {
+  const value = post.publishedAt || post.createdAt || post.updatedAt;
+  if (!value) return '未发布';
+  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(new Date(value));
+}
+
 export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [settings, setSettings] = useState(() => readBlogSettings());
@@ -155,17 +161,17 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       )}
       <div className="blog-grid" aria-busy={status === 'loading'}>
         {visiblePosts.map((post) => (
-          <article className="blog-card" key={post.slug}>
+          <article className="blog-card" key={`${post.authorUsername}/${post.slug}`}>
             <div className="blog-card-hero" aria-hidden="true">
-              <h4>{post.category}</h4>
+              <h4>{post.category || 'Blog'}</h4>
             </div>
             <div className="blog-card-content">
-              <span className="blog-tag">{post.category}</span>
+              <span className="blog-tag">{post.category || post.authorDisplayName}</span>
               <h3>{post.title}</h3>
-              {settings.showExcerpt && <p>{post.excerpt}</p>}
+              {settings.showExcerpt && <p>{post.excerpt || '暂无摘要。'}</p>}
               <div className="blog-card-footer">
-                <span className="blog-date">{post.date} · {post.readTime}</span>
-                <a className="product-card-button" href={`/blog/${post.slug}/`}>
+                <span className="blog-date">{formatPostDate(post)} · {post.readTime || '1 分钟阅读'}</span>
+                <a className="product-card-button" href={`/${post.authorUsername}/${post.slug}/`}>
                   阅读
                 </a>
               </div>

@@ -50,13 +50,16 @@ const NON_PROFILE_SEGMENTS = new Set([
   'profile',
   'products',
   'blog',
+  'me',
 ]);
 
 function isProfilePath(url: string): boolean {
   const [path] = url.split('?');
   if (path.includes('.')) return false;
-  const segment = path.split('/')[1];
+  const segments = path.split('/').filter(Boolean);
+  const segment = segments[0];
   if (segment?.startsWith('@') || segment?.startsWith('__vite')) return false;
+  if (segment === 'me' && segments[1] === 'posts') return true;
   return Boolean(segment && !NON_PROFILE_SEGMENTS.has(segment));
 }
 

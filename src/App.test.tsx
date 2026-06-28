@@ -144,17 +144,29 @@ describe('Blog component', () => {
       title: 'API blog one',
       excerpt: 'API summary one',
       category: 'Tech',
-      date: '2026-06-21',
       readTime: '4 min',
       slug: 'api-blog-one',
+      content: 'Body one',
+      tags: [],
+      authorUsername: 'LA',
+      authorDisplayName: 'LA',
+      status: 'published',
+      visibility: 'public',
+      publishedAt: '2026-06-21T00:00:00.000Z',
     },
     {
       title: 'API blog two',
       excerpt: 'API summary two',
       category: 'Product',
-      date: '2026-06-20',
       readTime: '3 min',
       slug: 'api-blog-two',
+      content: 'Body two',
+      tags: [],
+      authorUsername: 'LA',
+      authorDisplayName: 'LA',
+      status: 'published',
+      visibility: 'public',
+      publishedAt: '2026-06-20T00:00:00.000Z',
     },
   ];
 
@@ -168,7 +180,7 @@ describe('Blog component', () => {
       expect(screen.getByText('API blog one')).toBeInTheDocument();
     });
     expect(screen.getByText('API summary one')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/blog/api-blog-one/');
+    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/LA/api-blog-one/');
   });
 
   it('shows an error status without demo posts when the API fails', async () => {
@@ -240,3 +252,4 @@ describe('MaskedHeading', () => {
     expect(fnRef).toHaveBeenCalled();
   });
 });
+

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchUsers, updateUser, deleteUser } from './admin.js';
 
 describe('admin api', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.stubEnv('VITE_API_BASE_URL', '/api');
     localStorage.clear();
   });
@@ -12,6 +12,10 @@ describe('admin api', () => {
     vi.restoreAllMocks();
   });
 
+  async function importAdminApi() {
+    return await import('./admin.js');
+  }
+
   it('fetchUsers includes the auth token', async () => {
     localStorage.setItem('liyuan_auth_token', 'test-token');
     global.fetch = vi.fn().mockResolvedValue({
@@ -19,6 +23,7 @@ describe('admin api', () => {
       json: vi.fn().mockResolvedValue({ users: [{ id: '1', email: 'a@b.com', displayName: 'A', role: 'user', emailVerified: true }] }),
     } as unknown as Response);
 
+    const { fetchUsers } = await importAdminApi();
     const result = await fetchUsers();
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -37,6 +42,7 @@ describe('admin api', () => {
       json: vi.fn().mockResolvedValue({ user: { id: '1', email: 'a@b.com', displayName: 'B', role: 'admin', emailVerified: true } }),
     } as unknown as Response);
 
+    const { updateUser } = await importAdminApi();
     await updateUser('1', 'admin');
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -55,6 +61,7 @@ describe('admin api', () => {
       json: vi.fn().mockResolvedValue({ ok: true }),
     } as unknown as Response);
 
+    const { deleteUser } = await importAdminApi();
     const result = await deleteUser('1');
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -72,6 +79,7 @@ describe('admin api', () => {
       json: vi.fn().mockResolvedValue({ error: '没有权限' }),
     } as unknown as Response);
 
+    const { fetchUsers } = await importAdminApi();
     await expect(fetchUsers()).rejects.toThrow('没有权限');
   });
 });
