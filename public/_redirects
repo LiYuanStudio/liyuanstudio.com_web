@@ -9,6 +9,10 @@
 /me/posts /me/posts/ 301
 /me/posts/new /me/posts/new/ 301
 /me/posts/:id/edit /me/posts/:id/edit/ 301
+/assets/* /assets/:splat 200
+/png/* /png/:splat 200
+/icons/* /icons/:splat 200
+/404.html /404.html 200
 /me/posts/* /profile/ 200
 /:username/:slug /profile/ 200
 /:username /profile/ 200
