@@ -171,14 +171,15 @@ describe('AdminPage', () => {
       '/admin/users': () => ({
         ok: false,
         status: 500,
-        json: async () => ({ error: '加载失败' }),
+        json: async () => ({ error: '加载失败', requestId: 'admin-page-req-1' }),
       }),
     });
 
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText('加载失败')).toBeInTheDocument();
+      expect(screen.getByText('加载失败（调试 ID: admin-page-req-1）')).toBeInTheDocument();
     });
   });
 });
+

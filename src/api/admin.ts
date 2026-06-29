@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import type { User, UserRole } from '../types.js';
+import { createNetworkError, logApiError, parseApiErrorResponse } from './errors.js';
 
 const TOKEN_KEY = 'liyuan_auth_token';
 
@@ -17,14 +18,22 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${env.API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${env.API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    const error = createNetworkError();
+    logApiError(path, error);
+    throw error;
+  }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `API error: ${res.status} ${res.statusText}`);
+    const error = await parseApiErrorResponse(res);
+    logApiError(path, error);
+    throw error;
   }
   return res.json() as Promise<T>;
 }

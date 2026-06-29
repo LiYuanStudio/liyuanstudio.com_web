@@ -153,6 +153,38 @@ describe('ProfilePage', () => {
     }));
   });
 
+  it('shows requestId when profile save fails', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/me/profile')) {
+        return {
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          json: async () => ({ error: '保存失败', requestId: 'profile-req-1' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: CURRENT_USER }),
+      } as Response;
+    }));
+
+    renderPage('/profile/');
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: '保存更改' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-error')).toHaveTextContent('保存失败（调试 ID: profile-req-1）');
+    });
+  });
   it('shows the admin backend entry on an admin user profile', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     vi.stubGlobal('fetch', mockFetch(ADMIN_USER));
@@ -281,6 +313,7 @@ describe('ProfilePage', () => {
     });
   });
 });
+
 
 
 

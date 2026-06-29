@@ -1,11 +1,7 @@
 import { env } from '../config/env.js';
 import type { BlogPost, BlogPostInput, User } from '../types.js';
 import { getStoredToken } from './auth.js';
-
-type ErrorResponse = {
-  error?: unknown;
-  requestId?: unknown;
-};
+import { createNetworkError, logApiError, parseApiErrorResponse } from './errors.js';
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
@@ -21,17 +17,22 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${env.API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${env.API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    const error = createNetworkError();
+    logApiError(path, error);
+    throw error;
+  }
 
   if (!res.ok) {
-    const body = await res.json().catch((): ErrorResponse => ({}));
-    const error = typeof body.error === 'string'
-      ? body.error
-      : `API error: ${res.status} ${res.statusText}`;
-    throw new Error(error);
+    const error = await parseApiErrorResponse(res);
+    logApiError(path, error);
+    throw error;
   }
 
   return res.json() as Promise<T>;

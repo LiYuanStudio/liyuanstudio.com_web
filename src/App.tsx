@@ -7,6 +7,7 @@ import React, {
 import { IconGithub } from '@arco-design/web-react/icon';
 import { useAuth } from './context/AuthContext.js';
 import { fetchBlogPosts } from './api.js';
+import { getErrorMessage } from './api/errors.js';
 import {
   applyBlogSettings,
   readBlogSettings,
@@ -103,6 +104,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [settings, setSettings] = useState(() => readBlogSettings());
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,11 +113,13 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       .then((list) => {
         if (cancelled) return;
         setPosts(list);
+        setErrorMessage(null);
         setStatus('ready');
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return;
         setPosts([]);
+        setErrorMessage(getErrorMessage(error, '博客内容暂时无法加载，请稍后刷新。'));
         setStatus('error');
       });
 
@@ -151,7 +155,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       </p>
       {status === 'error' && (
         <p className="blog-status" role="status">
-          博客内容暂时无法加载。
+          {errorMessage ?? '博客内容暂时无法加载，请稍后刷新。'}
         </p>
       )}
       {status === 'ready' && visiblePosts.length === 0 && (
@@ -336,3 +340,4 @@ export function App() {
     </>
   );
 }
+

@@ -1,23 +1,15 @@
 import { env } from '../config/env.js';
 import type { AuthResponse, MessageResponse, ProfileUpdateInput, User } from '../types.js';
+import {
+  ApiError,
+  createNetworkError,
+  getErrorMessage,
+  logApiError,
+  parseApiErrorResponse,
+} from './errors.js';
 
 const TOKEN_KEY = 'liyuan_auth_token';
-
-type ErrorResponse = {
-  error?: unknown;
-  requestId?: unknown;
-};
-
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly requestId?: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+export { ApiError, getErrorMessage };
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -44,29 +36,22 @@ async function fetchJson<T>(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${env.API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${env.API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    const error = createNetworkError();
+    logApiError(path, error);
+    throw error;
+  }
 
   if (!res.ok) {
-    const body = await res.json().catch((): ErrorResponse => ({}));
-    const error = typeof body.error === 'string'
-      ? body.error
-      : `API error: ${res.status} ${res.statusText}`;
-    const requestId = typeof body.requestId === 'string'
-      ? body.requestId
-      : res.headers.get('X-Request-Id') ?? undefined;
-    const message = requestId ? `${error}（调试 ID: ${requestId}）` : error;
-
-    console.error('Auth API request failed', {
-      path,
-      status: res.status,
-      requestId,
-      error,
-    });
-
-    throw new ApiError(message, res.status, requestId);
+    const error = await parseApiErrorResponse(res);
+    logApiError(path, error);
+    throw error;
   }
   return res.json() as Promise<T>;
 }

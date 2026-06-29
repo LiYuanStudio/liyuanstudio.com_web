@@ -264,11 +264,11 @@ describe('auth api helpers', () => {
     expect(caught).toEqual(expect.objectContaining({
       message: '邮箱或密码错误（调试 ID: req-123）',
     }));
-    expect(consoleSpy).toHaveBeenCalledWith('Auth API request failed', {
+    expect(consoleSpy).toHaveBeenCalledWith('API request failed', {
       path: '/auth/login',
       status: 401,
       requestId: 'req-123',
-      error: '邮箱或密码错误',
+      error: '邮箱或密码错误（调试 ID: req-123）',
     });
     consoleSpy.mockRestore();
   });
@@ -285,11 +285,26 @@ describe('auth api helpers', () => {
 
     const { fetchMe } = await importAuthApi();
     await expect(fetchMe()).rejects.toThrow('服务器内部错误（调试 ID: header-req-1）');
-    expect(consoleSpy).toHaveBeenCalledWith('Auth API request failed', expect.objectContaining({
+    expect(consoleSpy).toHaveBeenCalledWith('API request failed', expect.objectContaining({
       path: '/auth/me',
       status: 500,
       requestId: 'header-req-1',
     }));
     consoleSpy.mockRestore();
   });
+  it('throws a friendly network error when fetch fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    const { fetchMe, ApiError } = await importAuthApi();
+    await expect(fetchMe()).rejects.toThrow('网络连接异常，请检查网络后重试');
+    await expect(fetchMe()).rejects.toBeInstanceOf(ApiError);
+    expect(consoleSpy).toHaveBeenCalledWith('API request failed', expect.objectContaining({
+      path: '/auth/me',
+      status: 0,
+    }));
+    consoleSpy.mockRestore();
+  });
 });
+
+

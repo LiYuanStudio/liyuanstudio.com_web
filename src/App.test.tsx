@@ -189,7 +189,7 @@ describe('Blog component', () => {
     render(<Blog />);
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('博客内容暂时无法加载。');
+      expect(screen.getByRole('status')).toHaveTextContent('offline');
     });
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
   });
@@ -252,4 +252,5 @@ describe('MaskedHeading', () => {
     expect(fnRef).toHaveBeenCalled();
   });
 });
+
 

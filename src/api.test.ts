@@ -50,18 +50,40 @@ describe('api helpers', () => {
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/blog', expect.objectContaining({ headers: {} }));
   });
 
-  it('throws an error with status text on non-ok response', async () => {
+  it('throws an error with response error and requestId on non-ok response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
       statusText: 'Internal Server Error',
-      json: async () => ({}),
+      headers: new Headers({ 'X-Request-Id': 'news-req-1' }),
+      json: async () => ({ error: '新闻加载失败' }),
     } as Response));
 
     const { fetchNews } = await importApi();
-    await expect(fetchNews()).rejects.toThrow('API error: 500 Internal Server Error');
+    await expect(fetchNews()).rejects.toThrow('新闻加载失败（调试 ID: news-req-1）');
   });
 
+  it('uses a friendly fallback for non-json error responses', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      statusText: '',
+      headers: new Headers(),
+      json: async () => { throw new SyntaxError('not json'); },
+    } as unknown as Response));
+
+    const { fetchNews } = await importApi();
+    await expect(fetchNews()).rejects.toThrow('请求失败，请稍后重试');
+  });
+
+  it('uses a friendly network error when the request cannot be sent', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    const { fetchNews } = await importApi();
+    await expect(fetchNews()).rejects.toThrow('网络连接异常，请检查网络后重试');
+  });
   it('uses relative base URL when configured', async () => {
     vi.unstubAllEnvs();
     vi.stubEnv('VITE_API_BASE_URL', '/api');
@@ -77,4 +99,5 @@ describe('api helpers', () => {
     expect(fetch).toHaveBeenCalledWith('/api/news');
   });
 });
+
 

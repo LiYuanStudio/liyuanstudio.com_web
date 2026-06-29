@@ -76,10 +76,12 @@ describe('admin api', () => {
       ok: false,
       status: 403,
       statusText: 'Forbidden',
+      headers: new Headers({ 'X-Request-Id': 'admin-req-1' }),
       json: vi.fn().mockResolvedValue({ error: '没有权限' }),
     } as unknown as Response);
 
     const { fetchUsers } = await importAdminApi();
-    await expect(fetchUsers()).rejects.toThrow('没有权限');
+    await expect(fetchUsers()).rejects.toThrow('没有权限（调试 ID: admin-req-1）');
   });
 });
+

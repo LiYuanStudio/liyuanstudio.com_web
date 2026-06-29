@@ -35,11 +35,7 @@ export const MaskedHeading = React.forwardRef<
     <Tag
       ref={setRefs}
       id={id}
-      className={className ? `masked-heading ${className}` : 'masked-heading'}
-    >
-      <span className="masked-base" ref={baseRef}>
-        {headingChildren}
-      </span>
-    </Tag>
+      className={className ? 'masked-heading ' + className : 'masked-heading'}
+    ><span className="masked-base" ref={baseRef}>{headingChildren}</span></Tag>
   );
 });
