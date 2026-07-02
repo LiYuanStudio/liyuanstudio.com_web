@@ -3,14 +3,13 @@ import { createMiddleware } from 'hono/factory';
 import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../config/env.js';
 import { UserModel } from '../models/user.js';
+import { normalizeUserRole, type UserRole } from '../lib/roles.js';
 import { getRequestId, jsonError } from './request-id.js';
 import type { RequestVariables } from './request-id.js';
 
 const SECRET = new TextEncoder().encode(env.JWT_SECRET);
 const ISSUER = 'liyuanstudio';
 const AUDIENCE = 'liyuanstudio-api';
-
-export type UserRole = 'user' | 'admin';
 
 export interface TokenUser {
   id: string;
@@ -49,7 +48,7 @@ export async function verifyToken(token: string): Promise<TokenUser> {
   if (
     !payload.sub ||
     typeof payload.email !== 'string' ||
-    (payload.role !== 'user' && payload.role !== 'admin') ||
+    (payload.role !== 'tourist' && payload.role !== 'member' && payload.role !== 'admin' && payload.role !== 'user') ||
     (payload.tokenVersion !== undefined && typeof payload.tokenVersion !== 'number')
   ) {
     throw new Error('无效的令牌内容');
@@ -58,7 +57,7 @@ export async function verifyToken(token: string): Promise<TokenUser> {
   return {
     id: payload.sub,
     email: payload.email,
-    role: payload.role,
+    role: normalizeUserRole(payload.role),
     tokenVersion: payload.tokenVersion ?? 0,
   };
 }
@@ -102,7 +101,7 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
       const user: TokenUser = {
         id: dbUser._id.toString(),
         email: dbUser.email,
-        role: dbUser.role,
+        role: normalizeUserRole(dbUser.role),
         tokenVersion: dbTokenVersion,
       };
       c.set('userId', user.id);

@@ -25,6 +25,10 @@ import './profile.css';
 const BIO_MAX_LENGTH = 120;
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024;
 
+function canWriteBlog(user?: User): boolean {
+  return user?.role === 'member' || user?.role === 'admin';
+}
+
 const EMPTY_BLOG_FORM: BlogPostInput = {
   title: '',
   slug: '',
@@ -95,7 +99,7 @@ function Nav({ user, onLogout }: { user?: User; onLogout?: () => void }) {
       </a>
       <div className="profile-nav-actions">
         {user && <a href={getOwnProfilePath(user.username, user.displayName)}>个人主页</a>}
-        {user && <a href="/me/posts/">我的文章</a>}
+        {canWriteBlog(user) && <a href="/me/posts/">我的文章</a>}
         {user?.role === 'admin' && <a href="/admin/">账号后台</a>}
         {onLogout ? <button type="button" onClick={onLogout}>退出</button> : <a href="/login/">登录</a>}
       </div>
@@ -110,8 +114,23 @@ function LoginPrompt({ title = '请先登录' }: { title?: string }) {
       <main className="profile-main">
         <section className="profile-card profile-card-narrow">
           <h1>{title}</h1>
-          <p className="profile-muted">登录后可以写文章、保存草稿和管理个人主页。</p>
+          <p className="profile-muted">登录后可以管理账号资料和个人主页。</p>
           <a className="profile-button" href="/login/">去登录</a>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function MemberRequiredPrompt({ user, onLogout }: { user?: User; onLogout?: () => void }) {
+  return (
+    <div className="profile-page">
+      <Nav user={user} onLogout={onLogout} />
+      <main className="profile-main">
+        <section className="profile-card profile-card-narrow">
+          <h1>需要成员权限</h1>
+          <p className="profile-muted">游客账号不能发布博客，请联系管理员升级为成员。</p>
+          <a className="profile-button" href="/profile/">返回账号设置</a>
         </section>
       </main>
     </div>
@@ -323,7 +342,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
             <div>
               <h1 id="profile-title">{profile.displayName}</h1>
               <p>{profile.bio || '这个人还没有写个人介绍。'}</p>
-              {isOwnProfile && (
+              {isOwnProfile && canWriteBlog(currentUser) && (
                 <div className="profile-inline-actions">
                   <a className="profile-button" href="/me/posts/new/">写文章</a>
                   <a className="profile-button profile-button-secondary" href="/me/posts/">管理文章</a>
@@ -525,8 +544,8 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
             <h1 id="profile-title">{form.displayName || user.displayName}</h1>
             <p>{form.bio || '一句话介绍还没有填写。'}</p>
             <div className="profile-inline-actions">
-              <a className="profile-button" href="/me/posts/new/">写文章</a>
-              <a className="profile-button profile-button-secondary" href="/me/posts/">管理文章</a>
+              {canWriteBlog(user) && <a className="profile-button" href="/me/posts/new/">写文章</a>}
+              {canWriteBlog(user) && <a className="profile-button profile-button-secondary" href="/me/posts/">管理文章</a>}
             </div>
           </div>
         </section>
@@ -590,6 +609,11 @@ export function ProfilePage() {
   const needsAuth = route.kind === 'settings' || route.kind === 'my-posts' || route.kind === 'new-post' || route.kind === 'edit-post';
   if (needsAuth && !user) {
     return <LoginPrompt title={route.kind === 'settings' ? '个人主页' : '请先登录'} />;
+  }
+
+  const needsMember = route.kind === 'my-posts' || route.kind === 'new-post' || route.kind === 'edit-post';
+  if (needsMember && !canWriteBlog(user)) {
+    return <MemberRequiredPrompt user={user} onLogout={user ? logout : undefined} />;
   }
 
   return (

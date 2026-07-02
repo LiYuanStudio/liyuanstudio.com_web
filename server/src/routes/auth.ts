@@ -13,6 +13,7 @@ import { requireAuth, signToken } from '../middleware/auth.js';
 import { getRequestId, jsonError } from '../middleware/request-id.js';
 import type { AuthVariables } from '../middleware/auth.js';
 import { isAdminEmail } from '../config/env.js';
+import { normalizeUserRole, type LegacyUserRole } from '../lib/roles.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 const EMAIL_VERIFY_TTL_MS = 10 * 60 * 1000;
@@ -82,7 +83,7 @@ type UserForResponse = {
   email: string;
   displayName: string;
   username?: string;
-  role: 'user' | 'admin';
+  role: LegacyUserRole;
   emailVerified: boolean;
   avatar?: string;
   bio?: string;
@@ -240,7 +241,7 @@ function serializeUser(user: UserForResponse) {
     email: user.email,
     displayName: user.displayName,
     username: user.username,
-    role: user.role,
+    role: normalizeUserRole(user.role),
     emailVerified: user.emailVerified,
     avatar: user.avatar,
     bio: user.bio ?? '',
@@ -435,7 +436,7 @@ app.post('/register/verify', async (c) => {
     passwordHash: pending.passwordHash,
     displayName: pending.displayName,
     username,
-    role: isAdminEmail(pending.email) ? 'admin' : 'user',
+    role: isAdminEmail(pending.email) ? 'admin' : 'tourist',
     tokenVersion: 0,
     emailVerified: true,
   });
@@ -445,7 +446,7 @@ app.post('/register/verify', async (c) => {
   const token = await signToken({
     id: user._id.toString(),
     email: user.email,
-    role: user.role,
+    role: normalizeUserRole(user.role),
     tokenVersion: user.tokenVersion ?? 0,
   });
 
@@ -539,6 +540,9 @@ app.post('/login', async (c) => {
   if (user.role !== 'admin' && isAdminEmail(user.email)) {
     user.role = 'admin';
     shouldSave = true;
+  } else if (user.role === 'user') {
+    user.role = 'tourist';
+    shouldSave = true;
   }
   if (user.tokenVersion === undefined) {
     user.tokenVersion = 0;
@@ -562,7 +566,7 @@ app.post('/login', async (c) => {
   const token = await signToken({
     id: user._id.toString(),
     email: user.email,
-    role: user.role,
+    role: normalizeUserRole(user.role),
     tokenVersion: user.tokenVersion ?? 0,
   });
   return c.json({ token, user: serializeUser(user) });

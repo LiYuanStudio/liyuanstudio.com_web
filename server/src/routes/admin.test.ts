@@ -18,6 +18,7 @@ async function makeApp() {
   vi.stubEnv('JWT_SECRET', JWT_SECRET);
   vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
   vi.stubEnv('APP_URL', 'https://liyuanstudio.com');
+  vi.stubEnv('ADMIN_EMAILS', 'la@liyuanstudio.com');
   const { createApp } = await import('../app.js');
   return createApp('/api');
 }
@@ -27,7 +28,7 @@ function userDoc(overrides: Record<string, unknown> = {}) {
     _id: { toString: () => 'user-1' },
     email: 'hello@liyuanstudio.com',
     displayName: 'Hello User',
-    role: 'user',
+    role: 'tourist',
     tokenVersion: 0,
     emailVerified: true,
     avatar: 'preset-avatar',
@@ -80,8 +81,8 @@ describe('admin routes', () => {
 
     it('rejects non-admin users', async () => {
       const app = await makeApp();
-      mockUserModel.findById.mockResolvedValue(userDoc({ _id: { toString: () => 'user-1' }, role: 'user' }) as never);
-      const token = await signToken({ id: 'user-1', email: 'user@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+      mockUserModel.findById.mockResolvedValue(userDoc({ _id: { toString: () => 'user-1' }, role: 'tourist' }) as never);
+      const token = await signToken({ id: 'user-1', email: 'user@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
       const res = await app.request('/api/admin/users', {
         headers: { Authorization: `Bearer ${token}` },
@@ -118,7 +119,7 @@ describe('admin routes', () => {
 
     it('rejects when token role is admin but database role is user', async () => {
       const app = await makeApp();
-      mockUserModel.findById.mockResolvedValue(adminAuthDoc({ role: 'user' }) as never);
+      mockUserModel.findById.mockResolvedValue(adminAuthDoc({ role: 'tourist' }) as never);
 
       const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users', {
@@ -222,9 +223,30 @@ describe('admin routes', () => {
       expect(await res.json()).toEqual(expect.objectContaining({ error: '只能修改用户角色' }));
     });
 
+    it('prevents demoting ADMIN_EMAILS users', async () => {
+      const app = await makeApp();
+      mockUserModel.findById
+        .mockResolvedValueOnce(adminAuthDoc() as never)
+        .mockResolvedValueOnce(userDoc({ email: 'la@liyuanstudio.com', role: 'admin' }) as never);
+
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
+      const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ role: 'member' }),
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '不能降低最高权限管理员账号' }));
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
     it('returns 404 for missing user', async () => {
       const app = await makeApp();
-      mockUserModel.findByIdAndUpdate.mockResolvedValue(null);
+      mockUserModel.findById.mockResolvedValueOnce(adminAuthDoc() as never).mockResolvedValueOnce(null);
 
       const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
@@ -238,6 +260,7 @@ describe('admin routes', () => {
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -272,9 +295,26 @@ describe('admin routes', () => {
       expect(mockUserModel.findByIdAndDelete).not.toHaveBeenCalled();
     });
 
+    it('prevents deleting ADMIN_EMAILS users', async () => {
+      const app = await makeApp();
+      mockUserModel.findById
+        .mockResolvedValueOnce(adminAuthDoc() as never)
+        .mockResolvedValueOnce(userDoc({ email: 'la@liyuanstudio.com', role: 'admin' }) as never);
+
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
+      const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '不能删除最高权限管理员账号' }));
+      expect(mockUserModel.findByIdAndDelete).not.toHaveBeenCalled();
+    });
+
     it('returns 404 for missing user', async () => {
       const app = await makeApp();
-      mockUserModel.findByIdAndDelete.mockResolvedValue(null);
+      mockUserModel.findById.mockResolvedValueOnce(adminAuthDoc() as never).mockResolvedValueOnce(null);
 
       const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
       const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
@@ -284,6 +324,7 @@ describe('admin routes', () => {
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
+      expect(mockUserModel.findByIdAndDelete).not.toHaveBeenCalled();
     });
   });
 });

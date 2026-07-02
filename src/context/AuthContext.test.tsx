@@ -123,7 +123,7 @@ describe('AuthProvider', () => {
             email: 'hello@example.com',
             displayName: isProfileUpdate ? 'New Name' : 'Old Name',
             username: 'Hello',
-            role: 'user',
+            role: 'tourist',
             emailVerified: true,
             avatar: isProfileUpdate ? 'https://example.com/new.png' : 'avatar.png',
             bio: isProfileUpdate ? 'New bio' : '',

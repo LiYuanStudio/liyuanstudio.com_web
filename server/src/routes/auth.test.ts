@@ -62,7 +62,7 @@ function userDoc(overrides: Record<string, unknown> = {}) {
     passwordHash: 'hashed-password',
     displayName: 'Hello User',
     username: 'Hello-User',
-    role: 'user',
+    role: 'tourist',
     tokenVersion: 0,
     emailVerified: true,
     avatar: 'preset-avatar',
@@ -218,7 +218,7 @@ describe('auth routes', () => {
       expect(mockUserModel.create).toHaveBeenCalledWith(expect.objectContaining({
         email: 'hello@liyuanstudio.com',
         displayName: 'Hello User',
-        role: 'user',
+        role: 'tourist',
         emailVerified: true,
         passwordHash: 'hashed-password',
         username: 'Hello-User',
@@ -484,7 +484,7 @@ describe('auth routes', () => {
   it('GET /api/auth/me returns the current user', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(userDoc() as never);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -496,7 +496,7 @@ describe('auth routes', () => {
         id: 'user-1',
         email: 'hello@liyuanstudio.com',
         displayName: 'Hello User',
-        role: 'user',
+        role: 'tourist',
         emailVerified: true,
         avatar: 'preset-avatar',
         username: 'Hello-User',
@@ -518,13 +518,13 @@ describe('auth routes', () => {
     expect(mockUserModel.findById).toHaveBeenCalledWith('user-1');
     const json = await res.json();
     expect(json.user.email).toBe('hello@liyuanstudio.com');
-    expect(json.user.role).toBe('user');
+    expect(json.user.role).toBe('tourist');
   });
 
   it('GET /api/auth/me returns 401 when tokenVersion does not match', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(userDoc({ tokenVersion: 2 }) as never);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 1 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 1 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -537,7 +537,7 @@ describe('auth routes', () => {
   it('GET /api/auth/me returns 401 when the token user no longer exists', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(null);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -702,7 +702,7 @@ describe('auth routes', () => {
     const doc = userDoc({ username: undefined });
     mockUserModel.findById.mockResolvedValue(doc as never);
     mockUserModel.findOne.mockResolvedValue(null);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -744,7 +744,7 @@ describe('auth routes', () => {
     });
     mockUserModel.findById.mockResolvedValue(doc as never);
     mockUserModel.findOne.mockResolvedValue(null);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -770,7 +770,7 @@ describe('auth routes', () => {
     });
     mockUserModel.findById.mockResolvedValue(doc as never);
     mockUserModel.findOne.mockResolvedValue(null);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
@@ -808,7 +808,7 @@ describe('auth routes', () => {
     const app = await makeApp();
     const doc = userDoc();
     mockUserModel.findById.mockResolvedValue(doc as never);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/profile', {
       method: 'PATCH',
@@ -838,7 +838,7 @@ describe('auth routes', () => {
     const doc = userDoc({ username: '中文用户名' });
     mockUserModel.findById.mockResolvedValue(doc as never);
     mockUserModel.findOne.mockResolvedValue(null);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/profile', {
       method: 'PATCH',
@@ -874,7 +874,7 @@ describe('auth routes', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ _id: { toString: () => 'other-user' } } as never)
       .mockResolvedValueOnce(null);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/profile', {
       method: 'PATCH',
@@ -899,7 +899,7 @@ describe('auth routes', () => {
   it('PATCH /api/auth/me/profile rejects invalid profile input', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(userDoc() as never);
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/profile', {
       method: 'PATCH',
@@ -923,7 +923,7 @@ describe('auth routes', () => {
     mockUserModel.findByIdAndUpdate.mockResolvedValue(
       userDoc({ avatar: 'https://example.com/new-avatar.png' }) as never,
     );
-    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'user', tokenVersion: 0 });
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/avatar', {
       method: 'PATCH',

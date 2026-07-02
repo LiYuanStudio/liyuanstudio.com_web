@@ -12,7 +12,7 @@ const CURRENT_USER: User = {
   email: 'hello@example.com',
   displayName: 'LA',
   username: 'LA',
-  role: 'user' as const,
+  role: 'tourist' as const,
   emailVerified: true,
   avatar: 'https://example.com/avatar.png',
   bio: 'Original bio',
@@ -105,7 +105,7 @@ describe('ProfilePage', () => {
     renderPage('/profile/');
 
     await waitFor(() => {
-      expect(screen.getByText('登录后可以写文章、保存草稿和管理个人主页。')).toBeInTheDocument();
+      expect(screen.getByText('登录后可以管理账号资料和个人主页。')).toBeInTheDocument();
     });
     expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login/');
   });
@@ -184,6 +184,44 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('profile-error')).toHaveTextContent('保存失败（调试 ID: profile-req-1）');
     });
+  });
+
+  it('hides blog authoring links for tourist accounts', async () => {
+    localStorage.setItem('liyuan_auth_token', 'tourist-token');
+    vi.stubGlobal('fetch', mockFetch(CURRENT_USER));
+
+    renderPage('/profile/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('link', { name: '写文章' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '管理文章' })).not.toBeInTheDocument();
+  });
+
+  it('blocks direct blog authoring routes for tourist accounts', async () => {
+    localStorage.setItem('liyuan_auth_token', 'tourist-token');
+    vi.stubGlobal('fetch', mockFetch(CURRENT_USER));
+
+    renderPage('/me/posts/new/');
+
+    await waitFor(() => {
+      expect(screen.getByText('需要成员权限')).toBeInTheDocument();
+    });
+    expect(screen.getByText('游客账号不能发布博客，请联系管理员升级为成员。')).toBeInTheDocument();
+  });
+
+  it('shows blog authoring links for member accounts', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', mockFetch({ ...CURRENT_USER, role: 'member' }));
+
+    renderPage('/profile/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: '写文章' })).toHaveAttribute('href', '/me/posts/new/');
+    expect(screen.getByRole('link', { name: '管理文章' })).toHaveAttribute('href', '/me/posts/');
   });
   it('shows the admin backend entry on an admin user profile', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');

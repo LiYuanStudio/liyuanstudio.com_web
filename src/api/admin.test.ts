@@ -20,7 +20,7 @@ describe('admin api', () => {
     localStorage.setItem('liyuan_auth_token', 'test-token');
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({ users: [{ id: '1', email: 'a@b.com', displayName: 'A', role: 'user', emailVerified: true }] }),
+      json: vi.fn().mockResolvedValue({ users: [{ id: '1', email: 'a@b.com', displayName: 'A', role: 'tourist', emailVerified: true }] }),
     } as unknown as Response);
 
     const { fetchUsers } = await importAdminApi();

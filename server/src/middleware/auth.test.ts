@@ -11,7 +11,7 @@ function authUserDoc(overrides: Record<string, unknown> = {}) {
   return {
     _id: { toString: () => 'user-123' },
     email: 'user@example.com',
-    role: 'user',
+    role: 'tourist',
     tokenVersion: 0,
     ...overrides,
   };
@@ -25,7 +25,7 @@ describe('auth middleware', () => {
     token = await signToken({
       id: 'user-123',
       email: 'user@example.com',
-      role: 'user',
+      role: 'tourist',
       tokenVersion: 0,
     });
   });
@@ -35,7 +35,7 @@ describe('auth middleware', () => {
     expect(user).toEqual({
       id: 'user-123',
       email: 'user@example.com',
-      role: 'user',
+      role: 'tourist',
       tokenVersion: 0,
     });
   });
@@ -56,7 +56,7 @@ describe('auth middleware', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       userId: 'user-123',
-      user: { id: 'user-123', email: 'user@example.com', role: 'user', tokenVersion: 0 },
+      user: { id: 'user-123', email: 'user@example.com', role: 'tourist', tokenVersion: 0 },
     });
   });
 

@@ -54,7 +54,7 @@ export interface BlogPostInput {
   visibility: BlogVisibility;
 }
 
-export type UserRole = 'user' | 'admin';
+export type UserRole = 'tourist' | 'member' | 'admin';
 
 export interface User {
   id: string;

@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import mongoose from 'mongoose';
 import { UserModel } from '../models/user.js';
+import { isAdminEmail } from '../config/env.js';
+import { isUserRole, normalizeUserRole, type UserRole } from '../lib/roles.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import type { AuthVariables } from '../middleware/auth.js';
 import { jsonError } from '../middleware/request-id.js';
@@ -15,9 +17,9 @@ const USER_PROJECTION = {
   passwordResetExpiresAt: 0,
 };
 
-function validateRole(role: unknown): 'user' | 'admin' {
-  if (role !== 'user' && role !== 'admin') {
-    throw new Error('角色必须是 user 或 admin');
+function validateRole(role: unknown): UserRole {
+  if (!isUserRole(role)) {
+    throw new Error('角色必须是 tourist、member 或 admin');
   }
   return role;
 }
@@ -26,7 +28,7 @@ function serializeUser(user: {
   _id: { toString: () => string };
   email: string;
   displayName: string;
-  role: 'user' | 'admin';
+  role: string;
   emailVerified: boolean;
   avatar?: string;
 }) {
@@ -34,7 +36,7 @@ function serializeUser(user: {
     id: user._id.toString(),
     email: user.email,
     displayName: user.displayName,
-    role: user.role,
+    role: normalizeUserRole(user.role),
     emailVerified: user.emailVerified,
     avatar: user.avatar,
   };
@@ -58,9 +60,18 @@ app.patch('/users/:id', async (c) => {
     return jsonError(c, '只能修改用户角色', 400);
   }
 
+  const role = validateRole(body.role);
+  const existingUser = await UserModel.findById(id);
+  if (!existingUser) {
+    return jsonError(c, '用户不存在', 404);
+  }
+  if (isAdminEmail(existingUser.email) && role !== 'admin') {
+    return jsonError(c, '不能降低最高权限管理员账号', 403);
+  }
+
   const user = await UserModel.findByIdAndUpdate(
     id,
-    { role: validateRole(body.role), $inc: { tokenVersion: 1 } },
+    { role, $inc: { tokenVersion: 1 } },
     { new: true, projection: USER_PROJECTION },
   );
   if (!user) {
@@ -80,11 +91,15 @@ app.delete('/users/:id', async (c) => {
     return jsonError(c, '不能删除当前登录的管理员账号', 403);
   }
 
-  const user = await UserModel.findByIdAndDelete(id);
-  if (!user) {
+  const existingUser = await UserModel.findById(id);
+  if (!existingUser) {
     return jsonError(c, '用户不存在', 404);
   }
+  if (isAdminEmail(existingUser.email)) {
+    return jsonError(c, '不能删除最高权限管理员账号', 403);
+  }
 
+  await UserModel.findByIdAndDelete(id);
   return c.json({ ok: true });
 });
 

@@ -22,7 +22,7 @@ const author = {
   displayName: 'Author',
   username: 'author',
   avatar: 'https://example.com/avatar.png',
-  role: 'user' as const,
+  role: 'member' as const,
   tokenVersion: 0,
 };
 

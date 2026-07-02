@@ -4,6 +4,14 @@ import { deleteUser, fetchUsers, updateUser } from '../api/admin.js';
 import type { User, UserRole } from '../types.js';
 import './admin.css';
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  tourist: '游客',
+  member: '成员',
+  admin: '管理员',
+};
+
+const ROLE_OPTIONS: UserRole[] = ['tourist', 'member', 'admin'];
+
 export function AdminPage() {
   const { state, logout } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -151,8 +159,9 @@ export function AdminPage() {
                         onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
                         className="admin-select"
                       >
-                        <option value="user">user</option>
-                        <option value="admin">admin</option>
+                        {ROLE_OPTIONS.map((role) => (
+                          <option key={role} value={role}>{ROLE_LABELS[role]} ({role})</option>
+                        ))}
                       </select>
                     </td>
                     <td>{user.emailVerified ? '已验证' : '未验证'}</td>

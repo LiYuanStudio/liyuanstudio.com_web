@@ -156,7 +156,7 @@ describe('AuthForm', () => {
   it('renders authenticated state', () => {
     mockUseAuth.mockReturnValue(
       unauthMock({
-        state: { status: 'authenticated', user: { id: '1', email: 'me@example.com', displayName: 'Me', role: 'user', emailVerified: true } },
+        state: { status: 'authenticated', user: { id: '1', email: 'me@example.com', displayName: 'Me', role: 'tourist', emailVerified: true } },
       }) as ReturnType<typeof useAuth>,
     );
     render(<AuthForm />);

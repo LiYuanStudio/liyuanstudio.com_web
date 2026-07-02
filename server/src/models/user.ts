@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import type { LegacyUserRole } from '../lib/roles.js';
 
 export const DEFAULT_AVATAR =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%237be188'/%3E%3Ccircle cx='50' cy='40' r='18' fill='%23ffffff'/%3E%3Cellipse cx='50' cy='82' rx='30' ry='22' fill='%23ffffff'/%3E%3C/svg%3E";
@@ -8,7 +9,7 @@ export interface User {
   passwordHash: string;
   displayName: string;
   username?: string;
-  role: 'user' | 'admin';
+  role: LegacyUserRole;
   tokenVersion: number;
   emailVerified: boolean;
   emailVerifyTokenHash?: string;
@@ -37,9 +38,9 @@ const UserSchema = new mongoose.Schema<User>(
     },
     role: {
       type: String,
-      enum: ['user', 'admin'],
+      enum: ['tourist', 'member', 'admin', 'user'],
       required: true,
-      default: 'user',
+      default: 'tourist',
     },
     tokenVersion: { type: Number, required: true, default: 0 },
     emailVerified: { type: Boolean, required: true, default: false },

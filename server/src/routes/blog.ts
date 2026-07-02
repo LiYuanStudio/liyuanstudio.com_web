@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { BlogModel, type BlogPost, type BlogStatus, type BlogVisibility } from '../models/blog.js';
 import { UserModel, type User } from '../models/user.js';
 import { requireAuth, verifyToken, type TokenUser, type AuthVariables } from '../middleware/auth.js';
+import { canWriteBlog, normalizeUserRole } from '../lib/roles.js';
 import { jsonError } from '../middleware/request-id.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
@@ -181,7 +182,12 @@ function isDuplicateSlugError(error: unknown): boolean {
 }
 
 function ownerCanAccess(post: Pick<BlogPost, 'authorId'>, user: TokenUser | null): boolean {
-  return Boolean(user && (user.role === 'admin' || post.authorId.toString() === user.id));
+  return Boolean(user && (user.role === 'admin' || (user.role === 'member' && post.authorId.toString() === user.id)));
+}
+
+function requireBlogWriter(c: Context<{ Variables: AuthVariables }>) {
+  if (canWriteBlog(c.get('authUser').role)) return null;
+  return jsonError(c, '游客账号不能发布博客，请联系管理员升级为成员', 403);
 }
 
 async function getOptionalAuthUser(c: Context<{ Variables: AuthVariables }>): Promise<TokenUser | null> {
@@ -196,7 +202,7 @@ async function getOptionalAuthUser(c: Context<{ Variables: AuthVariables }>): Pr
     return {
       id: dbUser._id.toString(),
       email: dbUser.email,
-      role: dbUser.role,
+      role: normalizeUserRole(dbUser.role),
       tokenVersion: dbUser.tokenVersion ?? 0,
     };
   } catch {
@@ -220,6 +226,9 @@ app.get('/', async (c) => {
 });
 
 app.get('/me', requireAuth, async (c) => {
+  const denied = requireBlogWriter(c);
+  if (denied) return denied;
+
   const list = await BlogModel.find({ authorId: c.get('userId') })
     .sort({ updatedAt: -1, createdAt: -1 })
     .lean();
@@ -256,6 +265,9 @@ app.get('/:username/:slug', async (c) => {
 });
 
 app.post('/', requireAuth, async (c) => {
+  const denied = requireBlogWriter(c);
+  if (denied) return denied;
+
   let data: Partial<BlogPost>;
   try {
     data = validateBlogInput(await c.req.json(), false);
@@ -301,6 +313,9 @@ app.post('/', requireAuth, async (c) => {
 });
 
 app.patch('/:id', requireAuth, async (c) => {
+  const denied = requireBlogWriter(c);
+  if (denied) return denied;
+
   let data: Partial<BlogPost>;
   try {
     data = validateBlogInput(await c.req.json(), true);
@@ -339,6 +354,9 @@ app.patch('/:id', requireAuth, async (c) => {
 });
 
 app.delete('/:id', requireAuth, async (c) => {
+  const denied = requireBlogWriter(c);
+  if (denied) return denied;
+
   const doc = await BlogModel.findById(c.req.param('id')).lean();
   if (!doc) {
     return jsonError(c, '未找到', 404);

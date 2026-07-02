@@ -67,7 +67,7 @@ describe('AdminPage', () => {
         status: 200,
         json: async () => ({
           users: [
-            { id: '1', email: 'a@b.com', displayName: 'Alice', role: 'user', emailVerified: true },
+            { id: '1', email: 'a@b.com', displayName: 'Alice', role: 'tourist', emailVerified: true },
             { id: '2', email: 'c@d.com', displayName: 'Bob', role: 'admin', emailVerified: true },
           ],
         }),
@@ -95,7 +95,7 @@ describe('AdminPage', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          users: [{ id: '1', email: 'a@b.com', displayName: 'Alice', role: 'user', emailVerified: true }],
+          users: [{ id: '1', email: 'a@b.com', displayName: 'Alice', role: 'tourist', emailVerified: true }],
         }),
       }),
       '/admin/users/1': () => ({
@@ -136,7 +136,7 @@ describe('AdminPage', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          users: [{ id: '1', email: 'a@b.com', displayName: 'Alice', role: 'user', emailVerified: true }],
+          users: [{ id: '1', email: 'a@b.com', displayName: 'Alice', role: 'tourist', emailVerified: true }],
         }),
       }),
       '/admin/users/1': () => ({
