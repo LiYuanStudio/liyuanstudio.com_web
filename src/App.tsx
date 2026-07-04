@@ -175,7 +175,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
               {settings.showExcerpt && <p>{post.excerpt || '暂无摘要。'}</p>}
               <div className="blog-card-footer">
                 <span className="blog-date">{formatPostDate(post)} · {post.readTime || '1 分钟阅读'}</span>
-                <a className="product-card-button" href={`/${post.authorUsername}/${post.slug}/`}>
+                <a className="product-card-button" href={getPublicPostPath(post.authorUsername, post.slug)}>
                   阅读
                 </a>
               </div>
@@ -188,7 +188,15 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
 });
 
 function getProfilePath(username: string | undefined, displayName: string) {
-  return `/${encodeURIComponent(username || displayName)}`;
+  return getPublicProfilePath(username || displayName);
+}
+
+function getPublicProfilePath(username: string) {
+  return `/~/${encodeURIComponent(username)}/`;
+}
+
+function getPublicPostPath(username: string, slug: string) {
+  return `/~/${encodeURIComponent(username)}/${encodeURIComponent(slug)}/`;
 }
 
 function getAvatarFallback(displayName: string) {

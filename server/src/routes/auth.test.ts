@@ -546,6 +546,57 @@ describe('auth routes', () => {
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual(expect.objectContaining({ error: '未授权，请先登录' }));
   });
+
+  it('GET /api/auth/users/:username returns only public profile fields', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(userDoc({
+      role: 'member',
+      avatar: 'https://example.com/avatar.png',
+      bio: 'Public bio',
+      tokenVersion: 7,
+    }) as never);
+
+    const res = await app.request('/api/auth/users/Hello-User');
+
+    expect(res.status).toBe(200);
+    expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'Hello-User' });
+    const json = await res.json();
+    expect(json).toEqual({
+      user: {
+        id: 'user-1',
+        displayName: 'Hello User',
+        username: 'Hello-User',
+        role: 'member',
+        avatar: 'https://example.com/avatar.png',
+        bio: 'Public bio',
+      },
+    });
+    expect(json.user.email).toBeUndefined();
+    expect(json.user.emailVerified).toBeUndefined();
+    expect(json.user.tokenVersion).toBeUndefined();
+  });
+
+  it('GET /api/auth/users/:username returns 404 for missing users', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(null);
+
+    const res = await app.request('/api/auth/users/Missing');
+
+    expect(res.status).toBe(404);
+    expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'Missing' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
+  });
+
+  it('GET /api/auth/users/:username returns 404 for invalid usernames without querying', async () => {
+    const app = await makeApp();
+
+    const res = await app.request('/api/auth/users/%E4%B8%AD%E6%96%87');
+
+    expect(res.status).toBe(404);
+    expect(mockUserModel.findOne).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
+  });
+
   it('POST /api/auth/forgot-password sends a reset email for an existing user', async () => {
     const app = await makeApp();
     const doc = userDoc();
@@ -629,6 +680,7 @@ describe('auth routes', () => {
     expect(doc.passwordResetExpiresAt).toBeUndefined();
     expect(doc.save).toHaveBeenCalledTimes(2);
   });
+
   it('POST /api/auth/forgot-password rejects invalid email', async () => {
     const app = await makeApp();
 

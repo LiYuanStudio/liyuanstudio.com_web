@@ -26,6 +26,11 @@ const ADMIN_USER = {
   role: 'admin' as const,
 };
 
+const MEMBER_USER: User = {
+  ...CURRENT_USER,
+  role: 'member',
+};
+
 vi.mock('../lib/crop-image.js', () => ({
   getCroppedImg: vi.fn(),
 }));
@@ -114,12 +119,40 @@ describe('ProfilePage', () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', mockFetch());
 
-    renderPage('/SomeoneElse');
+    renderPage('/~/SomeoneElse/');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
     });
     expect(screen.getByText('暂无公开文章。')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
+  });
+
+  it('renders a public profile without login', async () => {
+    vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
+
+    renderPage('/~/LA/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+    expect(screen.getByText('Original bio')).toBeInTheDocument();
+    expect(screen.getByText('暂无公开文章。')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
+  });
+
+  it('shows own public profile actions for a signed-in member', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
+
+    renderPage('/~/LA/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: '写文章' })).toHaveAttribute('href', '/me/posts/new/');
+    expect(screen.getByRole('link', { name: '管理文章' })).toHaveAttribute('href', '/me/posts/');
+    expect(screen.getByRole('link', { name: '编辑资料' })).toHaveAttribute('href', '/profile/');
   });
 
   it('saves profile changes', async () => {

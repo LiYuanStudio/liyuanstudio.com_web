@@ -248,6 +248,17 @@ function serializeUser(user: UserForResponse) {
   };
 }
 
+function serializePublicUser(user: UserForResponse) {
+  return {
+    id: user._id.toString(),
+    displayName: user.displayName,
+    username: user.username,
+    role: normalizeUserRole(user.role),
+    avatar: user.avatar,
+    bio: user.bio ?? '',
+  };
+}
+
 function badRequest(c: Context, error: unknown) {
   return jsonError(c, error instanceof Error ? error.message : '请求无效', 400);
 }
@@ -578,6 +589,20 @@ app.get('/me', requireAuth, async (c) => {
     return jsonError(c, '用户不存在', 404);
   }
   return c.json({ user: serializeUser(await ensureUsername(c, user, 'me')) });
+});
+
+app.get('/users/:username', async (c) => {
+  const username = c.req.param('username');
+  if (!isValidUsername(username)) {
+    return jsonError(c, '用户不存在', 404);
+  }
+
+  const user = await UserModel.findOne({ username });
+  if (!user) {
+    return jsonError(c, '用户不存在', 404);
+  }
+
+  return c.json({ user: serializePublicUser(user) });
 });
 
 app.post('/forgot-password', async (c) => {

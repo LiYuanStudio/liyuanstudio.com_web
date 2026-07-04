@@ -94,7 +94,7 @@ describe('App', () => {
     });
     expect(screen.queryByRole('link', { name: '后台' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/LA');
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/~/LA/');
   });
 });
 
@@ -180,7 +180,7 @@ describe('Blog component', () => {
       expect(screen.getByText('API blog one')).toBeInTheDocument();
     });
     expect(screen.getByText('API summary one')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/LA/api-blog-one/');
+    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/~/LA/api-blog-one/');
   });
 
   it('shows an error status without demo posts when the API fails', async () => {

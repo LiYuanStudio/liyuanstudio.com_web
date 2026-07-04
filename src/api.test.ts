@@ -50,6 +50,25 @@ describe('api helpers', () => {
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/blog', expect.objectContaining({ headers: {} }));
   });
 
+  it('fetchPublicProfile requests a public user profile by username', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        user: { id: '1', displayName: 'LA', username: 'LA', role: 'member', avatar: 'avatar.png', bio: 'Hello' },
+      }),
+    } as Response));
+
+    const { fetchPublicProfile } = await import('./api/blog.js');
+    const data = await fetchPublicProfile('LA');
+    expect(data.user.username).toBe('LA');
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.example.com/auth/users/LA',
+      expect.objectContaining({ headers: {} }),
+    );
+  });
+
   it('throws an error with response error and requestId on non-ok response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,

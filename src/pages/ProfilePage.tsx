@@ -68,13 +68,26 @@ function parseRoute(): Route {
     if (parts[2] && parts[3] === 'edit') return { kind: 'edit-post', id: parts[2] };
     return { kind: 'my-posts' };
   }
+  if (parts[0] === '~') {
+    if (!parts[1]) return { kind: 'settings' };
+    if (parts[2]) return { kind: 'post-detail', username: parts[1], slug: parts[2] };
+    return { kind: 'public-profile', username: parts[1] };
+  }
   if (!parts[0] || parts[0] === 'profile' || NON_PROFILE_PATHS.has(parts[0])) return { kind: 'settings' };
   if (parts[1]) return { kind: 'post-detail', username: parts[0], slug: parts[1] };
   return { kind: 'public-profile', username: parts[0] };
 }
 
 function getOwnProfilePath(username: string | undefined, displayName: string): string {
-  return `/${encodeURIComponent(username || displayName)}`;
+  return getPublicProfilePath(username || displayName);
+}
+
+function getPublicProfilePath(username: string): string {
+  return `/~/${encodeURIComponent(username)}/`;
+}
+
+function getPublicPostPath(username: string, slug: string): string {
+  return `/~/${encodeURIComponent(username)}/${encodeURIComponent(slug)}/`;
 }
 
 function formatDate(value?: string): string {
@@ -183,7 +196,7 @@ function MyPostsPage() {
                   <p>{post.status === 'published' ? '已发布' : '草稿'} · 更新于 {formatDate(post.updatedAt)}</p>
                 </div>
                 <div className="profile-post-actions">
-                  <a href={`/${post.authorUsername}/${post.slug}/`}>查看</a>
+                  <a href={getPublicPostPath(post.authorUsername, post.slug)}>查看</a>
                   {post._id && <a href={`/me/posts/${post._id}/edit/`}>编辑</a>}
                   <button type="button" onClick={() => void handleDelete(post)}>删除</button>
                 </div>
@@ -365,7 +378,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
                     <p>{post.excerpt || '暂无摘要。'}</p>
                     <p>{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'}</p>
                   </div>
-                  <a className="profile-button profile-button-secondary" href={`/${post.authorUsername}/${post.slug}/`}>阅读</a>
+                  <a className="profile-button profile-button-secondary" href={getPublicPostPath(post.authorUsername, post.slug)}>阅读</a>
                 </article>
               ))}
             </div>
@@ -400,7 +413,7 @@ function BlogDetailPage({ username, slug }: { username: string; slug: string }) 
       {status === 'error' && <section className="profile-card"><p className="profile-error">文章不存在或暂不可访问。</p></section>}
       {status === 'ready' && post && (
         <article className="profile-card profile-article">
-          <a href={`/${post.authorUsername}/`}>← {post.authorDisplayName}</a>
+          <a href={getPublicProfilePath(post.authorUsername)}>← {post.authorDisplayName}</a>
           <h1>{post.title}</h1>
           <p className="profile-muted">{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'}</p>
           {post.tags.length > 0 && <p className="profile-tags">{post.tags.map((tag) => <span key={tag}>{tag}</span>)}</p>}
