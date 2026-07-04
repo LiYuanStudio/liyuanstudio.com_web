@@ -252,6 +252,12 @@ Tests run with **Vitest**. Frontend tests use `jsdom` and `@testing-library/reac
 
 - The API is exposed as a Vercel Serverless Function via `api/index.ts`.
 - `vercel.json` configures the function (e.g., `maxDuration`).
+- For non-interactive Codex deployments, do not run a bare `npx vercel deploy --prod --yes` if the CLI reports missing credentials; it may fall into an interactive login flow and fail. Instead, read the existing local Vercel CLI auth file at `C:\Users\HP\AppData\Local\com.vercel.cli\auth.json` and pass its `token` field with `--token`, without printing the token:
+  ```powershell
+  $authPath='C:\Users\HP\AppData\Local\com.vercel.cli\auth.json'
+  $auth=Get-Content -LiteralPath $authPath -Raw | ConvertFrom-Json
+  npx vercel deploy --prod --yes --token $auth.token
+  ```
 - Required environment variables must be set in the Vercel dashboard:
   - `MONGODB_URI`
   - `API_KEY`
