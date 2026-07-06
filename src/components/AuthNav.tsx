@@ -10,8 +10,12 @@ function getPublicProfilePath(username: string) {
   return `/~/${encodeURIComponent(username)}/`;
 }
 
-function getProfilePath(username: string | undefined, displayName: string) {
-  return getPublicProfilePath(username || displayName);
+function isValidPublicUsername(username: string | undefined): username is string {
+  return typeof username === 'string' && /^[a-zA-Z0-9_-]{2,32}$/.test(username);
+}
+
+function getProfilePath(username: string | undefined) {
+  return isValidPublicUsername(username) ? getPublicProfilePath(username) : '/profile/';
 }
 
 function getAvatarFallback(displayName: string) {
@@ -27,7 +31,7 @@ export function AuthNav({ variant = 'main' }: AuthNavProps) {
     const nameClassName = variant === 'papyrus' ? 'papyrus-nav-user-name' : 'nav-user-name';
     const href = variant === 'papyrus'
       ? '/products/papyrusdesktop/'
-      : getProfilePath(state.user.username, state.user.displayName);
+      : getProfilePath(state.user.username);
 
     return (
       <div className={actionsClassName}>

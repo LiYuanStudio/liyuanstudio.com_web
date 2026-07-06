@@ -298,5 +298,184 @@ describe('blog routes', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
   });
+
+  it('rejects unauthenticated create requests', async () => {
+    const app = await makeApp();
+    const res = await app.request('/api/blog', {
+      method: 'POST',
+      body: JSON.stringify(validInput()),
+    });
+
+    expect(res.status).toBe(401);
+    expect(mockBlogModel.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects tourist accounts from creating posts', async () => {
+    const app = await makeApp();
+    const tourist = { ...author, role: 'tourist' as const };
+    mockUserModel.findById.mockResolvedValue(tourist as never);
+
+    const res = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(tourist)),
+      body: JSON.stringify(validInput()),
+    });
+
+    expect(res.status).toBe(403);
+    expect(mockBlogModel.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects members without a public username', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue({ ...author, username: undefined } as never);
+
+    const res = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput()),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('ignores spoofed author fields in the request body', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+    mockBlogModel.create.mockImplementation(async (doc) => ({ _id: 'created', ...(doc as object) }) as never);
+
+    const res = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput({
+        authorId: OTHER_ID,
+        authorUsername: 'attacker',
+        authorDisplayName: 'Evil',
+      })),
+    });
+
+    expect(res.status).toBe(201);
+    expect(mockBlogModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      authorUsername: 'author',
+      authorDisplayName: 'Author',
+    }));
+    expect(mockBlogModel.create).not.toHaveBeenCalledWith(expect.objectContaining({
+      authorUsername: 'attacker',
+    }));
+  });
+
+  it('rejects invalid status and visibility values', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+
+    const badStatus = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput({ status: 'archived' })),
+    });
+    expect(badStatus.status).toBe(400);
+
+    const badVisibility = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput({ visibility: 'private' })),
+    });
+    expect(badVisibility.status).toBe(400);
+  });
+
+  it('rejects malformed tags', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+
+    const tooMany = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput({ tags: ['1', '2', '3', '4', '5', '6', '7', '8', '9'] })),
+    });
+    expect(tooMany.status).toBe(400);
+
+    const tooLong = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput({ tags: ['a'.repeat(21)] })),
+    });
+    expect(tooLong.status).toBe(400);
+  });
+
+  it('rejects a data: URI cover image', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+
+    const res = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput({ image: 'data:image/png;base64,ABC' })),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('prevents non-owners from deleting a post', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(otherUser as never);
+    mockBlogModel.findById.mockReturnValue({ lean: vi.fn().mockResolvedValue(publishedPost) } as never);
+
+    const res = await app.request('/api/blog/post-1', {
+      method: 'DELETE',
+      headers: authHeaders(await tokenFor(otherUser)),
+    });
+
+    expect(res.status).toBe(403);
+    expect(mockBlogModel.findByIdAndDelete).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when patching a non-existent post', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+    mockBlogModel.findById.mockResolvedValue(null as never);
+
+    const res = await app.request('/api/blog/post-1', {
+      method: 'PATCH',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify({ title: 'Updated' }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 for an invalid slug in a patch', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+    mockBlogModel.findById.mockResolvedValue({ ...publishedPost, save: vi.fn() } as never);
+
+    const res = await app.request('/api/blog/post-1', {
+      method: 'PATCH',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify({ slug: 'bad slug!' }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 409 when a patch causes a duplicate slug', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+    const save = vi.fn().mockRejectedValue({ code: 11000 });
+    mockBlogModel.findById.mockResolvedValue({ ...publishedPost, save } as never);
+
+    const res = await app.request('/api/blog/post-1', {
+      method: 'PATCH',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify({ slug: 'taken' }),
+    });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('rejects unauthenticated access to the me endpoint', async () => {
+    const app = await makeApp();
+    const res = await app.request('/api/blog/me');
+
+    expect(res.status).toBe(401);
+  });
 });
 

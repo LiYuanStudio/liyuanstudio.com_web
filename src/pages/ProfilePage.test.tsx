@@ -243,6 +243,7 @@ describe('ProfilePage', () => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '个人主页' })).toHaveAttribute('href', '/~/LA/');
     expect(screen.queryByText('/LA')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '账号后台' })).not.toBeInTheDocument();
 
@@ -261,6 +262,22 @@ describe('ProfilePage', () => {
         bio: 'Updated bio',
       }),
     }));
+  });
+
+  it('does not use the display name as a profile navigation slug', async () => {
+    const userWithoutUsername: User = {
+      ...CURRENT_USER,
+      username: undefined,
+    };
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', mockFetch(userWithoutUsername));
+
+    renderPage('/profile/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: '个人主页' })).toHaveAttribute('href', '/profile/');
   });
 
   it('shows requestId when profile save fails', async () => {

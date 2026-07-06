@@ -78,8 +78,21 @@ function profileRewrite(): Plugin {
   };
 }
 
+function blogRewrite(): Plugin {
+  return {
+    name: 'blog-rewrite',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url?.split('?')[0].replace(/\/+$/, '') === '/blog/release') {
+          req.url = '/blog/';
+        }
+        next();
+      });
+    },
+  };
+}
 export default defineConfig({
-  plugins: [react(), backendHealthCheck(), profileRewrite()],
+  plugins: [react(), backendHealthCheck(), profileRewrite(), blogRewrite()],
   base: '/',
   build: {
     rollupOptions: {
@@ -92,6 +105,7 @@ export default defineConfig({
         resetPassword: resolve(__dirname, 'reset-password/index.html'),
         admin: resolve(__dirname, 'admin/index.html'),
         profile: resolve(__dirname, 'profile/index.html'),
+        blog: resolve(__dirname, 'blog/index.html'),
       },
     },
   },

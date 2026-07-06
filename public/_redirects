@@ -1,4 +1,5 @@
 /blog /blog/ 301
+/blog/release /blog/release/ 301
 /login /login/ 301
 /register /register/ 301
 /forgot-password /forgot-password/ 301
@@ -16,6 +17,8 @@
 /png/* /png/:splat 200
 /icons/* /icons/:splat 200
 /products/papyrusdesktop/ /products/papyrusdesktop/index.html 200
+/blog/release/ /blog/ 200
+/blog/ /blog/index.html 200
 /404.html /404.html 200
 /me/posts/* /profile/ 200
 /~/:username/:slug/ /profile/ 200

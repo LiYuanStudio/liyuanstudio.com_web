@@ -72,8 +72,12 @@ function parseRoute(): Route {
   return { kind: 'public-profile', username: parts[0] };
 }
 
-function getOwnProfilePath(username: string | undefined, displayName: string): string {
-  return getPublicProfilePath(username || displayName);
+function isValidPublicUsername(username: string | undefined): username is string {
+  return typeof username === 'string' && /^[a-zA-Z0-9_-]{2,32}$/.test(username);
+}
+
+function getOwnProfilePath(username: string | undefined): string {
+  return isValidPublicUsername(username) ? getPublicProfilePath(username) : '/profile/';
 }
 
 function getPublicProfilePath(username: string): string {
@@ -105,7 +109,7 @@ function Nav({ user, onLogout }: { user?: User; onLogout?: () => void }) {
         <span>LiYuan Studio</span>
       </a>
       <div className="profile-nav-actions">
-        {user && <a href={getOwnProfilePath(user.username, user.displayName)}>个人主页</a>}
+        {user && <a href={getOwnProfilePath(user.username)}>个人主页</a>}
         {canWriteBlog(user) && <a href="/me/posts/">我的文章</a>}
         {user?.role === 'admin' && <a href="/admin/">账号后台</a>}
         {onLogout ? <button type="button" onClick={onLogout}>退出</button> : <a href="/login/">登录</a>}
@@ -413,6 +417,32 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
   );
 }
 
+function renderArticleContent(content: string) {
+  const blocks = content.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  return blocks.map((block, index) => {
+    const heading = block.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      const HeadingTag = heading[1].length === 1 ? 'h2' : 'h3';
+      return <HeadingTag key={`${index}-${heading[2]}`}>{heading[2]}</HeadingTag>;
+    }
+
+    if (block.startsWith('>')) {
+      return <blockquote key={`${index}-${block}`}>{block.replace(/^>\s?/gm, '')}</blockquote>;
+    }
+
+    const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (lines.length > 1 && lines.every((line) => /^[-*]\s+/.test(line))) {
+      return (
+        <ul key={`${index}-${lines[0]}`}>
+          {lines.map((line) => <li key={line}>{line.replace(/^[-*]\s+/, '')}</li>)}
+        </ul>
+      );
+    }
+
+    return <p key={`${index}-${block}`}>{lines.join(' ')}</p>;
+  });
+}
+
 function BlogDetailPage({ username, slug }: { username: string; slug: string }) {
   const [post, setPost] = useState<BlogPost | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -432,16 +462,20 @@ function BlogDetailPage({ username, slug }: { username: string; slug: string }) 
   }, [username, slug]);
 
   return (
-    <main className="profile-main">
+    <main className="profile-main profile-article-main">
       {status === 'loading' && <p className="profile-empty">加载中...</p>}
       {status === 'error' && <section className="profile-card"><p className="profile-error">文章不存在或暂不可访问。</p></section>}
       {status === 'ready' && post && (
-        <article className="profile-card profile-article">
-          <a href={getPublicProfilePath(post.authorUsername)}>← {post.authorDisplayName}</a>
-          <h1>{post.title}</h1>
-          <p className="profile-muted">{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'}</p>
-          {post.tags.length > 0 && <p className="profile-tags">{post.tags.map((tag) => <span key={tag}>{tag}</span>)}</p>}
-          <pre>{post.content}</pre>
+        <article className="profile-article">
+          <header className="profile-article-header">
+            <a href={getPublicProfilePath(post.authorUsername)}>返回 {post.authorDisplayName}</a>
+            <h1>{post.title}</h1>
+            <p>{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'} · {post.authorDisplayName}</p>
+            {post.tags.length > 0 && <div className="profile-tags">{post.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
+          </header>
+          <div className="profile-article-body">
+            {renderArticleContent(post.content)}
+          </div>
         </article>
       )}
     </main>

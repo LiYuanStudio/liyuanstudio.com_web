@@ -34,3 +34,15 @@ Object.defineProperty(globalThis, 'localStorage', {
   writable: true,
   configurable: true,
 });
+
+// jsdom's File implementation does not expose arrayBuffer().
+if (!File.prototype.arrayBuffer) {
+  File.prototype.arrayBuffer = function arrayBuffer(): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(this);
+    });
+  };
+}

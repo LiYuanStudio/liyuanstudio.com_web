@@ -73,7 +73,7 @@ describe('App', () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(3);
   });
 
-  it('links authenticated admin users to their profile from the homepage', async () => {
+  it('links authenticated users with a valid username to their public profile from the homepage', async () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockResolvedValue([]);
     localStorage.setItem('liyuan_auth_token', 'admin-token');
@@ -85,7 +85,7 @@ describe('App', () => {
           id: '1',
           email: 'admin@example.com',
           displayName: 'Admin',
-          username: 'LA',
+          username: 'li-yuan',
           role: 'admin',
           emailVerified: true,
         },
@@ -99,7 +99,33 @@ describe('App', () => {
     });
     expect(screen.queryByRole('link', { name: '后台' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/~/LA/');
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/~/li-yuan/');
+  });
+
+  it('does not use the display name as a homepage public profile slug', async () => {
+    mockFetchNews.mockResolvedValue([]);
+    mockFetchBlogPosts.mockResolvedValue([]);
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: {
+          id: '1',
+          email: 'admin@example.com',
+          displayName: 'LA',
+          role: 'admin',
+          emailVerified: true,
+        },
+      }),
+    } as Response));
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'LA' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: 'LA' })).toHaveAttribute('href', '/profile/');
   });
 });
 
