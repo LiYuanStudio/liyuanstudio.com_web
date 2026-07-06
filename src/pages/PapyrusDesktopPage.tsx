@@ -1,4 +1,6 @@
 import { useRef } from 'react';
+import type { RefObject } from 'react';
+import { AuthNav } from '../components/AuthNav.js';
 import { MaskedHeading } from '../components/MaskedHeading.js';
 import './papyrusdesktop.css';
 
@@ -111,7 +113,7 @@ function PapyrusDownload() {
 function PapyrusNav({
   navRef,
 }: {
-  navRef: React.RefObject<HTMLElement | null>;
+  navRef: RefObject<HTMLElement | null>;
 }) {
   return (
     <nav ref={navRef} className="papyrus-nav" aria-label="Papyrus">
@@ -120,9 +122,7 @@ function PapyrusNav({
           <img src="/png/logo.png" alt="" />
           <span>LiYuan Studio</span>
         </a>
-        <a className="papyrus-nav-link" href="/login/">
-          登录 / 注册
-        </a>
+        <AuthNav variant="papyrus" />
       </div>
     </nav>
   );

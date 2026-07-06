@@ -5,7 +5,6 @@ import React, {
   useState,
 } from 'react';
 import { IconGithub } from '@arco-design/web-react/icon';
-import { useAuth } from './context/AuthContext.js';
 import { fetchBlogPosts } from './api.js';
 import { getErrorMessage } from './api/errors.js';
 import {
@@ -13,6 +12,7 @@ import {
   readBlogSettings,
 } from './blog-settings.js';
 import type { BlogPost } from './types.js';
+import { AuthNav } from './components/AuthNav.js';
 import { MaskedHeading } from './components/MaskedHeading.js';
 import './styles.css';
 
@@ -189,48 +189,8 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
   );
 });
 
-function getProfilePath(username: string | undefined, displayName: string) {
-  return getPublicProfilePath(username || displayName);
-}
-
-function getPublicProfilePath(username: string) {
-  return `/~/${encodeURIComponent(username)}/`;
-}
-
 function getPublicPostPath(username: string, slug: string) {
   return `/~/${encodeURIComponent(username)}/${encodeURIComponent(slug)}/`;
-}
-
-function getAvatarFallback(displayName: string) {
-  return displayName.trim().slice(0, 1).toUpperCase() || 'L';
-}
-
-function AuthNav() {
-  const { state } = useAuth();
-
-  if (state.status === 'authenticated') {
-    const profilePath = getProfilePath(state.user.username, state.user.displayName);
-
-    return (
-      <div className="nav-actions">
-        <a className="nav-user" href={profilePath} aria-label={state.user.displayName}>
-          {state.user.avatar ? (
-            <img src={state.user.avatar} alt="" />
-          ) : (
-            <span aria-hidden="true">{getAvatarFallback(state.user.displayName)}</span>
-          )}
-          <span className="nav-user-name">{state.user.displayName}</span>
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="nav-actions">
-      <a className="nav-item" href="/login/">登录</a>
-      <a className="nav-item" href="/register/">注册</a>
-    </div>
-  );
 }
 
 export function App() {
@@ -345,7 +305,6 @@ export function App() {
               </div>
               <div className="product-card-body">
                 <div className="product-card-text">
-                  <span className="product-tag">Open Source</span>
                   <h3>Papyrus</h3>
                   <p>面向开放创作体验的核心项目。</p>
                 </div>
@@ -367,7 +326,6 @@ export function App() {
               </div>
               <div className="product-card-body">
                 <div className="product-card-text">
-                  <span className="product-tag">CLI</span>
                   <h3>Papyrus CLI</h3>
                   <p>为自动化与终端工作流准备的命令行入口。</p>
                 </div>

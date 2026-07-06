@@ -1,14 +1,31 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { AuthProvider } from '../context/AuthContext.js';
 import { PapyrusDesktopPage } from './PapyrusDesktopPage.js';
 
+function renderPage() {
+  return render(
+    <AuthProvider>
+      <PapyrusDesktopPage />
+    </AuthProvider>,
+  );
+}
+
 describe('PapyrusDesktopPage', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com');
+    localStorage.clear();
+  });
+
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it('renders the product sections in the requested order', () => {
-    render(<PapyrusDesktopPage />);
+    renderPage();
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
 
@@ -24,9 +41,10 @@ describe('PapyrusDesktopPage', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container } = render(<PapyrusDesktopPage />);
+    const { container } = renderPage();
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: '登录 / 注册' })).toHaveAttribute('href', '/login/');
     expect(screen.queryByText('正在获取下载链接…')).not.toBeInTheDocument();
     expect(screen.queryByText(/GitHub API 返回 403/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '前往 GitHub Releases' })).not.toBeInTheDocument();
@@ -50,15 +68,46 @@ describe('PapyrusDesktopPage', () => {
   });
 
   it('removes the Flow shortcut table from this page', () => {
-    render(<PapyrusDesktopPage />);
+    renderPage();
 
     expect(screen.queryByText('Flow 模式快捷键')).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
   it('does not render the fixed blue period on the hero title', () => {
-    const { container } = render(<PapyrusDesktopPage />);
+    const { container } = renderPage();
 
     expect(container.querySelector('.papyrus-hero h1')).not.toHaveClass('fixed-blue-period');
+  });
+
+  it('links authenticated users to their profile from the product page', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: {
+          id: '1',
+          email: 'member@example.com',
+          displayName: 'Member',
+          username: 'LA',
+          role: 'member',
+          emailVerified: true,
+          avatar: 'https://example.com/avatar.png',
+        },
+      }),
+    } as Response));
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Member' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('link', { name: '登录 / 注册' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Member' })).toHaveAttribute('href', '/~/LA/');
+    expect(screen.getByRole('link', { name: 'Member' }).querySelector('img')).toHaveAttribute(
+      'src',
+      'https://example.com/avatar.png',
+    );
   });
 });

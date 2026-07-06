@@ -62,6 +62,57 @@
   text-decoration: underline;
 }
 
+.papyrus-nav-actions {
+  display: flex;
+  align-items: center;
+}
+
+.papyrus-nav-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  color: #1d1d1f;
+  text-decoration: none;
+  transition: background 0.2s ease;
+}
+
+.papyrus-nav-user:hover {
+  background: rgba(29, 29, 31, 0.06);
+}
+
+.papyrus-nav-user img,
+.papyrus-nav-user > span:first-child {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.papyrus-nav-user img {
+  object-fit: cover;
+}
+
+.papyrus-nav-user > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #1d1d1f;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.papyrus-nav-user-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .papyrus-hero {
   padding: 100px 0 80px;
   text-align: center;
