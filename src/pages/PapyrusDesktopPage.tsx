@@ -177,7 +177,7 @@ export function PapyrusDesktopPage() {
 
       <header className="papyrus-hero">
         <div className="papyrus-hero-inner">
-          <MaskedHeading as="h1" className="fixed-blue-period">
+          <MaskedHeading as="h1">
             Papyrus Desktop
           </MaskedHeading>
           <p className="papyrus-lead">由简入深</p>

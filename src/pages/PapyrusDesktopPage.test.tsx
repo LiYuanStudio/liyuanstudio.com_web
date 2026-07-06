@@ -55,4 +55,10 @@ describe('PapyrusDesktopPage', () => {
     expect(screen.queryByText('Flow 模式快捷键')).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
+
+  it('does not render the fixed blue period on the hero title', () => {
+    const { container } = render(<PapyrusDesktopPage />);
+
+    expect(container.querySelector('.papyrus-hero h1')).not.toHaveClass('fixed-blue-period');
+  });
 });
