@@ -306,7 +306,7 @@ export function App() {
               <div className="product-card-body">
                 <div className="product-card-text">
                   <h3>Papyrus</h3>
-                  <p>面向开放创作体验的核心项目。</p>
+                  <p>随手随学</p>
                 </div>
                 <div className="product-card-footer">
                   <a
