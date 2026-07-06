@@ -58,6 +58,8 @@ export function Footer() {
             <div className="footer-group">
               <h4>产品</h4>
               <a href="#products">Papyrus Desktop</a>
+              <a href="https://github.com/PapyrusOR/Papyrus" target="_blank" rel="noopener noreferrer">Papyrus</a>
+              <a href="https://github.com/PapyrusOR/Papyrus_CLI" target="_blank" rel="noopener noreferrer">Papyrus CLI</a>
             </div>
             <div className="footer-group">
               <h4>内容</h4>
@@ -317,7 +319,7 @@ export function App() {
             我们的产品
           </MaskedHeading>
           <p className="products-lead">
-            我们当前唯一在售的产品。
+            从桌面应用到开源核心与命令行工具，连接更自由的创作流程。
           </p>
 
           <div className="product-grid">
@@ -333,6 +335,50 @@ export function App() {
                 <div className="product-card-footer">
                   <a className="product-card-button" href="/products/papyrusdesktop/">
                     查看详情 →
+                  </a>
+                </div>
+              </div>
+            </article>
+            <article className="product-card product-card-side product-card-side-1">
+              <div className="product-card-hero" aria-hidden="true">
+                <h4>Papyrus</h4>
+              </div>
+              <div className="product-card-body">
+                <div className="product-card-text">
+                  <span className="product-tag">Open Source</span>
+                  <h3>Papyrus</h3>
+                  <p>面向开放创作体验的核心项目。</p>
+                </div>
+                <div className="product-card-footer">
+                  <a
+                    className="product-card-button"
+                    href="https://github.com/PapyrusOR/Papyrus"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    GitHub →
+                  </a>
+                </div>
+              </div>
+            </article>
+            <article className="product-card product-card-side product-card-side-2">
+              <div className="product-card-hero" aria-hidden="true">
+                <h4>Papyrus CLI</h4>
+              </div>
+              <div className="product-card-body">
+                <div className="product-card-text">
+                  <span className="product-tag">CLI</span>
+                  <h3>Papyrus CLI</h3>
+                  <p>为自动化与终端工作流准备的命令行入口。</p>
+                </div>
+                <div className="product-card-footer">
+                  <a
+                    className="product-card-button"
+                    href="https://github.com/PapyrusOR/Papyrus_CLI"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    GitHub →
                   </a>
                 </div>
               </div>

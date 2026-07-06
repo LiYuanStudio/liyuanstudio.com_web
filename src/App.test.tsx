@@ -44,6 +44,11 @@ describe('App', () => {
     expect(container.querySelector('#hero-title')).toHaveClass('fixed-blue-period');
     expect(container.querySelector('#products-title')).toBeInTheDocument();
     expect(container.querySelector('.product-card-large h3')).toHaveTextContent('Papyrus Desktop');
+    expect(screen.getAllByRole('heading', { name: 'Papyrus' })[0]).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Papyrus CLI' })[0]).toBeInTheDocument();
+    const githubLinks = screen.getAllByRole('link', { name: 'GitHub →' });
+    expect(githubLinks[0]).toHaveAttribute('href', 'https://github.com/PapyrusOR/Papyrus');
+    expect(githubLinks[1]).toHaveAttribute('href', 'https://github.com/PapyrusOR/Papyrus_CLI');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
     expect(screen.getAllByText('敬请期待')).toHaveLength(1);
