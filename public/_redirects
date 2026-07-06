@@ -1,3 +1,4 @@
+# Trailing-slash redirects for static MPA entries
 /blog /blog/ 301
 /blog/release /blog/release/ 301
 /login /login/ 301
@@ -13,25 +14,38 @@
 /me/posts/:id/edit /me/posts/:id/edit/ 301
 /~/:username /~/:username/ 301
 /~/:username/:slug /~/:username/:slug/ 301
+
+# Static assets (no rewrite)
 /assets/* /assets/:splat 200
 /png/* /png/:splat 200
 /icons/* /icons/:splat 200
+
+# Static MPA pages - explicit 200 for both directory and index.html forms.
+# Cloudflare Pages may internally normalize /blog/ to /blog/index.html before
+# evaluating _redirects, so both forms must be listed before profile catch-alls.
+/ /index.html 200
 /login/ /login/index.html 200
+/login/index.html /login/index.html 200
 /register/ /register/index.html 200
+/register/index.html /register/index.html 200
 /forgot-password/ /forgot-password/index.html 200
+/forgot-password/index.html /forgot-password/index.html 200
 /reset-password/ /reset-password/index.html 200
+/reset-password/index.html /reset-password/index.html 200
 /admin/ /admin/index.html 200
+/admin/index.html /admin/index.html 200
 /profile/ /profile/index.html 200
+/profile/index.html /profile/index.html 200
 /products/papyrusdesktop/ /products/papyrusdesktop/index.html 200
+/products/papyrusdesktop/index.html /products/papyrusdesktop/index.html 200
 /blog/release/ /blog/ 200
 /blog/ /blog/index.html 200
+/blog/index.html /blog/index.html 200
 /404.html /404.html 200
+
+# Profile / post-detail catch-alls (must come after static rules)
 /me/posts/* /profile/ 200
 /~/:username/:slug/ /profile/ 200
 /~/:username/:slug /profile/ 200
 /~/:username/ /profile/ 200
 /~/:username /profile/ 200
-/:username/:slug/ /profile/ 200
-/:username/:slug /profile/ 200
-/:username/ /profile/ 200
-/:username /profile/ 200
