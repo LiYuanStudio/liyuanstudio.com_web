@@ -77,6 +77,7 @@ describe('auth routes', () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     mockUserModel.findOne.mockReset();
+    mockUserModel.find.mockReset();
     mockUserModel.findById.mockReset();
     mockUserModel.findByIdAndUpdate.mockReset();
     mockUserModel.create.mockReset();
@@ -560,6 +561,7 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(200);
     expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'Hello-User' });
+    expect(mockUserModel.find).not.toHaveBeenCalled();
     const json = await res.json();
     expect(json).toEqual({
       user: {
@@ -576,14 +578,78 @@ describe('auth routes', () => {
     expect(json.user.tokenVersion).toBeUndefined();
   });
 
+  it('GET /api/auth/users/:username returns an admin public profile', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(userDoc({
+      displayName: 'LA',
+      username: 'LA',
+      role: 'admin',
+      avatar: 'https://example.com/admin.png',
+      bio: 'Studio admin',
+    }) as never);
+
+    const res = await app.request('/api/auth/users/LA');
+
+    expect(res.status).toBe(200);
+    expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'LA' });
+    expect(mockUserModel.find).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({
+      user: {
+        id: 'user-1',
+        displayName: 'LA',
+        username: 'LA',
+        role: 'admin',
+        avatar: 'https://example.com/admin.png',
+        bio: 'Studio admin',
+      },
+    });
+  });
+
+  it('GET /api/auth/users/:username backfills a legacy displayName match', async () => {
+    const app = await makeApp();
+    const doc = userDoc({ displayName: 'LA', username: undefined, role: 'admin' });
+    mockUserModel.findOne.mockResolvedValue(null);
+    mockUserModel.find.mockResolvedValue([doc] as never);
+
+    const res = await app.request('/api/auth/users/LA');
+
+    expect(res.status).toBe(200);
+    expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'LA' });
+    expect(mockUserModel.find).toHaveBeenCalledWith({ displayName: 'LA' });
+    expect(doc.username).toBe('LA');
+    expect(doc.save).toHaveBeenCalled();
+    expect((await res.json()).user).toEqual(expect.objectContaining({
+      displayName: 'LA',
+      username: 'LA',
+      role: 'admin',
+    }));
+  });
+
+  it('GET /api/auth/users/:username returns 404 for duplicate displayName matches', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(null);
+    mockUserModel.find.mockResolvedValue([
+      userDoc({ _id: { toString: () => 'user-1' }, displayName: 'LA', username: undefined }),
+      userDoc({ _id: { toString: () => 'user-2' }, displayName: 'LA', username: undefined }),
+    ] as never);
+
+    const res = await app.request('/api/auth/users/LA');
+
+    expect(res.status).toBe(404);
+    expect(mockUserModel.find).toHaveBeenCalledWith({ displayName: 'LA' });
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
+  });
+
   it('GET /api/auth/users/:username returns 404 for missing users', async () => {
     const app = await makeApp();
     mockUserModel.findOne.mockResolvedValue(null);
+    mockUserModel.find.mockResolvedValue([]);
 
     const res = await app.request('/api/auth/users/Missing');
 
     expect(res.status).toBe(404);
     expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'Missing' });
+    expect(mockUserModel.find).toHaveBeenCalledWith({ displayName: 'Missing' });
     expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
   });
 
@@ -594,6 +660,7 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(404);
     expect(mockUserModel.findOne).not.toHaveBeenCalled();
+    expect(mockUserModel.find).not.toHaveBeenCalled();
     expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
   });
 

@@ -141,6 +141,84 @@ describe('ProfilePage', () => {
     expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
   });
 
+  it('renders a bare username public profile without login', async () => {
+    vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
+
+    renderPage('/LA/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+    expect(screen.getByText('Original bio')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/users/LA'), expect.any(Object));
+  });
+
+  it('normalizes any bare profile path to the returned canonical username', async () => {
+    const canonicalUser: User = {
+      ...MEMBER_USER,
+      displayName: 'Alice Smith',
+      username: 'alice-smith',
+      bio: 'Canonical profile',
+    };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/users/Alice')) {
+        return { ok: true, status: 200, json: async () => ({ user: canonicalUser }) } as Response;
+      }
+      if (href.includes('/blog/user/alice-smith')) {
+        return { ok: true, status: 200, json: async () => [] } as Response;
+      }
+      if (href.includes('/blog/user/Alice')) {
+        return { ok: false, status: 404, headers: new Headers(), json: async () => ({ error: 'wrong username' }) } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: canonicalUser }),
+      } as Response;
+    }));
+
+    renderPage('/Alice/?from=old#profile');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Alice Smith' })).toBeInTheDocument();
+    });
+    expect(window.location.pathname).toBe('/~/alice-smith/');
+    expect(window.location.search).toBe('?from=old');
+    expect(window.location.hash).toBe('#profile');
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/blog/user/alice-smith'), expect.any(Object));
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/blog/user/Alice'), expect.any(Object));
+  });
+
+  it('shows requestId when a public profile is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/users/')) {
+        return {
+          ok: false,
+          status: 404,
+          headers: new Headers(),
+          json: async () => ({ error: '用户不存在', requestId: 'profile-404-req' }),
+        } as Response;
+      }
+      if (href.includes('/blog/user/')) {
+        return { ok: true, status: 200, json: async () => [] } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: CURRENT_USER }),
+      } as Response;
+    }));
+
+    renderPage('/Missing/');
+
+    await waitFor(() => {
+      expect(screen.getByText(/个人主页不存在或还未初始化。/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/调试 ID: profile-404-req/)).toBeInTheDocument();
+  });
+
   it('shows own public profile actions for a signed-in member', async () => {
     localStorage.setItem('liyuan_auth_token', 'member-token');
     vi.stubGlobal('fetch', mockFetch(MEMBER_USER));

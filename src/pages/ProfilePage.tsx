@@ -324,28 +324,58 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
   const [profile, setProfile] = useState<User | null>(null);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPublicProfile(username), fetchUserBlogPosts(username)])
-      .then(([profileResponse, postList]) => {
+    setStatus('loading');
+    setError(null);
+
+    fetchPublicProfile(username)
+      .then(async (profileResponse) => {
+        const canonicalUsername = profileResponse.user.username || username;
+        const canonicalPath = getPublicProfilePath(canonicalUsername);
+        if (window.location.pathname !== canonicalPath) {
+          window.history.replaceState(
+            {},
+            '',
+            `${canonicalPath}${window.location.search}${window.location.hash}`,
+          );
+        }
+        const postList = await fetchUserBlogPosts(canonicalUsername);
+        return { profile: profileResponse.user, posts: postList };
+      })
+      .then(({ profile: publicProfile, posts: postList }) => {
         if (cancelled) return;
-        setProfile(profileResponse.user);
+        setProfile(publicProfile);
         setPosts(postList);
         setStatus('ready');
       })
-      .catch(() => setStatus('error'));
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : null);
+        setStatus('error');
+      });
     return () => {
       cancelled = true;
     };
   }, [username]);
 
-  const isOwnProfile = currentUser?.username === username;
+  const profileUsername = profile?.username || username;
+  const isOwnProfile = currentUser?.username === profileUsername;
 
   return (
     <main className="profile-main">
       {status === 'loading' && <p className="profile-empty">加载中...</p>}
-      {status === 'error' && <section className="profile-card"><p className="profile-error">个人主页加载失败。</p></section>}
+      {status === 'error' && (
+        <section className="profile-card">
+          <p className="profile-error">
+            {error?.includes('调试 ID')
+              ? `个人主页不存在或还未初始化。 ${error}`
+              : '个人主页不存在或还未初始化。'}
+          </p>
+        </section>
+      )}
       {status === 'ready' && profile && (
         <>
           <section className="profile-hero" aria-labelledby="profile-title">

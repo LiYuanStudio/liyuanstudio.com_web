@@ -14,13 +14,19 @@ import { getRequestId, jsonError } from '../middleware/request-id.js';
 import type { AuthVariables } from '../middleware/auth.js';
 import { isAdminEmail } from '../config/env.js';
 import { normalizeUserRole, type LegacyUserRole } from '../lib/roles.js';
+import {
+  createUniqueUsername,
+  ensureUsername,
+  isDuplicateKeyError,
+  isValidUsername,
+  type UsernameBackfillError,
+} from '../lib/usernames.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 const EMAIL_VERIFY_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 const GENERIC_PASSWORD_RESET_MESSAGE = '如果该邮箱已注册，我们已发送重置密码链接。';
 const BIO_MAX_LENGTH = 120;
-const USERNAME_MAX_BASE_LENGTH = 24;
 
 const REGISTRATION_RATE_LIMIT_MS = 60 * 1000;
 const REGISTRATION_VERIFY_MAX_ATTEMPTS = 5;
@@ -50,15 +56,6 @@ function getErrorSummary(error: unknown) {
     message: error.message,
     code: (error as Error & { code?: unknown }).code,
   };
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return Boolean(
-    error &&
-    typeof error === 'object' &&
-    'code' in error &&
-    (error as { code?: unknown }).code === 11000
-  );
 }
 
 function logAuthEvent(
@@ -157,82 +154,22 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function createUsernameBase(primary: string, fallback: string): string {
-  const fallbackLocalPart = fallback.split('@')[0] ?? fallback;
-  const normalized = (primary || fallbackLocalPart)
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-zA-Z0-9_-]/g, '')
-    .slice(0, USERNAME_MAX_BASE_LENGTH);
-
-  if (normalized.length >= 2) {
-    return normalized;
-  }
-
-  const fallbackBase = fallbackLocalPart
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-zA-Z0-9_-]/g, '')
-    .slice(0, USERNAME_MAX_BASE_LENGTH);
-
-  return fallbackBase.length >= 2 ? fallbackBase : 'user';
-}
-
-function isValidUsername(username: string | undefined): boolean {
-  return typeof username === 'string' &&
-    /^[a-zA-Z0-9_-]{2,32}$/.test(username);
-}
-
-async function createUniqueUsername(primary: string, fallback: string, ownId?: string): Promise<string> {
-  const base = createUsernameBase(primary, fallback);
-
-  for (let index = 0; index < 100; index += 1) {
-    const suffix = index === 0 ? '' : String(index + 1);
-    const candidate = `${base}${suffix}`.slice(0, 32);
-    const existing = await UserModel.findOne({ username: candidate });
-    if (!existing || existing._id.toString() === ownId) {
-      return candidate;
-    }
-  }
-
-  return `user${randomBytes(4).toString('hex')}`;
-}
-
-async function ensureUsername(
+function logUsernameBackfillError(
   c: Context,
-  user: UserForResponse,
-  stage: string,
-): Promise<UserForResponse> {
-  if (isValidUsername(user.username)) {
-    return user;
-  }
+  details: UsernameBackfillError,
+) {
+  logAuthEvent(c, 'error', 'auth.username_backfill_failed', {
+    stage: details.stage,
+    attempt: details.attempt,
+    userId: details.user._id.toString(),
+    email: maskEmail(details.user.email),
+    duplicateKey: details.duplicateKey,
+    ...getErrorSummary(details.error),
+  });
+}
 
-  const userId = user._id.toString();
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      user.username = await createUniqueUsername(user.displayName, user.email, userId);
-      if (user.save) {
-        await user.save();
-      }
-      return user;
-    } catch (error) {
-      logAuthEvent(c, 'error', 'auth.username_backfill_failed', {
-        stage,
-        attempt,
-        userId,
-        email: maskEmail(user.email),
-        duplicateKey: isDuplicateKeyError(error),
-        ...getErrorSummary(error),
-      });
-
-      user.username = undefined;
-      if (!isDuplicateKeyError(error)) {
-        return user;
-      }
-    }
-  }
-
-  return user;
+function ensureUsernameForRequest(c: Context, user: UserForResponse, stage: string): Promise<UserForResponse> {
+  return ensureUsername(user, stage, (details) => logUsernameBackfillError(c, details)) as Promise<UserForResponse>;
 }
 
 function serializeUser(user: UserForResponse) {
@@ -560,7 +497,7 @@ app.post('/login', async (c) => {
     shouldSave = true;
   }
   if (!user.username) {
-    await ensureUsername(c, user, 'login');
+    await ensureUsernameForRequest(c, user, 'login');
   }
   if (shouldSave && user.save) {
     try {
@@ -588,7 +525,7 @@ app.get('/me', requireAuth, async (c) => {
   if (!user) {
     return jsonError(c, '用户不存在', 404);
   }
-  return c.json({ user: serializeUser(await ensureUsername(c, user, 'me')) });
+  return c.json({ user: serializeUser(await ensureUsernameForRequest(c, user, 'me')) });
 });
 
 app.get('/users/:username', async (c) => {
@@ -598,11 +535,36 @@ app.get('/users/:username', async (c) => {
   }
 
   const user = await UserModel.findOne({ username });
-  if (!user) {
+  if (user) {
+    return c.json({ user: serializePublicUser(user) });
+  }
+
+  const displayNameMatches = await UserModel.find({ displayName: username });
+  if (displayNameMatches.length !== 1) {
     return jsonError(c, '用户不存在', 404);
   }
 
-  return c.json({ user: serializePublicUser(user) });
+  const legacyUser = displayNameMatches[0] as UserForResponse;
+  if (isValidUsername(legacyUser.username)) {
+    return jsonError(c, '用户不存在', 404);
+  }
+
+  legacyUser.username = username;
+  try {
+    if (legacyUser.save) {
+      await legacyUser.save();
+    }
+  } catch (error) {
+    logAuthEvent(c, 'error', 'auth.public_profile_username_backfill_failed', {
+      userId: legacyUser._id.toString(),
+      email: maskEmail(legacyUser.email),
+      duplicateKey: isDuplicateKeyError(error),
+      ...getErrorSummary(error),
+    });
+    return jsonError(c, '用户不存在', 404);
+  }
+
+  return c.json({ user: serializePublicUser(legacyUser) });
 });
 
 app.post('/forgot-password', async (c) => {
@@ -749,7 +711,7 @@ app.patch('/me/avatar', requireAuth, async (c) => {
     return jsonError(c, '用户不存在', 404);
   }
 
-  return c.json({ user: serializeUser(await ensureUsername(c, user, 'avatar')) });
+  return c.json({ user: serializeUser(await ensureUsernameForRequest(c, user, 'avatar')) });
 });
 
 export default app;
