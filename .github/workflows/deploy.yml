@@ -63,6 +63,9 @@ jobs:
       - name: Build API
         run: npm run build:api
 
+      - name: Validate clean deployment tree
+        run: npm run guard:clean-deploy
+
       - name: Skip deployment
         if: steps.deployment_secrets.outputs.can_deploy != 'true'
         run: |

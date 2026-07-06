@@ -25,7 +25,9 @@
     "start:api": "npm run start --workspace=server",
     "seed:api": "npm run seed --workspace=server",
     "promote-admins:api": "npm run promote-admins --workspace=server",
-    "check:secrets": "tsx scripts/check-secrets.ts"
+    "check:secrets": "tsx scripts/check-secrets.ts",
+    "guard:clean-deploy": "tsx scripts/guard-clean-deploy.ts",
+    "deploy:vercel:prod": "npm run guard:clean-deploy && npm run build:api && npm run build && npx vercel deploy --prod --yes"
   },
   "dependencies": {
     "@arco-design/web-react": "^2.66.15",
