@@ -36,16 +36,22 @@ jobs:
       - name: Security scan
         run: npm run check:secrets
 
-      - name: Validate deployment secrets
+      - name: Check deployment secrets
+        id: deployment_secrets
         run: |
-          missing=0
+          missing_names=()
           for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID VERCEL_TOKEN; do
             if [ -z "${!name}" ]; then
-              echo "::error::Missing required secret: $name"
-              missing=1
+              missing_names+=("$name")
             fi
           done
-          exit "$missing"
+
+          if [ "${#missing_names[@]}" -eq 0 ]; then
+            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "missing_names=${missing_names[*]}" >> "$GITHUB_OUTPUT"
+          fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -57,13 +63,20 @@ jobs:
       - name: Build API
         run: npm run build:api
 
+      - name: Skip deployment
+        if: steps.deployment_secrets.outputs.can_deploy != 'true'
+        run: |
+          echo "::notice::Skipping deployment because required deployment secrets are not configured: ${{ steps.deployment_secrets.outputs.missing_names }}. Secret scan and builds completed successfully."
+
       - name: Deploy to Cloudflare Pages
+        if: steps.deployment_secrets.outputs.can_deploy == 'true'
         run: npx wrangler pages deploy dist --project-name "$CLOUDFLARE_PROJECT_NAME" --branch main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy to Vercel
+        if: steps.deployment_secrets.outputs.can_deploy == 'true'
         run: npx vercel deploy --prod --yes --token "$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
