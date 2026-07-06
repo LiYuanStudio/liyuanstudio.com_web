@@ -49,7 +49,7 @@ const UserSchema = new mongoose.Schema<User>(
     passwordResetTokenHash: { type: String },
     passwordResetExpiresAt: { type: Date },
     avatar: { type: String, required: true, default: DEFAULT_AVATAR },
-    bio: { type: String, required: true, default: '', trim: true, maxlength: 120 },
+    bio: { type: String, default: '', trim: true, maxlength: 120 },
   },
   { timestamps: true },
 );
