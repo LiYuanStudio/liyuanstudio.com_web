@@ -11,12 +11,6 @@ import {
   fetchUserBlogPosts,
   updateBlogPost,
 } from '../api/blog.js';
-import {
-  DEFAULT_BLOG_SETTINGS,
-  readBlogSettings,
-  saveBlogSettings,
-  type BlogSettings,
-} from '../blog-settings.js';
 import { useAuth } from '../context/AuthContext.js';
 import { getCroppedImg } from '../lib/crop-image.js';
 import type { BlogPost, BlogPostInput, BlogStatus, ProfileUpdateInput, User } from '../types.js';
@@ -469,11 +463,6 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [blogSettings, setBlogSettings] = useState<BlogSettings>(() => {
-    if (typeof window === 'undefined') return DEFAULT_BLOG_SETTINGS;
-    return readBlogSettings();
-  });
-  const [blogSettingsMessage, setBlogSettingsMessage] = useState<string | null>(null);
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const [cropImage, setCropImage] = useState<string | null>(null);
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
@@ -564,12 +553,6 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
     }
   };
 
-  const handleBlogSettingsSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    const saved = saveBlogSettings(blogSettings);
-    setBlogSettings(saved);
-    setBlogSettingsMessage('博客设置已保存。');
-  };
 
   return (
     <>
@@ -609,20 +592,6 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
           </form>
         </section>
 
-        <section className="profile-card" aria-labelledby="blog-settings-title">
-          <div className="profile-card-header"><h2 id="blog-settings-title">博客设置</h2><span>首页展示</span></div>
-          <form className="profile-form" onSubmit={handleBlogSettingsSubmit}>
-            <label htmlFor="blog-visible-count">首页显示数量</label>
-            <select id="blog-visible-count" value={blogSettings.visibleCount} onChange={(event) => { setBlogSettingsMessage(null); setBlogSettings((prev) => ({ ...prev, visibleCount: Number(event.target.value) })); }}>
-              <option value={1}>1 篇</option><option value={2}>2 篇</option><option value={3}>3 篇</option>
-            </select>
-            <label htmlFor="blog-featured-slug">置顶文章 slug</label>
-            <input id="blog-featured-slug" type="text" value={blogSettings.featuredSlug} onChange={(event) => { setBlogSettingsMessage(null); setBlogSettings((prev) => ({ ...prev, featuredSlug: event.target.value })); }} placeholder="留空则按发布时间排序" />
-            <label className="profile-checkbox-row" htmlFor="blog-show-excerpt"><input id="blog-show-excerpt" type="checkbox" checked={blogSettings.showExcerpt} onChange={(event) => { setBlogSettingsMessage(null); setBlogSettings((prev) => ({ ...prev, showExcerpt: event.target.checked })); }} /><span>在首页博客卡片显示摘要</span></label>
-            {blogSettingsMessage && <p className="profile-success" role="status" data-testid="blog-settings-message">{blogSettingsMessage}</p>}
-            <button type="submit" className="profile-button">保存博客设置</button>
-          </form>
-        </section>
       </main>
 
       {isCropperOpen && cropImage && (
