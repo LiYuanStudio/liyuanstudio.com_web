@@ -22,14 +22,16 @@ export function AuthNav({ variant = 'main' }: AuthNavProps) {
   const { state } = useAuth();
 
   if (state.status === 'authenticated') {
-    const profilePath = getProfilePath(state.user.username, state.user.displayName);
     const actionsClassName = variant === 'papyrus' ? 'papyrus-nav-actions' : 'nav-actions';
     const userClassName = variant === 'papyrus' ? 'papyrus-nav-user' : 'nav-user';
     const nameClassName = variant === 'papyrus' ? 'papyrus-nav-user-name' : 'nav-user-name';
+    const href = variant === 'papyrus'
+      ? '/products/papyrusdesktop/'
+      : getProfilePath(state.user.username, state.user.displayName);
 
     return (
       <div className={actionsClassName}>
-        <a className={userClassName} href={profilePath} aria-label={state.user.displayName}>
+        <a className={userClassName} href={href} aria-label={state.user.displayName}>
           {state.user.avatar ? (
             <img src={state.user.avatar} alt="" />
           ) : (

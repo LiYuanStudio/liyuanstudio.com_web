@@ -80,7 +80,7 @@ describe('PapyrusDesktopPage', () => {
     expect(container.querySelector('.papyrus-hero h1')).not.toHaveClass('fixed-blue-period');
   });
 
-  it('links authenticated users to their profile from the product page', async () => {
+  it('keeps authenticated users on the product page from the product nav', async () => {
     localStorage.setItem('liyuan_auth_token', 'member-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -104,7 +104,10 @@ describe('PapyrusDesktopPage', () => {
       expect(screen.getByRole('link', { name: 'Member' })).toBeInTheDocument();
     });
     expect(screen.queryByRole('link', { name: '登录 / 注册' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Member' })).toHaveAttribute('href', '/~/LA/');
+    expect(screen.getByRole('link', { name: 'Member' })).toHaveAttribute(
+      'href',
+      '/products/papyrusdesktop/',
+    );
     expect(screen.getByRole('link', { name: 'Member' }).querySelector('img')).toHaveAttribute(
       'src',
       'https://example.com/avatar.png',
