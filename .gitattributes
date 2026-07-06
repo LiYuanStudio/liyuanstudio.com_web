@@ -1,0 +1,2 @@
+# Keep _redirects with LF line endings; Cloudflare Pages requires it.
+public/_redirects text eol=lf

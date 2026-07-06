@@ -16,6 +16,12 @@
 /assets/* /assets/:splat 200
 /png/* /png/:splat 200
 /icons/* /icons/:splat 200
+/login/ /login/index.html 200
+/register/ /register/index.html 200
+/forgot-password/ /forgot-password/index.html 200
+/reset-password/ /reset-password/index.html 200
+/admin/ /admin/index.html 200
+/profile/ /profile/index.html 200
 /products/papyrusdesktop/ /products/papyrusdesktop/index.html 200
 /blog/release/ /blog/ 200
 /blog/ /blog/index.html 200
