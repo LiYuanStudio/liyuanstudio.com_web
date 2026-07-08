@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import mongoose from 'mongoose';
 import { BlogModel, type BlogPost, type BlogStatus, type BlogVisibility } from '../models/blog.js';
+import { CounterModel } from '../models/counter.js';
 import { UserModel, type User } from '../models/user.js';
 import { requireAuth, verifyToken, type TokenUser, type AuthVariables } from '../middleware/auth.js';
 import { canWriteBlog, normalizeUserRole } from '../lib/roles.js';
@@ -141,11 +142,82 @@ function estimateReadTime(content: string): string {
   return `${minutes} 分钟阅读`;
 }
 
+function createSlugFromTitle(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48);
+  return slug || 'post';
+}
+
+async function getNextBlogNumber(): Promise<number> {
+  const counter = await CounterModel.findOneAndUpdate(
+    { _id: 'blogNumber' },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true },
+  ).lean() as { seq?: number } | null;
+
+  const highest = await BlogModel.findOne({ blogNumber: { $exists: true } })
+    .sort({ blogNumber: -1 })
+    .select('blogNumber')
+    .lean() as { blogNumber?: number } | null;
+
+  const counterValue = counter?.seq ?? 1;
+  const highestValue = typeof highest?.blogNumber === 'number' ? highest.blogNumber : 0;
+  if (counterValue > highestValue) return counterValue;
+
+  const next = highestValue + 1;
+  const synced = await CounterModel.findOneAndUpdate(
+    { _id: 'blogNumber', seq: { $lt: next } },
+    { $set: { seq: next } },
+    { new: true, upsert: true },
+  ).lean() as { seq?: number } | null;
+  return synced?.seq ?? next;
+}
+
+async function ensureBlogNumber<T extends { _id?: unknown; blogNumber?: number }>(post: T): Promise<T & { blogNumber: number }> {
+  if (Number.isInteger(post.blogNumber) && post.blogNumber! > 0) {
+    return post as T & { blogNumber: number };
+  }
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const blogNumber = await getNextBlogNumber();
+    try {
+      const updated = await BlogModel.findByIdAndUpdate(
+        post._id,
+        { $set: { blogNumber } },
+        { new: true },
+      ).lean() as (T & { blogNumber: number }) | null;
+      if (updated) return updated;
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) throw error;
+    }
+  }
+
+  throw new Error('博客编号分配失败');
+}
+
+async function ensureBlogNumbers<T extends { _id?: unknown; blogNumber?: number }>(posts: T[]): Promise<Array<T & { blogNumber: number }>> {
+  return await Promise.all(posts.map((post) => ensureBlogNumber(post)));
+}
+
+function parseBlogNumber(value: string): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function validateBlogInput(body: BlogInput, partial = false): Partial<BlogPost> {
   const content = getString(body.content, '正文', 100000, !partial);
   const data: Partial<BlogPost> = {};
   const title = getString(body.title, '标题', 80, !partial);
-  const slug = validateSlug(body.slug, !partial);
+  const slug = body.slug === undefined || body.slug === null || body.slug === ''
+    ? undefined
+    : validateSlug(body.slug, false);
   const excerpt = getString(body.excerpt, '摘要', 200, false);
   const category = getString(body.category, '分类', 32, false);
   const tags = validateTags(body.tags);
@@ -172,7 +244,7 @@ function validateBlogInput(body: BlogInput, partial = false): Partial<BlogPost> 
   return data;
 }
 
-function isDuplicateSlugError(error: unknown): boolean {
+function isDuplicateKeyError(error: unknown): boolean {
   return Boolean(
     error &&
       typeof error === 'object' &&
@@ -222,7 +294,7 @@ app.get('/', async (c) => {
   const list = await BlogModel.find(publicListQuery())
     .sort({ publishedAt: -1, createdAt: -1 })
     .lean();
-  return c.json(list);
+  return c.json(await ensureBlogNumbers(list));
 });
 
 app.get('/me', requireAuth, async (c) => {
@@ -232,7 +304,7 @@ app.get('/me', requireAuth, async (c) => {
   const list = await BlogModel.find({ authorId: c.get('userId') })
     .sort({ updatedAt: -1, createdAt: -1 })
     .lean();
-  return c.json(list);
+  return c.json(await ensureBlogNumbers(list));
 });
 
 app.get('/user/:username', async (c) => {
@@ -243,7 +315,26 @@ app.get('/user/:username', async (c) => {
   })
     .sort({ publishedAt: -1, createdAt: -1 })
     .lean();
-  return c.json(list);
+  return c.json(await ensureBlogNumbers(list));
+});
+
+app.get('/number/:blogNumber', async (c) => {
+  const blogNumber = parseBlogNumber(c.req.param('blogNumber'));
+  if (!blogNumber) {
+    return jsonError(c, '未找到', 404);
+  }
+
+  const item = await BlogModel.findOne({ blogNumber }).lean();
+  if (!item) {
+    return jsonError(c, '未找到', 404);
+  }
+
+  const user = await getOptionalAuthUser(c);
+  if ((item.status !== 'published' || item.visibility !== 'public') && !ownerCanAccess(item, user)) {
+    return jsonError(c, '未找到', 404);
+  }
+
+  return c.json(item);
 });
 
 app.get('/:username/:slug', async (c) => {
@@ -261,7 +352,7 @@ app.get('/:username/:slug', async (c) => {
     return jsonError(c, '未找到', 404);
   }
 
-  return c.json(item);
+  return c.json(await ensureBlogNumber(item));
 });
 
 app.post('/', requireAuth, async (c) => {
@@ -283,33 +374,38 @@ app.post('/', requireAuth, async (c) => {
     return jsonError(c, '请先完善个人主页用户名', 400);
   }
 
-  const doc: BlogPost = {
-    title: data.title!,
-    excerpt: data.excerpt ?? '',
-    category: data.category ?? '',
-    tags: data.tags ?? [],
-    slug: data.slug!,
-    content: data.content!,
-    image: data.image,
-    readTime: data.readTime,
-    authorId: new mongoose.Types.ObjectId(user._id.toString()),
-    authorUsername: user.username,
-    authorDisplayName: user.displayName,
-    authorAvatar: user.avatar,
-    status: data.status ?? 'draft',
-    visibility: data.visibility ?? 'public',
-    publishedAt: data.status === 'published' ? new Date() : undefined,
-  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const blogNumber = await getNextBlogNumber();
+    const doc: BlogPost = {
+      title: data.title!,
+      excerpt: data.excerpt ?? '',
+      category: data.category ?? '',
+      tags: data.tags ?? [],
+      blogNumber,
+      slug: data.slug ?? `${createSlugFromTitle(data.title!)}-${blogNumber}`,
+      content: data.content!,
+      image: data.image,
+      readTime: data.readTime,
+      authorId: new mongoose.Types.ObjectId(user._id.toString()),
+      authorUsername: user.username,
+      authorDisplayName: user.displayName,
+      authorAvatar: user.avatar,
+      status: data.status ?? 'draft',
+      visibility: data.visibility ?? 'public',
+      publishedAt: data.status === 'published' ? new Date() : undefined,
+    };
 
-  try {
-    const created = await BlogModel.create(doc);
-    return c.json(created, 201);
-  } catch (error) {
-    if (isDuplicateSlugError(error)) {
-      return jsonError(c, '该 slug 已被使用', 409);
+    try {
+      const created = await BlogModel.create(doc);
+      return c.json(created, 201);
+    } catch (error) {
+      if (!isDuplicateKeyError(error) || data.slug) {
+        return jsonError(c, '该 slug 已被使用', 409);
+      }
     }
-    throw error;
   }
+
+  return jsonError(c, '博客编号分配失败，请稍后再试', 409);
 });
 
 app.patch('/:id', requireAuth, async (c) => {
@@ -346,7 +442,7 @@ app.patch('/:id', requireAuth, async (c) => {
     const saved = doc.save ? await doc.save() : doc;
     return c.json(saved);
   } catch (error) {
-    if (isDuplicateSlugError(error)) {
+    if (isDuplicateKeyError(error)) {
       return jsonError(c, '该 slug 已被使用', 409);
     }
     throw error;

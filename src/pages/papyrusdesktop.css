@@ -84,17 +84,19 @@
 }
 
 .papyrus-nav-user img,
+.papyrus-nav-user .user-avatar-fallback,
 .papyrus-nav-user > span:first-child {
   width: 28px;
   height: 28px;
   border-radius: 999px;
 }
 
-.papyrus-nav-user img {
+.papyrus-nav-user img,
+.papyrus-nav-user .user-avatar-fallback {
   object-fit: cover;
 }
 
-.papyrus-nav-user > span:first-child {
+.papyrus-nav-user .user-avatar-fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;

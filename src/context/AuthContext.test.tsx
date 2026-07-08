@@ -18,7 +18,7 @@ function TestConsumer() {
         <span data-testid="bio">{state.user.bio}</span>
         <img data-testid="avatar" src={state.user.avatar} alt="avatar" />
         <button onClick={() => updateAvatar('https://example.com/new.png')}>Update avatar</button>
-        <button onClick={() => updateProfile({ displayName: 'New Name', avatar: 'https://example.com/new.png', bio: 'New bio' })}>Update profile</button>
+        <button onClick={() => updateProfile({ displayName: 'New Name', bio: 'New bio' })}>Update profile</button>
         <button onClick={logout}>Logout</button>
       </div>
     );

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '../context/AuthContext.js';
 import { ProfilePage } from './ProfilePage.js';
 import { getCroppedImg } from '../lib/crop-image.js';
-import type { User } from '../types.js';
+import type { BlogPost, User } from '../types.js';
 
 const CURRENT_USER: User = {
   id: '1',
@@ -28,6 +28,21 @@ const ADMIN_USER = {
 const MEMBER_USER: User = {
   ...CURRENT_USER,
   role: 'member',
+};
+const MARKDOWN_POST: BlogPost = {
+  _id: 'post-1',
+  title: 'Markdown post',
+  excerpt: 'Markdown summary',
+  category: 'Tech',
+  tags: ['Markdown'],
+  blogNumber: 1,
+  slug: 'markdown-post',
+  content: '',
+  authorUsername: 'LA',
+  authorDisplayName: 'LA',
+  status: 'published',
+  visibility: 'public',
+  publishedAt: '2026-07-01T00:00:00.000Z',
 };
 
 vi.mock('../lib/crop-image.js', () => ({
@@ -85,6 +100,23 @@ function mockFetch(userResponse: User = CURRENT_USER) {
 function uploadFile(input: HTMLElement, file: File) {
   fireEvent.change(input, { target: { files: [file] } });
 }
+function mockBlogDetailFetch(content: string) {
+  return vi.fn().mockImplementation(async (url: string) => {
+    const href = url.toString();
+    if (href.includes('/blog/number/1')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ...MARKDOWN_POST, content }),
+      } as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ user: MEMBER_USER }),
+    } as Response;
+  });
+}
 
 describe('ProfilePage', () => {
   beforeEach(() => {
@@ -118,7 +150,7 @@ describe('ProfilePage', () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', mockFetch());
 
-    renderPage('/~/SomeoneElse/');
+    renderPage('/SomeoneElse/');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
@@ -130,7 +162,7 @@ describe('ProfilePage', () => {
   it('renders a public profile without login', async () => {
     vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
 
-    renderPage('/~/LA/');
+    renderPage('/LA/');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
@@ -140,6 +172,62 @@ describe('ProfilePage', () => {
     expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
   });
 
+  it('renders markdown in public blog article details', async () => {
+    vi.stubGlobal('fetch', mockBlogDetailFetch([
+      '## Section title',
+      '',
+      'A paragraph with **bold text** and [docs](https://example.com/docs).',
+      '',
+      '> Quoted note',
+      '',
+      '1. First item',
+      '2. Second item',
+      '',
+      '```ts',
+      'const answer = 42;',
+      '```',
+      '',
+      '| Name | Value |',
+      '| --- | --- |',
+      '| Mode | Markdown |',
+    ].join('\n')));
+
+    renderPage('/LA/1/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Markdown post' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('heading', { name: 'Section title' })).toBeInTheDocument();
+    expect(screen.getByText('bold text')).toBeInTheDocument();
+    expect(screen.getByText('Quoted note')).toBeInTheDocument();
+    expect(screen.getByText('Second item')).toBeInTheDocument();
+    expect(screen.getByText('const answer = 42;')).toBeInTheDocument();
+    expect(screen.getAllByText('Markdown').length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('rel', 'noreferrer');
+  });
+
+  it('does not inject raw html from markdown content', async () => {
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Safe paragraph\n\n<script>alert(1)</script>\n\n<img src=x onerror=alert(1) />'));
+
+    const { container } = renderPage('/LA/1/');
+
+    await waitFor(() => {
+      expect(screen.getByText('Safe paragraph')).toBeInTheDocument();
+    });
+    expect(container.querySelector('.profile-article-body script')).toBeNull();
+    expect(container.querySelector('.profile-article-body img')).toBeNull();
+  });
+
+  it('keeps plain text article content readable', async () => {
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Just a plain paragraph.'));
+
+    renderPage('/LA/1/');
+
+    await waitFor(() => {
+      expect(screen.getByText('Just a plain paragraph.')).toBeInTheDocument();
+    });
+  });
   it('renders a bare username public profile without login', async () => {
     vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
 
@@ -182,7 +270,7 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Alice Smith' })).toBeInTheDocument();
     });
-    expect(window.location.pathname).toBe('/~/alice-smith/');
+    expect(window.location.pathname).toBe('/alice-smith/');
     expect(window.location.search).toBe('?from=old');
     expect(window.location.hash).toBe('#profile');
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/blog/user/alice-smith'), expect.any(Object));
@@ -222,7 +310,7 @@ describe('ProfilePage', () => {
     localStorage.setItem('liyuan_auth_token', 'member-token');
     vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
 
-    renderPage('/~/LA/');
+    renderPage('/LA/');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
@@ -243,7 +331,7 @@ describe('ProfilePage', () => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '个人主页' })).toHaveAttribute('href', '/~/LA/');
+    expect(screen.getByRole('link', { name: '个人主页' })).toHaveAttribute('href', '/LA/');
     expect(screen.queryByText('/LA')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '账号后台' })).not.toBeInTheDocument();
 
@@ -258,8 +346,52 @@ describe('ProfilePage', () => {
       method: 'PATCH',
       body: JSON.stringify({
         displayName: 'New LA',
-        avatar: 'https://example.com/avatar.png',
         bio: 'Updated bio',
+      }),
+    }));
+  });
+
+  it('does not overwrite avatar when saving profile after uploading a new avatar', async () => {
+    const mockGetCroppedImg = vi.mocked(getCroppedImg);
+    mockGetCroppedImg.mockResolvedValue('data:image/jpeg;base64,cropped');
+
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', mockFetch());
+
+    renderPage('/profile/');
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
+    });
+
+    const fileInput = screen.getByTestId('avatar-input');
+    const file = new File(['dummy'], 'avatar.png', { type: 'image/png' });
+    uploadFile(fileInput, file);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: '截取头像' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: '确认' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-message')).toHaveTextContent('头像已更新。');
+    });
+
+    await user.click(screen.getByRole('button', { name: '保存更改' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-message')).toHaveTextContent('个人主页已保存。');
+    });
+
+    const profileCalls = vi.mocked(fetch).mock.calls.filter(([url]) => url.toString().includes('/auth/me/profile'));
+    expect(profileCalls).toHaveLength(1);
+    expect(profileCalls[0]?.[1]).toEqual(expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({
+        displayName: 'LA',
+        bio: 'Original bio',
       }),
     }));
   });

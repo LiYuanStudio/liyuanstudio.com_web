@@ -167,7 +167,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       )}
       <div className="blog-grid" aria-busy={status === 'loading'}>
         {visiblePosts.map((post) => (
-          <article className="blog-card" key={`${post.authorUsername}/${post.slug}`}>
+          <article className="blog-card" key={`${post.authorUsername}/${post.blogNumber}`}>
             <div className="blog-card-hero" aria-hidden="true">
               <h4>{post.category || 'Blog'}</h4>
             </div>
@@ -177,7 +177,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
               {settings.showExcerpt && <p>{post.excerpt || '暂无摘要。'}</p>}
               <div className="blog-card-footer">
                 <span className="blog-date">{formatPostDate(post)} · {post.readTime || '1 分钟阅读'}</span>
-                <a className="product-card-button" href={getPublicPostPath(post.authorUsername, post.slug)}>
+                <a className="product-card-button" href={getPublicPostPath(post.authorUsername, post.blogNumber)}>
                   阅读
                 </a>
               </div>
@@ -189,8 +189,8 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
   );
 });
 
-function getPublicPostPath(username: string, slug: string) {
-  return `/~/${encodeURIComponent(username)}/${encodeURIComponent(slug)}/`;
+function getPublicPostPath(username: string, blogNumber: number) {
+  return `/${encodeURIComponent(username)}/${encodeURIComponent(String(blogNumber))}/`;
 }
 
 export function App() {

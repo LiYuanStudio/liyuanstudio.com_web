@@ -26,6 +26,7 @@ export interface BlogPost {
   excerpt?: string;
   category?: string;
   tags: string[];
+  blogNumber: number;
   slug: string;
   content: string;
   image?: string;
@@ -46,7 +47,7 @@ export interface BlogPostInput {
   excerpt?: string;
   category?: string;
   tags: string[];
-  slug: string;
+  slug?: string;
   content: string;
   image?: string;
   readTime?: string;
@@ -69,7 +70,6 @@ export interface User {
 
 export interface ProfileUpdateInput {
   displayName: string;
-  avatar: string;
   bio: string;
 }
 

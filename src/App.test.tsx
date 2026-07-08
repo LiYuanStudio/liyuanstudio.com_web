@@ -99,7 +99,7 @@ describe('App', () => {
     });
     expect(screen.queryByRole('link', { name: '后台' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/~/li-yuan/');
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/li-yuan/');
   });
 
   it('does not use the display name as a homepage public profile slug', async () => {
@@ -176,6 +176,7 @@ describe('Blog component', () => {
       excerpt: 'API summary one',
       category: 'Tech',
       readTime: '4 min',
+      blogNumber: 50,
       slug: 'api-blog-one',
       content: 'Body one',
       tags: [],
@@ -190,6 +191,7 @@ describe('Blog component', () => {
       excerpt: 'API summary two',
       category: 'Product',
       readTime: '3 min',
+      blogNumber: 51,
       slug: 'api-blog-two',
       content: 'Body two',
       tags: [],
@@ -211,7 +213,7 @@ describe('Blog component', () => {
       expect(screen.getByText('API blog one')).toBeInTheDocument();
     });
     expect(screen.getByText('API summary one')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/~/LA/api-blog-one/');
+    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/LA/50/');
   });
 
   it('shows an error status without demo posts when the API fails', async () => {

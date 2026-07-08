@@ -12,8 +12,6 @@
 /me/posts /me/posts/ 301
 /me/posts/new /me/posts/new/ 301
 /me/posts/:id/edit /me/posts/:id/edit/ 301
-/~/:username /~/:username/ 301
-/~/:username/:slug /~/:username/:slug/ 301
 
 # Static assets (no rewrite)
 /assets/* /assets/:splat 200
@@ -45,7 +43,7 @@
 
 # Profile / post-detail catch-alls (must come after static rules)
 /me/posts/* /profile/ 200
-/~/:username/:slug/ /profile/ 200
-/~/:username/:slug /profile/ 200
-/~/:username/ /profile/ 200
-/~/:username /profile/ 200
+/:username/:blogNumber/ /profile/ 200
+/:username/:blogNumber /profile/ 200
+/:username/ /profile/ 200
+/:username /profile/ 200

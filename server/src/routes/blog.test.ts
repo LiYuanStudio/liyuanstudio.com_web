@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BlogModel } from '../models/blog.js';
+import { CounterModel } from '../models/counter.js';
 import { UserModel } from '../models/user.js';
 
 vi.mock('../lib/db.js', () => ({
   connectDB: vi.fn().mockResolvedValue({}),
 }));
 vi.mock('../models/blog.js');
+vi.mock('../models/counter.js');
 vi.mock('../models/user.js');
 
 const mockBlogModel = vi.mocked(BlogModel);
+const mockCounterModel = vi.mocked(CounterModel);
 const mockUserModel = vi.mocked(UserModel);
 
 const AUTHOR_ID = '64a000000000000000000001';
@@ -49,6 +52,7 @@ const publishedPost = {
   excerpt: 'Summary',
   category: 'Tech',
   tags: [],
+  blogNumber: 1,
   slug: 'hello',
   content: 'Body',
   authorId: { toString: () => AUTHOR_ID },
@@ -57,6 +61,25 @@ const publishedPost = {
   status: 'published',
   visibility: 'public',
 };
+
+function mockBlogNumberAllocation(nextNumber = 1) {
+  mockCounterModel.findOneAndUpdate.mockReturnValue({
+    lean: vi.fn().mockResolvedValue({ seq: nextNumber }),
+  } as never);
+  mockBlogModel.findOne.mockImplementation((filter: unknown) => {
+    const blogNumberFilter = filter as { blogNumber?: { $exists?: boolean } };
+    if (blogNumberFilter?.blogNumber?.$exists) {
+      return {
+        sort: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            lean: vi.fn().mockResolvedValue(null),
+          }),
+        }),
+      } as never;
+    }
+    return { lean: vi.fn().mockResolvedValue(null) } as never;
+  });
+}
 
 function validInput(overrides = {}) {
   return {
@@ -87,6 +110,8 @@ describe('blog routes', () => {
     mockBlogModel.findById.mockReset();
     mockBlogModel.findByIdAndDelete.mockReset();
     mockUserModel.findById.mockReset();
+    mockCounterModel.findOneAndUpdate.mockReset();
+    mockBlogNumberAllocation();
   });
 
   async function makeApp() {

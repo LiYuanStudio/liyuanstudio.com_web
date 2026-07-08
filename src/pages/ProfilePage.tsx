@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
+import remarkGfm from 'remark-gfm';
 import Cropper from 'react-easy-crop';
 import type { Area, Point } from 'react-easy-crop';
 import 'react-easy-crop/react-easy-crop.css';
@@ -14,6 +17,7 @@ import {
 import { useAuth } from '../context/AuthContext.js';
 import { getCroppedImg } from '../lib/crop-image.js';
 import type { BlogPost, BlogPostInput, BlogStatus, ProfileUpdateInput, User } from '../types.js';
+import { UserAvatar } from '../components/UserAvatar.js';
 import './profile.css';
 
 const BIO_MAX_LENGTH = 120;
@@ -25,7 +29,6 @@ function canWriteBlog(user?: User): boolean {
 
 const EMPTY_BLOG_FORM: BlogPostInput = {
   title: '',
-  slug: '',
   excerpt: '',
   category: '',
   tags: [],
@@ -53,7 +56,7 @@ type Route =
   | { kind: 'new-post' }
   | { kind: 'edit-post'; id: string }
   | { kind: 'public-profile'; username: string }
-  | { kind: 'post-detail'; username: string; slug: string };
+  | { kind: 'post-detail'; username: string; blogNumber: number };
 
 function parseRoute(): Route {
   const parts = window.location.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -62,13 +65,15 @@ function parseRoute(): Route {
     if (parts[2] && parts[3] === 'edit') return { kind: 'edit-post', id: parts[2] };
     return { kind: 'my-posts' };
   }
-  if (parts[0] === '~') {
-    if (!parts[1]) return { kind: 'settings' };
-    if (parts[2]) return { kind: 'post-detail', username: parts[1], slug: parts[2] };
-    return { kind: 'public-profile', username: parts[1] };
-  }
+  if (parts[0] === '~') return { kind: 'settings' };
   if (!parts[0] || parts[0] === 'profile' || NON_PROFILE_PATHS.has(parts[0])) return { kind: 'settings' };
-  if (parts[1]) return { kind: 'post-detail', username: parts[0], slug: parts[1] };
+  if (parts[1]) {
+    const blogNumber = Number(parts[1]);
+    if (Number.isSafeInteger(blogNumber) && blogNumber > 0 && String(blogNumber) === parts[1]) {
+      return { kind: 'post-detail', username: parts[0], blogNumber };
+    }
+    return { kind: 'settings' };
+  }
   return { kind: 'public-profile', username: parts[0] };
 }
 
@@ -81,11 +86,11 @@ function getOwnProfilePath(username: string | undefined): string {
 }
 
 function getPublicProfilePath(username: string): string {
-  return `/~/${encodeURIComponent(username)}/`;
+  return `/${encodeURIComponent(username)}/`;
 }
 
-function getPublicPostPath(username: string, slug: string): string {
-  return `/~/${encodeURIComponent(username)}/${encodeURIComponent(slug)}/`;
+function getPublicPostPath(username: string, blogNumber: number): string {
+  return `/${encodeURIComponent(username)}/${encodeURIComponent(String(blogNumber))}/`;
 }
 
 function formatDate(value?: string): string {
@@ -188,13 +193,13 @@ function MyPostsPage() {
         {posts.length > 0 && (
           <div className="profile-post-list">
             {posts.map((post) => (
-              <article className="profile-post-row" key={post._id || post.slug}>
+              <article className="profile-post-row" key={post._id || post.blogNumber}>
                 <div>
                   <h2>{post.title}</h2>
                   <p>{post.status === 'published' ? '已发布' : '草稿'} · 更新于 {formatDate(post.updatedAt)}</p>
                 </div>
                 <div className="profile-post-actions">
-                  <a href={getPublicPostPath(post.authorUsername, post.slug)}>查看</a>
+                  <a href={getPublicPostPath(post.authorUsername, post.blogNumber)}>查看</a>
                   {post._id && <a href={`/me/posts/${post._id}/edit/`}>编辑</a>}
                   <button type="button" onClick={() => void handleDelete(post)}>删除</button>
                 </div>
@@ -287,8 +292,6 @@ function BlogEditorPage({ id }: { id?: string }) {
           <label htmlFor="post-title">标题</label>
           <input id="post-title" value={form.title} maxLength={80} onChange={(event) => updateField('title', event.target.value)} required />
 
-          <label htmlFor="post-slug">slug</label>
-          <input id="post-slug" value={form.slug} onChange={(event) => updateField('slug', event.target.value)} placeholder="my-first-post" required />
 
           <label htmlFor="post-excerpt">摘要</label>
           <textarea id="post-excerpt" rows={3} maxLength={200} value={form.excerpt} onChange={(event) => updateField('excerpt', event.target.value)} />
@@ -378,7 +381,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
         <>
           <section className="profile-hero" aria-labelledby="profile-title">
             <div className="profile-avatar-frame">
-              <img src={profile.avatar} alt="" />
+              <UserAvatar src={profile.avatar} displayName={profile.displayName} />
             </div>
             <div>
               <h1 id="profile-title">{profile.displayName}</h1>
@@ -400,13 +403,13 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
             {posts.length === 0 && <p className="profile-empty">暂无公开文章。</p>}
             <div className="profile-post-list">
               {posts.map((post) => (
-                <article className="profile-post-row" key={post.slug}>
+                <article className="profile-post-row" key={post.blogNumber}>
                   <div>
                     <h2>{post.title}</h2>
                     <p>{post.excerpt || '暂无摘要。'}</p>
                     <p>{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'}</p>
                   </div>
-                  <a className="profile-button profile-button-secondary" href={getPublicPostPath(post.authorUsername, post.slug)}>阅读</a>
+                  <a className="profile-button profile-button-secondary" href={getPublicPostPath(post.authorUsername, post.blogNumber)}>阅读</a>
                 </article>
               ))}
             </div>
@@ -418,38 +421,38 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
 }
 
 function renderArticleContent(content: string) {
-  const blocks = content.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
-  return blocks.map((block, index) => {
-    const heading = block.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      const HeadingTag = heading[1].length === 1 ? 'h2' : 'h3';
-      return <HeadingTag key={`${index}-${heading[2]}`}>{heading[2]}</HeadingTag>;
-    }
-
-    if (block.startsWith('>')) {
-      return <blockquote key={`${index}-${block}`}>{block.replace(/^>\s?/gm, '')}</blockquote>;
-    }
-
-    const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
-    if (lines.length > 1 && lines.every((line) => /^[-*]\s+/.test(line))) {
-      return (
-        <ul key={`${index}-${lines[0]}`}>
-          {lines.map((line) => <li key={line}>{line.replace(/^[-*]\s+/, '')}</li>)}
-        </ul>
-      );
-    }
-
-    return <p key={`${index}-${block}`}>{lines.join(' ')}</p>;
-  });
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeSanitize]}
+      components={{
+        a({ href, children, node: _node, ...props }) {
+          const isExternal = Boolean(href && /^https?:\/\//i.test(href));
+          return (
+            <a
+              {...props}
+              href={href}
+              target={isExternal ? '_blank' : undefined}
+              rel={isExternal ? 'noreferrer' : undefined}
+            >
+              {children}
+            </a>
+          );
+        },
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }
 
-function BlogDetailPage({ username, slug }: { username: string; slug: string }) {
+function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber: number }) {
   const [post, setPost] = useState<BlogPost | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     let cancelled = false;
-    fetchBlogPost(username, slug)
+    fetchBlogPost(blogNumber)
       .then((item) => {
         if (cancelled) return;
         setPost(item);
@@ -459,7 +462,7 @@ function BlogDetailPage({ username, slug }: { username: string; slug: string }) 
     return () => {
       cancelled = true;
     };
-  }, [username, slug]);
+  }, [blogNumber]);
 
   return (
     <main className="profile-main profile-article-main">
@@ -491,7 +494,6 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<ProfileUpdateInput>({
     displayName: user.displayName,
-    avatar: user.avatar ?? '',
     bio: user.bio ?? '',
   });
   const [saving, setSaving] = useState(false);
@@ -576,7 +578,6 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
     try {
       await updateProfile({
         displayName: form.displayName.trim(),
-        avatar: form.avatar.trim(),
         bio: form.bio.trim(),
       });
       setMessage('个人主页已保存。');
@@ -595,7 +596,7 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
         <section className="profile-hero" aria-labelledby="profile-title">
           <label className="profile-avatar-upload" htmlFor="profile-avatar-input">
             <div className="profile-avatar-frame">
-              <img src={form.avatar || user.avatar} alt="个人头像预览" />
+              <UserAvatar src={user.avatar} displayName={user.displayName} alt="个人头像预览" />
               <div className="profile-avatar-overlay" aria-hidden="true"><span>更换头像</span></div>
             </div>
           </label>
@@ -670,7 +671,7 @@ export function ProfilePage() {
       {route.kind === 'new-post' && <BlogEditorPage />}
       {route.kind === 'edit-post' && <BlogEditorPage id={route.id} />}
       {route.kind === 'public-profile' && <PublicProfilePage username={route.username} currentUser={user} />}
-      {route.kind === 'post-detail' && <BlogDetailPage username={route.username} slug={route.slug} />}
+      {route.kind === 'post-detail' && <BlogDetailPage username={route.username} blogNumber={route.blogNumber} />}
     </div>
   );
 }

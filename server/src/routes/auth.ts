@@ -14,6 +14,7 @@ import { getRequestId, jsonError } from '../middleware/request-id.js';
 import type { AuthVariables } from '../middleware/auth.js';
 import { isAdminEmail } from '../config/env.js';
 import { normalizeUserRole, type LegacyUserRole } from '../lib/roles.js';
+import { validateAvatarValue } from '../lib/avatar.js';
 import {
   createUniqueUsername,
   ensureUsername,
@@ -111,13 +112,6 @@ function validateDisplayName(displayName: unknown): string {
     throw new Error('显示名称不能为空');
   }
   return displayName.trim();
-}
-
-function validateAvatar(avatar: unknown): string {
-  if (typeof avatar !== 'string' || avatar.trim().length === 0) {
-    throw new Error('头像链接不能为空');
-  }
-  return avatar.trim();
 }
 
 function validateBio(bio: unknown): string {
@@ -645,13 +639,11 @@ app.post('/reset-password', async (c) => {
 
 app.patch('/me/profile', requireAuth, async (c) => {
   let displayName: string;
-  let avatar: string;
   let bio: string;
 
   try {
     const body = await c.req.json();
     displayName = validateDisplayName(body.displayName);
-    avatar = validateAvatar(body.avatar);
     bio = validateBio(body.bio);
   } catch (error) {
     return badRequest(c, error);
@@ -665,7 +657,6 @@ app.patch('/me/profile', requireAuth, async (c) => {
   const userId = user._id.toString();
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     user.displayName = displayName;
-    user.avatar = avatar;
     user.bio = bio;
     if (!isValidUsername(user.username)) {
       user.username = await createUniqueUsername(user.displayName, user.email, userId);
@@ -697,7 +688,7 @@ app.patch('/me/avatar', requireAuth, async (c) => {
   let avatar: string;
   try {
     const body = await c.req.json();
-    avatar = validateAvatar(body.avatar);
+    avatar = validateAvatarValue(body.avatar);
   } catch (error) {
     return badRequest(c, error);
   }

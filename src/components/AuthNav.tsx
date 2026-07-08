@@ -1,4 +1,5 @@
 import { useAuth } from '../context/AuthContext.js';
+import { UserAvatar } from './UserAvatar.js';
 
 type AuthNavVariant = 'main' | 'papyrus';
 
@@ -7,7 +8,7 @@ type AuthNavProps = {
 };
 
 function getPublicProfilePath(username: string) {
-  return `/~/${encodeURIComponent(username)}/`;
+  return `/${encodeURIComponent(username)}/`;
 }
 
 function isValidPublicUsername(username: string | undefined): username is string {
@@ -16,10 +17,6 @@ function isValidPublicUsername(username: string | undefined): username is string
 
 function getProfilePath(username: string | undefined) {
   return isValidPublicUsername(username) ? getPublicProfilePath(username) : '/profile/';
-}
-
-function getAvatarFallback(displayName: string) {
-  return displayName.trim().slice(0, 1).toUpperCase() || 'L';
 }
 
 export function AuthNav({ variant = 'main' }: AuthNavProps) {
@@ -36,11 +33,7 @@ export function AuthNav({ variant = 'main' }: AuthNavProps) {
     return (
       <div className={actionsClassName}>
         <a className={userClassName} href={href} aria-label={state.user.displayName}>
-          {state.user.avatar ? (
-            <img src={state.user.avatar} alt="" />
-          ) : (
-            <span aria-hidden="true">{getAvatarFallback(state.user.displayName)}</span>
-          )}
+          <UserAvatar src={state.user.avatar} displayName={state.user.displayName} />
           <span className={nameClassName}>{state.user.displayName}</span>
         </a>
       </div>

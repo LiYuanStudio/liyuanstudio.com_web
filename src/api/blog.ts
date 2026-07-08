@@ -46,8 +46,8 @@ export function fetchUserBlogPosts(username: string): Promise<BlogPost[]> {
   return fetchJson<BlogPost[]>(`/blog/user/${encodeURIComponent(username)}`);
 }
 
-export function fetchBlogPost(username: string, slug: string): Promise<BlogPost> {
-  return fetchJson<BlogPost>(`/blog/${encodeURIComponent(username)}/${encodeURIComponent(slug)}`);
+export function fetchBlogPost(blogNumber: number): Promise<BlogPost> {
+  return fetchJson<BlogPost>(`/blog/number/${encodeURIComponent(String(blogNumber))}`);
 }
 
 export function fetchMyBlogPosts(): Promise<BlogPost[]> {

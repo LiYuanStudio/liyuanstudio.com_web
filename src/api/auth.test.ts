@@ -190,7 +190,6 @@ describe('auth api helpers', () => {
     const { updateProfile } = await importAuthApi();
     const { user } = await updateProfile({
       displayName: 'New Name',
-      avatar: 'new.png',
       bio: 'Hello there.',
     });
 
@@ -203,7 +202,6 @@ describe('auth api helpers', () => {
       },
       body: JSON.stringify({
         displayName: 'New Name',
-        avatar: 'new.png',
         bio: 'Hello there.',
       }),
     });

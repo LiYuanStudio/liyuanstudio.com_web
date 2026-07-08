@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from '
 import { createBlogPost, fetchBlogPosts } from '../api/blog.js';
 import { getErrorMessage } from '../api/errors.js';
 import { useAuth } from '../context/AuthContext.js';
-import { createSlug, importBlogFile } from '../lib/blog-upload.js';
+import { importBlogFile } from '../lib/blog-upload.js';
 import type { BlogPost, BlogPostInput, User } from '../types.js';
 import './blog.css';
 
 const EMPTY_FORM: BlogPostInput = {
   title: '',
-  slug: '',
   excerpt: '',
   category: '',
   tags: [],
@@ -29,7 +28,7 @@ function formatDate(post: BlogPost): string {
 }
 
 function getPublicPostPath(post: BlogPost): string {
-  return `/~/${encodeURIComponent(post.authorUsername)}/${encodeURIComponent(post.slug)}/`;
+  return `/${encodeURIComponent(post.authorUsername)}/${encodeURIComponent(String(post.blogNumber))}/`;
 }
 
 function getTagsText(tags: string[]): string {
@@ -45,11 +44,8 @@ function buildExcerpt(content: string): string {
 }
 
 function validateForm(form: BlogPostInput): string | null {
-  if (!form.title.trim() || !form.slug.trim() || !form.content.trim()) {
-    return '标题、slug 和正文不能为空。';
-  }
-  if (!/^[a-zA-Z0-9-]{2,64}$/.test(form.slug.trim())) {
-    return 'slug 只能包含字母、数字和连字符，长度 2-64 个字符。';
+  if (!form.title.trim() || !form.content.trim()) {
+    return '标题和正文不能为空。';
   }
   return null;
 }
@@ -115,7 +111,7 @@ function BlogIndex() {
         {status === 'ready' && posts.length === 0 && <p className="blog-page-status">暂无博客内容。</p>}
         <div className="blog-page-list" aria-busy={status === 'loading'}>
           {posts.map((post) => (
-            <article className="blog-page-post" key={`${post.authorUsername}/${post.slug}`}>
+            <article className="blog-page-post" key={`${post.authorUsername}/${post.blogNumber}`}>
               <a href={getPublicPostPath(post)} aria-label={`阅读 ${post.title}`}>
                 <span className="blog-page-post-meta">{post.category || 'Blog'} · {formatDate(post)}</span>
                 <h2>{post.title}</h2>
@@ -158,7 +154,6 @@ function BlogRelease() {
   const { state } = useAuth();
   const user = state.status === 'authenticated' ? state.user : undefined;
   const [form, setForm] = useState<BlogPostInput>(EMPTY_FORM);
-  const [slugTouched, setSlugTouched] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successPath, setSuccessPath] = useState<string | null>(null);
@@ -178,7 +173,6 @@ function BlogRelease() {
     setForm((prev) => ({
       ...prev,
       title: value,
-      slug: slugTouched ? prev.slug : createSlug(value),
     }));
   };
 
@@ -192,7 +186,6 @@ function BlogRelease() {
       setForm((prev) => ({
         ...prev,
         title: prev.title || imported.title,
-        slug: prev.slug || imported.slug,
         excerpt: prev.excerpt || buildExcerpt(imported.content),
         content: imported.content,
       }));
@@ -219,7 +212,6 @@ function BlogRelease() {
       const saved = await createBlogPost({
         ...form,
         title: form.title.trim(),
-        slug: form.slug.trim().toLowerCase(),
         excerpt: form.excerpt?.trim() || buildExcerpt(form.content),
         category: form.category?.trim(),
         image: form.image?.trim(),
@@ -227,7 +219,7 @@ function BlogRelease() {
         status: 'published',
         visibility: 'public',
       });
-      setSuccessPath(`/~/${encodeURIComponent(saved.authorUsername)}/${encodeURIComponent(saved.slug)}/`);
+      setSuccessPath(`/${encodeURIComponent(saved.authorUsername)}/${encodeURIComponent(String(saved.blogNumber))}/`);
     } catch (err) {
       setError(getErrorMessage(err, '发布失败，请稍后重试。'));
     } finally {
@@ -272,17 +264,6 @@ function BlogRelease() {
           placeholder="写一个清晰的标题"
         />
 
-        <label htmlFor="blog-slug">slug</label>
-        <input
-          id="blog-slug"
-          value={form.slug}
-          maxLength={64}
-          onChange={(event) => {
-            setSlugTouched(true);
-            updateField('slug', event.target.value);
-          }}
-          placeholder="my-first-post"
-        />
 
         <label htmlFor="blog-excerpt">摘要</label>
         <textarea

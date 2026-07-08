@@ -923,9 +923,9 @@ describe('auth routes', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.username_backfill_failed'));
     errorSpy.mockRestore();
   });
-  it('PATCH /api/auth/me/profile updates display name, avatar and bio', async () => {
+  it('PATCH /api/auth/me/profile updates display name and bio without changing avatar', async () => {
     const app = await makeApp();
-    const doc = userDoc();
+    const doc = userDoc({ avatar: 'https://example.com/original.png' });
     mockUserModel.findById.mockResolvedValue(doc as never);
     const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
@@ -937,14 +937,13 @@ describe('auth routes', () => {
       },
       body: JSON.stringify({
         displayName: 'New Name',
-        avatar: 'https://example.com/new.png',
         bio: 'Building useful software.',
       }),
     });
 
     expect(res.status).toBe(200);
     expect(doc.displayName).toBe('New Name');
-    expect(doc.avatar).toBe('https://example.com/new.png');
+    expect(doc.avatar).toBe('https://example.com/original.png');
     expect(doc.bio).toBe('Building useful software.');
     expect(doc.save).toHaveBeenCalled();
     const json = await res.json();
@@ -967,7 +966,6 @@ describe('auth routes', () => {
       },
       body: JSON.stringify({
         displayName: 'New Name',
-        avatar: 'https://example.com/new.png',
         bio: 'Building useful software.',
       }),
     });
@@ -1003,7 +1001,6 @@ describe('auth routes', () => {
       },
       body: JSON.stringify({
         displayName: 'New Name',
-        avatar: 'https://example.com/new.png',
         bio: 'Building useful software.',
       }),
     });
@@ -1028,7 +1025,6 @@ describe('auth routes', () => {
       },
       body: JSON.stringify({
         displayName: '',
-        avatar: '',
         bio: 'x'.repeat(121),
       }),
     });
@@ -1056,5 +1052,22 @@ describe('auth routes', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.user.avatar).toBe('https://example.com/new-avatar.png');
+  });
+
+  it('PATCH /api/auth/me/avatar rejects invalid avatar values', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(userDoc() as never);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me/avatar', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ avatar: 'not-a-valid-avatar' }),
+    });
+
+    expect(res.status).toBe(400);
   });
 });

@@ -74,6 +74,7 @@ const SAMPLE_POSTS: BlogPost[] = [
     excerpt: 'First summary',
     category: 'Tech',
     tags: ['React'],
+    blogNumber: 50,
     slug: 'first-post',
     content: 'First body',
     authorUsername: 'member',
@@ -110,7 +111,7 @@ describe('BlogPage list view', () => {
     expect(screen.getByText('First summary')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /阅读 First post/i })).toHaveAttribute(
       'href',
-      '/~/member/first-post/',
+      '/member/50/',
     );
   });
 
@@ -204,20 +205,6 @@ describe('BlogPage release form', () => {
     });
   }
 
-  it('auto-generates a slug from the title until the slug field is edited', async () => {
-    await renderReleaseAsMember();
-    const user = userEvent.setup();
-
-    await user.type(screen.getByLabelText('标题'), 'Hello World');
-    expect(screen.getByLabelText('slug')).toHaveValue('hello-world');
-
-    await user.clear(screen.getByLabelText('slug'));
-    await user.type(screen.getByLabelText('slug'), 'custom-slug');
-    await user.clear(screen.getByLabelText('标题'));
-    await user.type(screen.getByLabelText('标题'), 'Another Title');
-    expect(screen.getByLabelText('slug')).toHaveValue('custom-slug');
-  });
-
   it('validates required fields before submitting', async () => {
     await renderReleaseAsMember();
     const user = userEvent.setup();
@@ -225,23 +212,7 @@ describe('BlogPage release form', () => {
     await user.click(screen.getByRole('button', { name: '发布' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('标题、slug 和正文不能为空');
-    });
-    expect(mockCreateBlogPost).not.toHaveBeenCalled();
-  });
-
-  it('rejects slugs that do not match the allowed pattern', async () => {
-    await renderReleaseAsMember();
-    const user = userEvent.setup();
-
-    await user.type(screen.getByLabelText('标题'), 'Title');
-    await user.clear(screen.getByLabelText('slug'));
-    await user.type(screen.getByLabelText('slug'), 'invalid_slug!');
-    await user.type(screen.getByLabelText('正文'), 'Body content');
-    await user.click(screen.getByRole('button', { name: '发布' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('slug 只能包含字母、数字和连字符');
+      expect(screen.getByRole('alert')).toHaveTextContent('标题和正文不能为空');
     });
     expect(mockCreateBlogPost).not.toHaveBeenCalled();
   });
@@ -256,7 +227,6 @@ describe('BlogPage release form', () => {
       expect(screen.getByText('已导入 imported.md')).toBeInTheDocument();
     });
     expect(screen.getByLabelText('标题')).toHaveValue('Imported Title');
-    expect(screen.getByLabelText('slug')).toHaveValue('imported-title');
     expect(screen.getByLabelText('正文')).toHaveValue('# Imported Title\n\nImported body.');
   });
 
@@ -290,7 +260,6 @@ describe('BlogPage release form', () => {
     expect(mockCreateBlogPost).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'My Post',
-        slug: 'my-post',
         content: 'Post body',
         status: 'published',
         visibility: 'public',
@@ -298,7 +267,7 @@ describe('BlogPage release form', () => {
     );
     expect(screen.getByRole('link', { name: '打开文章' })).toHaveAttribute(
       'href',
-      '/~/member/my-post/',
+      '/member/50/',
     );
   });
 
