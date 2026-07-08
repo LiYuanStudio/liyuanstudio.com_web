@@ -62,9 +62,9 @@ const publishedPost = {
   visibility: 'public',
 };
 
-function mockBlogNumberAllocation(nextNumber = 1) {
+function mockCounterForBlogCreate() {
   mockCounterModel.findOneAndUpdate.mockReturnValue({
-    lean: vi.fn().mockResolvedValue({ seq: nextNumber }),
+    lean: vi.fn().mockResolvedValue({ seq: 1 }),
   } as never);
   mockBlogModel.findOne.mockImplementation((filter: unknown) => {
     const blogNumberFilter = filter as { blogNumber?: { $exists?: boolean } };
@@ -111,7 +111,6 @@ describe('blog routes', () => {
     mockBlogModel.findByIdAndDelete.mockReset();
     mockUserModel.findById.mockReset();
     mockCounterModel.findOneAndUpdate.mockReset();
-    mockBlogNumberAllocation();
   });
 
   async function makeApp() {
@@ -197,6 +196,7 @@ describe('blog routes', () => {
 
   it('POST /api/blog creates a post from the authenticated user only', async () => {
     const app = await makeApp();
+    mockCounterForBlogCreate();
     mockUserModel.findById.mockResolvedValue(author as never);
     mockBlogModel.create.mockImplementation(async (doc) => ({ _id: 'created', ...(doc as object) }) as never);
 
@@ -228,6 +228,7 @@ describe('blog routes', () => {
 
   it('returns a friendly duplicate slug error', async () => {
     const app = await makeApp();
+    mockCounterForBlogCreate();
     mockUserModel.findById.mockResolvedValue(author as never);
     mockBlogModel.create.mockRejectedValue({ code: 11000 } as never);
 
@@ -243,6 +244,7 @@ describe('blog routes', () => {
 
   it('allows different users to submit the same slug payload to model create', async () => {
     const app = await makeApp();
+    mockCounterForBlogCreate();
     mockUserModel.findById.mockResolvedValueOnce(otherUser as never).mockResolvedValueOnce(otherUser as never);
     mockBlogModel.create.mockImplementation(async (doc) => ({ _id: 'created', ...(doc as object) }) as never);
 
@@ -365,6 +367,7 @@ describe('blog routes', () => {
 
   it('ignores spoofed author fields in the request body', async () => {
     const app = await makeApp();
+    mockCounterForBlogCreate();
     mockUserModel.findById.mockResolvedValue(author as never);
     mockBlogModel.create.mockImplementation(async (doc) => ({ _id: 'created', ...(doc as object) }) as never);
 

@@ -24,6 +24,7 @@
     "build:api": "npm run build --workspace=server",
     "start:api": "npm run start --workspace=server",
     "seed:api": "npm run seed --workspace=server",
+    "cleanup-mock:api": "npm run cleanup-mock-data --workspace=server",
     "promote-admins:api": "npm run promote-admins --workspace=server",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "guard:clean-deploy": "tsx scripts/guard-clean-deploy.ts",

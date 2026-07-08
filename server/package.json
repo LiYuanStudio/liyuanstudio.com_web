@@ -8,6 +8,7 @@
     "build": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "start": "node dist/src/index.js",
     "seed": "tsx scripts/seed.ts",
+    "cleanup-mock-data": "tsx scripts/cleanup-mock-data.ts",
     "promote-admins": "tsx src/scripts/promote-admins.ts"
   },
   "dependencies": {
