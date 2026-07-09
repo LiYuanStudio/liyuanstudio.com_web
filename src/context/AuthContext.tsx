@@ -7,16 +7,27 @@ import React, {
   useState,
 } from 'react';
 import {
+  beginTwoFactorAction as apiBeginTwoFactorAction,
+  confirmTwoFactorAction as apiConfirmTwoFactorAction,
   fetchMe,
   getStoredToken,
   login as apiLogin,
+  resendLoginTwoFactor as apiResendLoginTwoFactor,
   sendRegistrationCode as apiSendRegistrationCode,
   verifyRegistrationCode as apiVerifyRegistrationCode,
   setStoredToken,
   updateAvatar as apiUpdateAvatar,
   updateProfile as apiUpdateProfile,
+  verifyLoginTwoFactor as apiVerifyLoginTwoFactor,
 } from '../api/auth.js';
-import type { ProfileUpdateInput, User } from '../types.js';
+import type {
+  ProfileUpdateInput,
+  RecoveryCodesResponse,
+  SecurityChallengeResponse,
+  TwoFactorAction,
+  TwoFactorChallengeResponse,
+  User,
+} from '../types.js';
 
 type AuthState =
   | { status: 'loading' }
@@ -25,7 +36,21 @@ type AuthState =
 
 interface AuthContextValue {
   state: AuthState;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<TwoFactorChallengeResponse | null>;
+  completeLoginTwoFactor: (
+    challengeToken: string,
+    credential: { code: string } | { recoveryCode: string },
+  ) => Promise<void>;
+  resendLoginTwoFactor: (challengeToken: string) => Promise<void>;
+  beginTwoFactorAction: (
+    action: TwoFactorAction,
+    password: string,
+  ) => Promise<SecurityChallengeResponse>;
+  confirmTwoFactorAction: (
+    action: TwoFactorAction,
+    challengeToken: string,
+    code: string,
+  ) => Promise<RecoveryCodesResponse | null>;
   sendRegistrationCode: (email: string, password: string, displayName: string) => Promise<void>;
   verifyRegistrationCode: (email: string, code: string) => Promise<void>;
   logout: () => void;
@@ -66,9 +91,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadUser]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { token, user } = await apiLogin(email, password);
+    const response = await apiLogin(email, password);
+    if ('twoFactorRequired' in response) {
+      return response;
+    }
+    const { token, user } = response;
     setStoredToken(token);
     setState({ status: 'authenticated', user });
+    return null;
+  }, []);
+
+  const completeLoginTwoFactor = useCallback(async (
+    challengeToken: string,
+    credential: { code: string } | { recoveryCode: string },
+  ) => {
+    const { token, user } = await apiVerifyLoginTwoFactor(challengeToken, credential);
+    setStoredToken(token);
+    setState({ status: 'authenticated', user });
+  }, []);
+
+  const resendLoginTwoFactor = useCallback(async (challengeToken: string) => {
+    await apiResendLoginTwoFactor(challengeToken);
+  }, []);
+
+  const beginTwoFactorAction = useCallback((
+    action: TwoFactorAction,
+    password: string,
+  ) => apiBeginTwoFactorAction(action, password), []);
+
+  const confirmTwoFactorAction = useCallback(async (
+    action: TwoFactorAction,
+    challengeToken: string,
+    code: string,
+  ) => {
+    const response = await apiConfirmTwoFactorAction(action, challengeToken, code);
+    setStoredToken(response.token);
+    setState({ status: 'authenticated', user: response.user });
+    return 'recoveryCodes' in response ? response : null;
   }, []);
 
   const sendRegistrationCode = useCallback(async (
@@ -104,13 +163,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       state,
       login,
+      completeLoginTwoFactor,
+      resendLoginTwoFactor,
+      beginTwoFactorAction,
+      confirmTwoFactorAction,
       sendRegistrationCode,
       verifyRegistrationCode,
       logout,
       updateAvatar,
       updateProfile,
     }),
-    [state, login, sendRegistrationCode, verifyRegistrationCode, logout, updateAvatar, updateProfile],
+    [
+      state,
+      login,
+      completeLoginTwoFactor,
+      resendLoginTwoFactor,
+      beginTwoFactorAction,
+      confirmTwoFactorAction,
+      sendRegistrationCode,
+      verifyRegistrationCode,
+      logout,
+      updateAvatar,
+      updateProfile,
+    ],
   );
 
   return (

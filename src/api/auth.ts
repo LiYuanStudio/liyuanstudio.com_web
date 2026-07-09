@@ -1,5 +1,14 @@
 import { env } from '../config/env.js';
-import type { AuthResponse, MessageResponse, ProfileUpdateInput, User } from '../types.js';
+import type {
+  AuthResponse,
+  LoginResponse,
+  MessageResponse,
+  ProfileUpdateInput,
+  RecoveryCodesResponse,
+  SecurityChallengeResponse,
+  TwoFactorAction,
+  User,
+} from '../types.js';
 import {
   ApiError,
   createNetworkError,
@@ -77,13 +86,49 @@ export function verifyRegistrationCode(
   });
 }
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
-  const response = await fetchJson<AuthResponse>('/auth/login', {
+export function login(email: string, password: string): Promise<LoginResponse> {
+  return fetchJson<LoginResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  setStoredToken(response.token);
-  return response;
+}
+
+export function verifyLoginTwoFactor(
+  challengeToken: string,
+  credential: { code: string } | { recoveryCode: string },
+): Promise<AuthResponse> {
+  return fetchJson<AuthResponse>('/auth/2fa/login/verify', {
+    method: 'POST',
+    body: JSON.stringify({ challengeToken, ...credential }),
+  });
+}
+
+export function resendLoginTwoFactor(challengeToken: string): Promise<MessageResponse> {
+  return fetchJson<MessageResponse>('/auth/2fa/login/resend', {
+    method: 'POST',
+    body: JSON.stringify({ challengeToken }),
+  });
+}
+
+export function beginTwoFactorAction(
+  action: TwoFactorAction,
+  password: string,
+): Promise<SecurityChallengeResponse> {
+  return fetchJson<SecurityChallengeResponse>(`/auth/2fa/${action}`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}
+
+export function confirmTwoFactorAction(
+  action: TwoFactorAction,
+  challengeToken: string,
+  code: string,
+): Promise<AuthResponse | RecoveryCodesResponse> {
+  return fetchJson<AuthResponse | RecoveryCodesResponse>(`/auth/2fa/${action}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ challengeToken, code }),
+  });
 }
 
 export function fetchMe(): Promise<{ user: User }> {

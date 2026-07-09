@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext.js';
 import { getCroppedImg } from '../lib/crop-image.js';
 import type { BlogPost, BlogPostInput, BlogStatus, ProfileUpdateInput, User } from '../types.js';
 import { UserAvatar } from '../components/UserAvatar.js';
+import { TwoFactorSettings } from '../components/TwoFactorSettings.js';
 import './profile.css';
 
 const BIO_MAX_LENGTH = 120;
@@ -626,6 +627,8 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
             <button type="submit" className="profile-button" disabled={saving}>{saving ? '保存中...' : '保存更改'}</button>
           </form>
         </section>
+
+        <TwoFactorSettings user={user} />
 
       </main>
 
