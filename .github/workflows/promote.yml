@@ -177,13 +177,16 @@ jobs:
       - name: Build API
         run: npm run build:api
 
+      - name: Build deploy console
+        run: npm run build:deploy-console
+
       - name: Validate clean deployment tree
         run: npm run guard:clean-deploy
 
       - name: Deploy API to Vercel production
         id: vercel_production
         run: |
-          production_url="$(npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN")"
+          production_url="$(npx --yes vercel@50.28.0 deploy --prod --yes --token "$VERCEL_TOKEN")"
           echo "url=$production_url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
