@@ -10,6 +10,7 @@ function validPost(overrides = {}) {
     excerpt: 'Summary',
     category: 'Tech',
     tags: ['React', 'Product'],
+    blogNumber: 1,
     slug: 'unique-slug',
     content: 'Full content',
     image: 'https://example.com/cover.png',
@@ -30,6 +31,7 @@ describe('BlogModel', () => {
     const err = doc.validateSync();
     expect(err).toBeDefined();
     expect(err?.errors.title).toBeDefined();
+    expect(err?.errors.blogNumber).toBeDefined();
     expect(err?.errors.slug).toBeDefined();
     expect(err?.errors.content).toBeDefined();
     expect(err?.errors.authorId).toBeDefined();
