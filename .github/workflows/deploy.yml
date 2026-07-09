@@ -36,6 +36,9 @@ jobs:
       - name: Security scan
         run: npm run check:secrets
 
+      - name: Run tests
+        run: npm test
+
       - name: Check deployment secrets
         id: deployment_secrets
         run: |

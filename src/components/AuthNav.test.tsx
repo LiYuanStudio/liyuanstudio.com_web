@@ -15,7 +15,7 @@ describe('AuthNav', () => {
   it('shows login and register links for guests on the main variant', () => {
     mockUseAuth.mockReturnValue({
       state: { status: 'unauthenticated' },
-    } as ReturnType<typeof useAuth>);
+    } as unknown as ReturnType<typeof useAuth>);
 
     render(<AuthNav />);
 
@@ -26,7 +26,7 @@ describe('AuthNav', () => {
   it('shows a combined login link for guests on the papyrus variant', () => {
     mockUseAuth.mockReturnValue({
       state: { status: 'unauthenticated' },
-    } as ReturnType<typeof useAuth>);
+    } as unknown as ReturnType<typeof useAuth>);
 
     render(<AuthNav variant="papyrus" />);
 
@@ -47,7 +47,7 @@ describe('AuthNav', () => {
         },
         token: 'tok',
       },
-    } as ReturnType<typeof useAuth>);
+    } as unknown as ReturnType<typeof useAuth>);
 
     render(<AuthNav />);
 
@@ -68,7 +68,7 @@ describe('AuthNav', () => {
         },
         token: 'tok',
       },
-    } as ReturnType<typeof useAuth>);
+    } as unknown as ReturnType<typeof useAuth>);
 
     render(<AuthNav />);
 
@@ -89,7 +89,7 @@ describe('AuthNav', () => {
         },
         token: 'tok',
       },
-    } as ReturnType<typeof useAuth>);
+    } as unknown as ReturnType<typeof useAuth>);
 
     render(<AuthNav variant="papyrus" />);
 

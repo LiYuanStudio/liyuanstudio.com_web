@@ -31,7 +31,6 @@ describe('BlogModel', () => {
     const err = doc.validateSync();
     expect(err).toBeDefined();
     expect(err?.errors.title).toBeDefined();
-    expect(err?.errors.blogNumber).toBeDefined();
     expect(err?.errors.slug).toBeDefined();
     expect(err?.errors.content).toBeDefined();
     expect(err?.errors.authorId).toBeDefined();
@@ -43,6 +42,17 @@ describe('BlogModel', () => {
     const doc = new BlogModel(validPost());
     const err = doc.validateSync();
     expect(err).toBeUndefined();
+  });
+
+  it('accepts legacy posts that do not have a blog number yet', () => {
+    const { blogNumber: _blogNumber, ...legacyPost } = validPost();
+    const doc = new BlogModel(legacyPost);
+    expect(doc.validateSync()).toBeUndefined();
+  });
+
+  it('rejects a non-positive blog number', () => {
+    const doc = new BlogModel(validPost({ blogNumber: 0 }));
+    expect(doc.validateSync()?.errors.blogNumber).toBeDefined();
   });
 
   it('allows optional excerpt, category, image and readTime', () => {

@@ -130,6 +130,27 @@ describe('news routes', () => {
     expect(res.status).toBe(403);
   });
 
+  it('POST /api/news rejects a JWT invalidated by token version', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue({
+      _id: { toString: () => 'admin-1' },
+      email: 'admin@liyuanstudio.com',
+      role: 'admin',
+      tokenVersion: 1,
+    } as never);
+
+    const res = await app.request('/api/news', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${await adminToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(validNews),
+    });
+
+    expect(res.status).toBe(401);
+  });
+
   it('POST /api/news creates a document with admin JWT', async () => {
     const app = await makeApp();
     const created = { _id: '1', ...validNews };
@@ -173,6 +194,17 @@ describe('news routes', () => {
     expect(await res.json()).toEqual(created);
   });
 
+  it('POST /api/news rejects an incorrect API key', async () => {
+    const app = await makeApp();
+    const res = await app.request('/api/news', {
+      method: 'POST',
+      headers: { 'X-API-Key': 'wrong-key!', 'Content-Type': 'application/json' },
+      body: JSON.stringify(validNews),
+    });
+
+    expect(res.status).toBe(401);
+  });
+
   it('POST /api/news validates required fields', async () => {
     const app = await makeApp();
     const res = await app.request('/api/news', {
@@ -188,6 +220,49 @@ describe('news routes', () => {
     expect(await res.json()).toEqual(expect.objectContaining({
       error: expect.stringContaining('不能为空'),
     }));
+  });
+
+  it('POST /api/news rejects duplicate slugs', async () => {
+    const app = await makeApp();
+    mockNewsModel.findOne.mockReturnValue({
+      lean: vi.fn().mockResolvedValue({ _id: 'existing' }),
+    } as never);
+
+    const res = await app.request('/api/news', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(validNews),
+    });
+
+    expect(res.status).toBe(409);
+  });
+
+  it.each([
+    [{ ...validNews, date: '2026-02-30' }],
+    [{ ...validNews, slug: 'admin' }],
+    [{ ...validNews, image: 'javascript:alert(1)' }],
+  ])('POST /api/news rejects invalid fields', async (body) => {
+    const app = await makeApp();
+    const res = await app.request('/api/news', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('PATCH /api/news/:id rejects invalid identifiers', async () => {
+    const app = await makeApp();
+
+    const res = await app.request('/api/news/not-an-object-id', {
+      method: 'PATCH',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Updated' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockNewsModel.findByIdAndUpdate).not.toHaveBeenCalled();
   });
 
   it('PATCH /api/news/:id updates a document', async () => {
@@ -224,6 +299,27 @@ describe('news routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('PATCH /api/news/:id rejects an empty update and duplicate slug', async () => {
+    const app = await makeApp();
+    const id = '507f1f77bcf86cd799439011';
+    const empty = await app.request(`/api/news/${id}`, {
+      method: 'PATCH',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(empty.status).toBe(400);
+
+    mockNewsModel.findOne.mockReturnValue({
+      lean: vi.fn().mockResolvedValue({ _id: 'existing' }),
+    } as never);
+    const duplicate = await app.request(`/api/news/${id}`, {
+      method: 'PATCH',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'taken-slug' }),
+    });
+    expect(duplicate.status).toBe(409);
+  });
+
   it('DELETE /api/news/:id removes a document', async () => {
     const app = await makeApp();
     mockNewsModel.findByIdAndDelete.mockReturnValue({
@@ -251,5 +347,16 @@ describe('news routes', () => {
     });
 
     expect(res.status).toBe(404);
+  });
+
+  it('DELETE /api/news/:id rejects invalid identifiers', async () => {
+    const app = await makeApp();
+    const res = await app.request('/api/news/not-an-object-id', {
+      method: 'DELETE',
+      headers: { 'X-API-Key': API_KEY },
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockNewsModel.findByIdAndDelete).not.toHaveBeenCalled();
   });
 });

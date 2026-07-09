@@ -19,7 +19,7 @@ describe('LoginPage', () => {
       logout: vi.fn(),
       updateAvatar: vi.fn().mockResolvedValue(undefined),
       updateProfile: vi.fn().mockResolvedValue(undefined),
-    } as ReturnType<typeof useAuth>);
+    } as unknown as ReturnType<typeof useAuth>);
   });
 
   it('renders the brand shell and login form', () => {
@@ -40,7 +40,7 @@ describe('LoginPage', () => {
       logout: vi.fn(),
       updateAvatar: vi.fn(),
       updateProfile: vi.fn(),
-    } as ReturnType<typeof useAuth>);
+    } as unknown as ReturnType<typeof useAuth>);
 
     const hrefSetter = vi.fn();
     Object.defineProperty(window, 'location', {

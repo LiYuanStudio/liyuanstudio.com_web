@@ -1,16 +1,11 @@
 import { Hono } from 'hono';
-import { createMiddleware } from 'hono/factory';
-import { timingSafeEqual } from 'node:crypto';
 import mongoose from 'mongoose';
-import { env } from '../config/env.js';
 import { NewsModel } from '../models/news.js';
-import { UserModel } from '../models/user.js';
-import { normalizeUserRole } from '../lib/roles.js';
-import { verifyToken, type AuthVariables, type TokenUser } from '../middleware/auth.js';
+import { requireAdminOrApiKey } from '../middleware/admin.js';
+import type { AuthVariables } from '../middleware/auth.js';
 import { jsonError } from '../middleware/request-id.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
-const EXPECTED_API_KEY = env.API_KEY;
 
 const RESERVED_SLUGS = new Set([
   'admin',
@@ -134,53 +129,6 @@ function validateNewsInput(body: NewsInput, { partial }: { partial: boolean }) {
   return update;
 }
 
-/** Accept either JWT admin or X-API-Key (for automation / seed scripts). */
-const requireNewsAdmin = createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
-  const apiKey = c.req.header('x-api-key');
-  if (apiKey !== undefined) {
-    if (apiKey.length !== EXPECTED_API_KEY.length) {
-      return jsonError(c, '未授权', 401);
-    }
-    const a = Buffer.from(apiKey);
-    const b = Buffer.from(EXPECTED_API_KEY);
-    if (!timingSafeEqual(a, b)) {
-      return jsonError(c, '未授权', 401);
-    }
-    await next();
-    return;
-  }
-
-  const header = c.req.header('authorization') ?? '';
-  const [scheme, token] = header.split(' ');
-  if (scheme?.toLowerCase() !== 'bearer' || !token) {
-    return jsonError(c, '未授权，请先登录', 401);
-  }
-
-  try {
-    const tokenUser = await verifyToken(token);
-    const dbUser = await UserModel.findById(tokenUser.id);
-    if (!dbUser || (dbUser.tokenVersion ?? 0) !== tokenUser.tokenVersion) {
-      return jsonError(c, '未授权，请先登录', 401);
-    }
-
-    const user: TokenUser = {
-      id: dbUser._id.toString(),
-      email: dbUser.email,
-      role: normalizeUserRole(dbUser.role),
-      tokenVersion: dbUser.tokenVersion ?? 0,
-    };
-    if (user.role !== 'admin') {
-      return jsonError(c, '没有权限', 403);
-    }
-
-    c.set('userId', user.id);
-    c.set('authUser', user);
-    await next();
-  } catch {
-    return jsonError(c, '未授权，请先登录', 401);
-  }
-});
-
 app.get('/', async (c) => {
   const list = await NewsModel.find().sort({ date: -1 }).lean();
   return c.json(list);
@@ -194,7 +142,7 @@ app.get('/:slug', async (c) => {
   return c.json(item);
 });
 
-app.post('/', requireNewsAdmin, async (c) => {
+app.post('/', requireAdminOrApiKey, async (c) => {
   let update: Record<string, string | undefined>;
   try {
     update = validateNewsInput(await c.req.json(), { partial: false });
@@ -220,7 +168,7 @@ app.post('/', requireNewsAdmin, async (c) => {
   }
 });
 
-app.patch('/:id', requireNewsAdmin, async (c) => {
+app.patch('/:id', requireAdminOrApiKey, async (c) => {
   const id = c.req.param('id');
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return jsonError(c, '动态 ID 格式不正确', 400);
@@ -260,7 +208,7 @@ app.patch('/:id', requireNewsAdmin, async (c) => {
   }
 });
 
-app.delete('/:id', requireNewsAdmin, async (c) => {
+app.delete('/:id', requireAdminOrApiKey, async (c) => {
   const id = c.req.param('id');
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return jsonError(c, '动态 ID 格式不正确', 400);

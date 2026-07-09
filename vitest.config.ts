@@ -20,8 +20,6 @@ export default defineConfig({
         'src/types.ts',
         'src/main.tsx',
         'src/entries/**',
-        // Orphaned cursor/glow animation; not imported by any page.
-        'src/components/MouseFollower.tsx',
       ],
       thresholds: {
         statements: 80,
