@@ -468,6 +468,38 @@ describe('auth routes', () => {
     expect(mockTwoFactorChallengeModel.findOneAndDelete).not.toHaveBeenCalled();
   });
 
+  it('rejects verification when the 2FA challenge is missing or the account is disabled', async () => {
+    const app = await makeApp();
+    const request = () => app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32), code: '123456' }),
+    });
+
+    mockTwoFactorChallengeModel.findOne.mockResolvedValueOnce(null as never);
+    expect((await request()).status).toBe(400);
+
+    mockTwoFactorChallengeModel.findOne
+      .mockResolvedValueOnce(challengeDoc() as never)
+      .mockResolvedValueOnce(challengeDoc() as never);
+    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValueOnce(challengeDoc() as never);
+    mockUserModel.findById.mockResolvedValueOnce(userDoc({ twoFactorEnabled: false }) as never);
+    expect((await request()).status).toBe(401);
+  });
+
+  it('rejects resending a missing or expired login challenge', async () => {
+    const app = await makeApp();
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(null as never);
+
+    const res = await app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32) }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
   it('POST /api/auth/2fa/login/verify consumes a recovery code only once', async () => {
     const app = await makeApp();
     const challenge = challengeDoc();
@@ -829,6 +861,36 @@ describe('auth routes', () => {
     expect(res.status).toBe(404);
     expect(mockUserModel.find).toHaveBeenCalledWith({ displayName: 'LA' });
     expect(await res.json()).toEqual(expect.objectContaining({ error: '用户不存在' }));
+  });
+
+  it('GET /api/auth/users/:username refuses a legacy displayName match that already has another valid username', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(null);
+    mockUserModel.find.mockResolvedValue([
+      userDoc({ displayName: 'LA', username: 'Existing-Profile' }),
+    ] as never);
+
+    const res = await app.request('/api/auth/users/LA');
+
+    expect(res.status).toBe(404);
+  });
+
+  it('GET /api/auth/users/:username hides a legacy profile when username backfill fails', async () => {
+    const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const doc = userDoc({
+      displayName: 'LA',
+      username: undefined,
+      save: vi.fn().mockRejectedValue(new Error('write failed')),
+    });
+    mockUserModel.findOne.mockResolvedValue(null);
+    mockUserModel.find.mockResolvedValue([doc] as never);
+
+    const res = await app.request('/api/auth/users/LA');
+
+    expect(res.status).toBe(404);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.public_profile_username_backfill_failed'));
+    errorSpy.mockRestore();
   });
 
   it('GET /api/auth/users/:username returns 404 for missing users', async () => {
@@ -1223,6 +1285,22 @@ describe('auth routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PATCH /api/auth/me/profile returns 404 when the authenticated user was deleted', async () => {
+    const app = await makeApp();
+    mockUserModel.findById
+      .mockResolvedValueOnce(userDoc() as never)
+      .mockResolvedValueOnce(null as never);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me/profile', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'New Name', bio: '' }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+
   it('PATCH /api/auth/me/avatar updates the avatar', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(userDoc() as never);
@@ -1260,5 +1338,19 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(400);
+  });
+  it('PATCH /api/auth/me/avatar returns 404 when the user was deleted after authentication', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(userDoc() as never);
+    mockUserModel.findByIdAndUpdate.mockResolvedValue(null as never);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
+
+    const res = await app.request('/api/auth/me/avatar', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avatar: 'https://example.com/avatar.png' }),
+    });
+
+    expect(res.status).toBe(404);
   });
 });

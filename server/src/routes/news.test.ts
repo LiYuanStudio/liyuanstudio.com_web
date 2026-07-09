@@ -151,6 +151,22 @@ describe('news routes', () => {
     expect(res.status).toBe(401);
   });
 
+  it('POST /api/news rejects a JWT whose user no longer exists', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(null as never);
+
+    const res = await app.request('/api/news', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${await adminToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(validNews),
+    });
+
+    expect(res.status).toBe(401);
+  });
+
   it('POST /api/news creates a document with admin JWT', async () => {
     const app = await makeApp();
     const created = { _id: '1', ...validNews };
@@ -203,6 +219,55 @@ describe('news routes', () => {
     });
 
     expect(res.status).toBe(401);
+  });
+
+  it('POST /api/news rejects a differently sized API key and invalid JWT', async () => {
+    const app = await makeApp();
+    const withShortKey = await app.request('/api/news', {
+      method: 'POST',
+      headers: { 'X-API-Key': 'short', 'Content-Type': 'application/json' },
+      body: JSON.stringify(validNews),
+    });
+    expect(withShortKey.status).toBe(401);
+
+    const withInvalidJwt = await app.request('/api/news', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer invalid', 'Content-Type': 'application/json' },
+      body: JSON.stringify(validNews),
+    });
+    expect(withInvalidJwt.status).toBe(401);
+  });
+
+  it('POST /api/news accepts an empty image and generates a slug', async () => {
+    const app = await makeApp();
+    mockNewsModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) } as never);
+    mockNewsModel.create.mockResolvedValue({ _id: '1' } as never);
+
+    const res = await app.request('/api/news', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...validNews, title: 'Generated slug', slug: undefined, image: '' }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(mockNewsModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      image: '',
+      slug: 'generated-slug',
+    }));
+  });
+
+  it('POST /api/news accepts a null optional image', async () => {
+    const app = await makeApp();
+    mockNewsModel.findOne.mockReturnValue({ lean: vi.fn().mockResolvedValue(null) } as never);
+    mockNewsModel.create.mockResolvedValue({ _id: '1' } as never);
+
+    const res = await app.request('/api/news', {
+      method: 'POST',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...validNews, image: null }),
+    });
+
+    expect(res.status).toBe(201);
   });
 
   it('POST /api/news validates required fields', async () => {
@@ -318,6 +383,26 @@ describe('news routes', () => {
       body: JSON.stringify({ slug: 'taken-slug' }),
     });
     expect(duplicate.status).toBe(409);
+  });
+
+  it('PATCH /api/news/:id can clear the optional image', async () => {
+    const app = await makeApp();
+    mockNewsModel.findByIdAndUpdate.mockReturnValue({
+      lean: vi.fn().mockResolvedValue({ image: '' }),
+    } as never);
+
+    const res = await app.request('/api/news/507f1f77bcf86cd799439011', {
+      method: 'PATCH',
+      headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: '' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockNewsModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      expect.any(String),
+      { image: '' },
+      expect.any(Object),
+    );
   });
 
   it('DELETE /api/news/:id removes a document', async () => {
