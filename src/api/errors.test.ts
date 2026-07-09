@@ -66,12 +66,13 @@ describe('api errors', () => {
     expect(getErrorMessage(null, '自定义兜底')).toBe('自定义兜底');
   });
 
-  it('logApiError writes structured console output', () => {
+  it('logApiError writes structured console output outside production builds', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const error = new ApiError('失败', 500, 'req-1');
 
     logApiError('/blog', error);
 
+    // Vitest runs with import.meta.env.PROD === false, so logging is enabled.
     expect(spy).toHaveBeenCalledWith('API request failed', {
       path: '/blog',
       status: 500,

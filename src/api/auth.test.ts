@@ -185,7 +185,28 @@ describe('auth api helpers', () => {
     });
   });
 
+  it('logout sends a POST request with the stored token', async () => {
+    localStorage.setItem('liyuan_auth_token', 'my-token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ message: '已退出登录' }),
+    } as Response));
+
+    const { logout } = await importAuthApi();
+    await expect(logout()).resolves.toEqual({ message: '已退出登录' });
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer my-token',
+      },
+    });
+  });
+
   it('requestPasswordReset sends a POST request', async () => {
+    localStorage.setItem('liyuan_auth_token', 'stale-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       status: 200,

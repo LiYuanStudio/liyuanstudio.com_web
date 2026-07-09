@@ -32,23 +32,30 @@ export function setStoredToken(token: string | null): void {
   }
 }
 
+type FetchJsonOptions = RequestInit & {
+  auth?: boolean;
+};
+
 async function fetchJson<T>(
   path: string,
-  options?: RequestInit,
+  options?: FetchJsonOptions,
 ): Promise<T> {
-  const token = getStoredToken();
+  const { auth = true, ...requestInit } = options ?? {};
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options?.headers as Record<string, string>),
+    ...(requestInit.headers as Record<string, string>),
   };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  if (auth) {
+    const token = getStoredToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
   }
 
   let res: Response;
   try {
     res = await fetch(`${env.API_BASE_URL}${path}`, {
-      ...options,
+      ...requestInit,
       headers,
     });
   } catch {
@@ -72,6 +79,7 @@ export function sendRegistrationCode(
 ): Promise<MessageResponse> {
   return fetchJson<MessageResponse>('/auth/register/send-code', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ email, password, displayName }),
   });
 }
@@ -82,6 +90,7 @@ export function verifyRegistrationCode(
 ): Promise<AuthResponse> {
   return fetchJson<AuthResponse>('/auth/register/verify', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ email, code }),
   });
 }
@@ -89,6 +98,7 @@ export function verifyRegistrationCode(
 export function login(email: string, password: string): Promise<LoginResponse> {
   return fetchJson<LoginResponse>('/auth/login', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ email, password }),
   });
 }
@@ -99,6 +109,7 @@ export function verifyLoginTwoFactor(
 ): Promise<AuthResponse> {
   return fetchJson<AuthResponse>('/auth/2fa/login/verify', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ challengeToken, ...credential }),
   });
 }
@@ -106,6 +117,7 @@ export function verifyLoginTwoFactor(
 export function resendLoginTwoFactor(challengeToken: string): Promise<MessageResponse> {
   return fetchJson<MessageResponse>('/auth/2fa/login/resend', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ challengeToken }),
   });
 }
@@ -135,9 +147,16 @@ export function fetchMe(): Promise<{ user: User }> {
   return fetchJson<{ user: User }>('/auth/me');
 }
 
+export function logout(): Promise<MessageResponse> {
+  return fetchJson<MessageResponse>('/auth/logout', {
+    method: 'POST',
+  });
+}
+
 export function requestPasswordReset(email: string): Promise<MessageResponse> {
   return fetchJson<MessageResponse>('/auth/forgot-password', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ email }),
   });
 }
@@ -145,6 +164,7 @@ export function requestPasswordReset(email: string): Promise<MessageResponse> {
 export function resetPassword(token: string, password: string): Promise<MessageResponse> {
   return fetchJson<MessageResponse>('/auth/reset-password', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ token, password }),
   });
 }
