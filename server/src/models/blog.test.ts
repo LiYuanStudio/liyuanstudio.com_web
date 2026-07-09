@@ -39,7 +39,7 @@ describe('BlogModel', () => {
   });
 
   it('accepts a valid personal blog document', () => {
-    const doc = new BlogModel(validPost());
+    const doc = new BlogModel(validPost({ blogNumber: 1 }));
     const err = doc.validateSync();
     expect(err).toBeUndefined();
   });
