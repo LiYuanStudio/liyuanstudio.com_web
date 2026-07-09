@@ -65,6 +65,8 @@ npm run dev
 | `npm run build` | 前端 TypeScript 检查并构建 |
 | `npm run dev:api` | 启动 Hono 后端开发服务器 |
 | `npm run build:api` | 编译后端 TypeScript |
+| `npm run build:deploy-console` | 检查独立灰度发布控制台 |
+| `npm run test:deploy-console` | 测试灰度发布控制台 |
 | `npm run seed:api` | 向后端数据库写入示例新闻/博客数据 |
 | `npm run check:secrets` | 扫描仓库中可能的密钥泄漏 |
 
@@ -84,6 +86,8 @@ npm run dev
 第一位管理员需要在 MongoDB Atlas 中手动把对应用户文档的 `role` 改为 `admin`。前端不会决定用户是否为管理员；管理员权限以后端 JWT 和 `role` 为准。
 
 ## 部署
+
+生产发布采用两阶段流程：`main` 先部署受保护的前后端灰度候选，LA 管理员在独立控制台验收后才触发全量发布。配置和操作说明见 [`docs/gray-deployment.md`](docs/gray-deployment.md)。灰度控制台独立部署，不会进入官网构建产物。
 
 ### 前端（Cloudflare Pages）
 

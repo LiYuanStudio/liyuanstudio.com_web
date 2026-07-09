@@ -172,6 +172,41 @@ describe('ProfilePage', () => {
     expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['admin', '管理员'],
+    ['member', '成员'],
+    ['tourist', '游客'],
+  ] as const)('shows the %s role on public profile avatars', async (role, label) => {
+    vi.stubGlobal('fetch', mockFetch({ ...CURRENT_USER, role }));
+
+    renderPage('/LA/');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(`用户权限：${label}`)).toHaveTextContent(label);
+    });
+  });
+
+  it('shows the profile owner role instead of the signed-in visitor role', async () => {
+    localStorage.setItem('liyuan_auth_token', 'tourist-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/users/')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.includes('/blog/user/')) {
+        return { ok: true, status: 200, json: async () => [] } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ user: CURRENT_USER }) } as Response;
+    }));
+
+    renderPage('/LA/');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('用户权限：成员')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText('用户权限：游客')).not.toBeInTheDocument();
+  });
+
   it('renders markdown in public blog article details', async () => {
     vi.stubGlobal('fetch', mockBlogDetailFetch([
       '## Section title',
@@ -349,6 +384,17 @@ describe('ProfilePage', () => {
         bio: 'Updated bio',
       }),
     }));
+  });
+
+  it('shows the signed-in user role on the editable profile avatar', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    vi.stubGlobal('fetch', mockFetch(ADMIN_USER));
+
+    renderPage('/profile/');
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('用户权限：管理员')).toHaveTextContent('管理员');
+    });
   });
 
   it('does not overwrite avatar when saving profile after uploading a new avatar', async () => {

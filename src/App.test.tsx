@@ -34,7 +34,7 @@ describe('App', () => {
     localStorage.clear();
   });
 
-  it('renders the hero, products, news and blog sections', () => {
+  it('renders the hero, products, news and blog sections', async () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockReturnValue(new Promise(() => {}));
 
@@ -51,7 +51,7 @@ describe('App', () => {
     expect(githubLinks[1]).toHaveAttribute('href', 'https://github.com/PapyrusOR/Papyrus_CLI');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
-    expect(screen.getAllByText('敬请期待')).toHaveLength(1);
+    expect(await screen.findAllByText('敬请期待')).toHaveLength(1);
     expect(container.querySelector('.blog-card')).not.toBeInTheDocument();
   });
 
@@ -162,10 +162,30 @@ describe('Footer', () => {
 });
 
 describe('News component', () => {
-  it('renders heading and placeholder text', () => {
+  it('renders heading and empty placeholder', async () => {
+    mockFetchNews.mockResolvedValue([]);
     render(<News />);
     expect(screen.getByRole('heading', { name: '最新动态' })).toBeInTheDocument();
-    expect(screen.getByText('敬请期待')).toBeInTheDocument();
+    expect(await screen.findByText('敬请期待')).toBeInTheDocument();
+  });
+
+  it('renders news cards from the API', async () => {
+    mockFetchNews.mockResolvedValue([
+      {
+        _id: '1',
+        slug: 'site-refresh',
+        title: '官网视觉全新升级',
+        description: '更轻盈的界面',
+        tag: '品牌',
+        date: '2026-06-10',
+      },
+    ]);
+
+    render(<News />);
+
+    expect(await screen.findByText('官网视觉全新升级')).toBeInTheDocument();
+    expect(screen.getByText('更轻盈的界面')).toBeInTheDocument();
+    expect(screen.getByText('2026-06-10')).toBeInTheDocument();
   });
 });
 

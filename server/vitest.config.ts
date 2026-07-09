@@ -10,6 +10,7 @@ export default defineConfig({
     name: 'server',
     globals: true,
     environment: 'node',
+    fileParallelism: false,
     include: ['src/**/*.test.ts'],
     setupFiles: ['src/test/setup.ts'],
     coverage: {

@@ -16,6 +16,8 @@ export interface User {
   emailVerifyExpiresAt?: Date;
   passwordResetTokenHash?: string;
   passwordResetExpiresAt?: Date;
+  twoFactorEnabled: boolean;
+  twoFactorRecoveryCodeHashes: string[];
   avatar: string;
   bio: string;
   createdAt?: Date;
@@ -48,6 +50,8 @@ const UserSchema = new mongoose.Schema<User>(
     emailVerifyExpiresAt: { type: Date },
     passwordResetTokenHash: { type: String },
     passwordResetExpiresAt: { type: Date },
+    twoFactorEnabled: { type: Boolean, required: true, default: false },
+    twoFactorRecoveryCodeHashes: { type: [String], required: true, default: [] },
     avatar: { type: String, required: true, default: DEFAULT_AVATAR },
     bio: { type: String, default: '', trim: true, maxlength: 120 },
   },

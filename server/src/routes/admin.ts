@@ -15,6 +15,7 @@ const USER_PROJECTION = {
   emailVerifyExpiresAt: 0,
   passwordResetTokenHash: 0,
   passwordResetExpiresAt: 0,
+  twoFactorRecoveryCodeHashes: 0,
 };
 
 function validateRole(role: unknown): UserRole {

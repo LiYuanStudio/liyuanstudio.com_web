@@ -105,6 +105,7 @@
 .profile-avatar-overlay {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -119,6 +120,36 @@
 .profile-avatar-upload:hover .profile-avatar-overlay,
 .profile-avatar-upload:focus-within .profile-avatar-overlay {
   opacity: 1;
+}
+
+.profile-role-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  padding: 6px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.profile-role-badge-admin {
+  background: #1d1d1f;
+  color: #ffd86b;
+}
+
+.profile-role-badge-member {
+  background: #167a2f;
+  color: #ffffff;
+}
+
+.profile-role-badge-tourist {
+  background: rgba(255, 255, 255, 0.92);
+  color: #6e6e73;
 }
 
 .profile-kicker {
@@ -177,6 +208,49 @@
 .profile-muted,
 .profile-empty {
   color: #6e6e73;
+}
+
+.profile-security-description {
+  margin: 8px 0 0;
+  color: #6e6e73;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.profile-card-header .profile-security-on {
+  color: #137333;
+  font-weight: 600;
+}
+
+.profile-recovery-panel {
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 1px solid rgba(123, 225, 136, 0.5);
+  border-radius: 16px;
+  background: rgba(123, 225, 136, 0.08);
+}
+
+.profile-recovery-panel p {
+  color: #515154;
+  line-height: 1.5;
+}
+
+.profile-recovery-panel ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-recovery-panel code {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
+.profile-button.profile-button-danger {
+  background: #b42318;
+  color: #ffffff;
 }
 
 .profile-empty {
@@ -362,6 +436,13 @@
     width: 128px;
     height: 128px;
     border-radius: 24px;
+  }
+
+  .profile-role-badge {
+    right: 8px;
+    bottom: 8px;
+    padding: 5px 9px;
+    font-size: 12px;
   }
 
   .profile-card {

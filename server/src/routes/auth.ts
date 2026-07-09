@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt } from 'node:crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import bcrypt from 'bcryptjs';
@@ -6,8 +6,13 @@ import { UserModel } from '../models/user.js';
 import { PendingRegistrationModel } from '../models/pending-registration.js';
 import { AuthThrottleModel } from '../models/auth-throttle.js';
 import {
+  TwoFactorChallengeModel,
+  type TwoFactorChallengePurpose,
+} from '../models/two-factor-challenge.js';
+import {
   sendPasswordResetEmail,
   sendRegistrationCodeEmail,
+  sendTwoFactorCodeEmail,
 } from '../lib/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import { getRequestId, jsonError } from '../middleware/request-id.js';
@@ -35,6 +40,9 @@ const REGISTRATION_VERIFY_LOCK_MS = 10 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 10 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const TWO_FACTOR_CHALLENGE_TTL_MS = 10 * 60 * 1000;
+const TWO_FACTOR_MAX_ATTEMPTS = 5;
+const RECOVERY_CODE_COUNT = 10;
 const FORGOT_PASSWORD_COOLDOWN_MS = 60 * 1000;
 const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
 const FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
@@ -86,6 +94,9 @@ type UserForResponse = {
   avatar?: string;
   bio?: string;
   tokenVersion?: number;
+  passwordHash?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorRecoveryCodeHashes?: string[];
   save?: () => Promise<unknown>;
 };
 
@@ -148,6 +159,45 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function hashesMatch(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, 'hex');
+  const rightBuffer = Buffer.from(right, 'hex');
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function normalizeRecoveryCode(code: unknown): string {
+  if (typeof code !== 'string') {
+    throw new Error('恢复码格式不正确');
+  }
+  const normalized = code.trim().replace(/-/g, '').toUpperCase();
+  if (!/^[A-Z0-9_]{12}$/.test(normalized)) {
+    throw new Error('恢复码格式不正确');
+  }
+  return normalized;
+}
+
+function createRecoveryCodes(): { codes: string[]; hashes: string[] } {
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => {
+    const raw = randomBytes(6).toString('hex').toUpperCase();
+    return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+  });
+  return {
+    codes,
+    hashes: codes.map((code) => hashToken(normalizeRecoveryCode(code))),
+  };
+}
+
+function createChallengeCredentials() {
+  const challengeToken = randomBytes(32).toString('base64url');
+  const code = createRegistrationCode();
+  return {
+    challengeToken,
+    tokenHash: hashToken(challengeToken),
+    code,
+    codeHash: hashToken(code),
+  };
+}
+
 function logUsernameBackfillError(
   c: Context,
   details: UsernameBackfillError,
@@ -174,6 +224,7 @@ function serializeUser(user: UserForResponse) {
     username: user.username,
     role: normalizeUserRole(user.role),
     emailVerified: user.emailVerified,
+    twoFactorEnabled: user.twoFactorEnabled ?? false,
     avatar: user.avatar,
     bio: user.bio ?? '',
   };
@@ -277,6 +328,84 @@ async function recordForgotPasswordAttempt(key: string, now: Date): Promise<void
   throttle.attempts = (throttle.attempts ?? 0) + 1;
   throttle.lockedUntil = new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS);
   await throttle.save();
+}
+
+async function startTwoFactorChallenge(
+  user: UserForResponse,
+  purpose: TwoFactorChallengePurpose,
+) {
+  const credentials = createChallengeCredentials();
+  const now = new Date();
+  await TwoFactorChallengeModel.deleteMany({ userId: user._id, purpose });
+  const challenge = await TwoFactorChallengeModel.create({
+    userId: user._id,
+    tokenHash: credentials.tokenHash,
+    codeHash: credentials.codeHash,
+    purpose,
+    failedAttempts: 0,
+    expiresAt: new Date(now.getTime() + TWO_FACTOR_CHALLENGE_TTL_MS),
+    lastSentAt: now,
+  });
+  try {
+    await sendTwoFactorCodeEmail({
+      email: user.email,
+      displayName: user.displayName,
+      code: credentials.code,
+      purpose,
+    });
+  } catch (error) {
+    await TwoFactorChallengeModel.deleteOne({ _id: challenge._id });
+    throw error;
+  }
+  return credentials.challengeToken;
+}
+
+async function issueAuthResponse(user: UserForResponse) {
+  const token = await signToken({
+    id: user._id.toString(),
+    email: user.email,
+    role: normalizeUserRole(user.role),
+    tokenVersion: user.tokenVersion ?? 0,
+  });
+  return { token, user: serializeUser(user) };
+}
+
+async function verifyChallengeCode(
+  challengeToken: string,
+  purpose: TwoFactorChallengePurpose,
+  code: string,
+  userId?: string,
+) {
+  const challenge = await TwoFactorChallengeModel.findOne({
+    tokenHash: hashToken(challengeToken),
+    purpose,
+    expiresAt: { $gt: new Date() },
+    ...(userId ? { userId } : {}),
+  });
+  if (!challenge || challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
+    return null;
+  }
+  if (!hashesMatch(challenge.codeHash, hashToken(code))) {
+    challenge.failedAttempts += 1;
+    await challenge.save();
+    return null;
+  }
+  return TwoFactorChallengeModel.findOneAndDelete({
+    _id: challenge._id,
+    tokenHash: challenge.tokenHash,
+  });
+}
+
+function validateChallengeToken(token: unknown): string {
+  if (typeof token !== 'string' || token.length < 32 || token.length > 128) {
+    throw new Error('双重验证请求无效或已过期');
+  }
+  return token;
+}
+
+async function verifyCurrentPassword(user: UserForResponse, password: unknown): Promise<boolean> {
+  const validated = validatePassword(password);
+  return Boolean(user.passwordHash && await bcrypt.compare(validated, user.passwordHash));
 }
 
 app.post('/register/send-code', async (c) => {
@@ -505,13 +634,276 @@ app.post('/login', async (c) => {
     }
   }
 
-  const token = await signToken({
-    id: user._id.toString(),
-    email: user.email,
-    role: normalizeUserRole(user.role),
-    tokenVersion: user.tokenVersion ?? 0,
+  if (user.twoFactorEnabled) {
+    const sendKeys = [`2fa-send:email:${email}`, `2fa-send:ip:${getClientIp(c)}`];
+    if (await isForgotPasswordLimited(sendKeys, now)) {
+      return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
+    }
+    await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+    try {
+      const challengeToken = await startTwoFactorChallenge(user, 'login');
+      return c.json({
+        twoFactorRequired: true,
+        challengeToken,
+        emailHint: maskEmail(user.email),
+      });
+    } catch (error) {
+      logAuthEvent(c, 'error', 'auth.two_factor_email_failed', {
+        userId: user._id.toString(),
+        email: maskEmail(email),
+        ...getErrorSummary(error),
+      });
+      return jsonError(c, '双重验证邮件发送失败', 502);
+    }
+  }
+
+  return c.json(await issueAuthResponse(user));
+});
+
+app.post('/2fa/login/verify', async (c) => {
+  let challengeToken: string;
+  let code: string | undefined;
+  let recoveryCode: string | undefined;
+  try {
+    const body = await c.req.json();
+    challengeToken = validateChallengeToken(body.challengeToken);
+    if (body.recoveryCode !== undefined) {
+      recoveryCode = normalizeRecoveryCode(body.recoveryCode);
+    } else {
+      code = validateCode(body.code);
+    }
+  } catch (error) {
+    return badRequest(c, error);
+  }
+
+  const challenge = await TwoFactorChallengeModel.findOne({
+    tokenHash: hashToken(challengeToken),
+    purpose: 'login',
+    expiresAt: { $gt: new Date() },
   });
-  return c.json({ token, user: serializeUser(user) });
+  if (!challenge || challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
+    return jsonError(c, '验证码无效或已过期', 400);
+  }
+
+  let user: UserForResponse | null = null;
+  if (recoveryCode) {
+    const recoveryHash = hashToken(recoveryCode);
+    const recoveryUser = await UserModel.findById(challenge.userId);
+    const matchedHash = recoveryUser?.twoFactorRecoveryCodeHashes?.find(
+      (storedHash) => hashesMatch(storedHash, recoveryHash),
+    );
+    user = matchedHash ? await UserModel.findOneAndUpdate(
+      {
+        _id: challenge.userId,
+        twoFactorEnabled: true,
+        twoFactorRecoveryCodeHashes: matchedHash,
+      },
+      {
+        $pull: { twoFactorRecoveryCodeHashes: matchedHash },
+        $inc: { tokenVersion: 1 },
+      },
+      { new: true },
+    ) : null;
+    if (!user) {
+      challenge.failedAttempts += 1;
+      await challenge.save();
+      return jsonError(c, '恢复码无效', 400);
+    }
+    const consumed = await TwoFactorChallengeModel.findOneAndDelete({
+      _id: challenge._id,
+      tokenHash: challenge.tokenHash,
+    });
+    if (!consumed) {
+      return jsonError(c, '双重验证请求已使用', 409);
+    }
+  } else {
+    const consumed = await verifyChallengeCode(challengeToken, 'login', code ?? '');
+    if (!consumed) {
+      return jsonError(c, '验证码无效或已过期', 400);
+    }
+    user = await UserModel.findById(consumed.userId);
+  }
+
+  if (!user || !user.twoFactorEnabled) {
+    return jsonError(c, '用户不存在或双重验证已关闭', 401);
+  }
+  return c.json(await issueAuthResponse(await ensureUsernameForRequest(c, user, '2fa-login')));
+});
+
+app.post('/2fa/login/resend', async (c) => {
+  let challengeToken: string;
+  try {
+    const body = await c.req.json();
+    challengeToken = validateChallengeToken(body.challengeToken);
+  } catch (error) {
+    return badRequest(c, error);
+  }
+
+  const challenge = await TwoFactorChallengeModel.findOne({
+    tokenHash: hashToken(challengeToken),
+    purpose: 'login',
+    expiresAt: { $gt: new Date() },
+  });
+  if (!challenge) {
+    return jsonError(c, '双重验证请求无效或已过期', 400);
+  }
+  const user = await UserModel.findById(challenge.userId);
+  if (!user || !user.twoFactorEnabled) {
+    return jsonError(c, '双重验证请求无效或已过期', 400);
+  }
+  const now = new Date();
+  const sendKeys = [`2fa-send:email:${user.email}`, `2fa-send:ip:${getClientIp(c)}`];
+  if (
+    now.getTime() - challenge.lastSentAt.getTime() < REGISTRATION_RATE_LIMIT_MS ||
+    await isForgotPasswordLimited(sendKeys, now)
+  ) {
+    return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
+  }
+
+  const code = createRegistrationCode();
+  challenge.codeHash = hashToken(code);
+  challenge.failedAttempts = 0;
+  challenge.lastSentAt = now;
+  challenge.expiresAt = new Date(now.getTime() + TWO_FACTOR_CHALLENGE_TTL_MS);
+  await challenge.save();
+  await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+  try {
+    await sendTwoFactorCodeEmail({
+      email: user.email,
+      displayName: user.displayName,
+      code,
+      purpose: 'login',
+    });
+  } catch (error) {
+    return jsonError(c, '双重验证邮件发送失败', 502);
+  }
+  return c.json({ message: '验证码已重新发送。' });
+});
+
+async function beginAccountTwoFactorChallenge(
+  c: Context<{ Variables: AuthVariables }>,
+  purpose: Exclude<TwoFactorChallengePurpose, 'login'>,
+) {
+  const user = await UserModel.findById(c.get('userId'));
+  if (!user) {
+    return { response: jsonError(c, '用户不存在', 404) };
+  }
+  let password: unknown;
+  try {
+    const body = await c.req.json();
+    password = body.password;
+    if (!await verifyCurrentPassword(user, password)) {
+      return { response: jsonError(c, '密码错误', 401) };
+    }
+  } catch (error) {
+    return { response: badRequest(c, error) };
+  }
+  if (purpose === 'enable' && user.twoFactorEnabled) {
+    return { response: jsonError(c, '双重验证已启用', 409) };
+  }
+  if (purpose !== 'enable' && !user.twoFactorEnabled) {
+    return { response: jsonError(c, '双重验证尚未启用', 409) };
+  }
+  const now = new Date();
+  const sendKeys = [`2fa-settings:${user._id.toString()}`, `2fa-send:ip:${getClientIp(c)}`];
+  if (await isForgotPasswordLimited(sendKeys, now)) {
+    return { response: jsonError(c, '验证码发送过于频繁，请稍后再试', 429) };
+  }
+  await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+  try {
+    return { user, challengeToken: await startTwoFactorChallenge(user, purpose) };
+  } catch (error) {
+    return { response: jsonError(c, '双重验证邮件发送失败', 502) };
+  }
+}
+
+async function confirmAccountChallenge(
+  c: Context<{ Variables: AuthVariables }>,
+  purpose: Exclude<TwoFactorChallengePurpose, 'login'>,
+) {
+  let challengeToken: string;
+  let code: string;
+  try {
+    const body = await c.req.json();
+    challengeToken = validateChallengeToken(body.challengeToken);
+    code = validateCode(body.code);
+  } catch (error) {
+    return { response: badRequest(c, error) };
+  }
+  const challenge = await verifyChallengeCode(challengeToken, purpose, code, c.get('userId'));
+  if (!challenge) {
+    return { response: jsonError(c, '验证码无效或已过期', 400) };
+  }
+  const user = await UserModel.findById(c.get('userId'));
+  if (!user) {
+    return { response: jsonError(c, '用户不存在', 404) };
+  }
+  if (purpose === 'enable' && user.twoFactorEnabled) {
+    return { response: jsonError(c, '双重验证已启用', 409) };
+  }
+  if (purpose !== 'enable' && !user.twoFactorEnabled) {
+    return { response: jsonError(c, '双重验证尚未启用', 409) };
+  }
+  return { user };
+}
+
+app.post('/2fa/enable', requireAuth, async (c) => {
+  const result = await beginAccountTwoFactorChallenge(c, 'enable');
+  if ('response' in result) return result.response;
+  return c.json({
+    challengeToken: result.challengeToken,
+    message: '验证码已发送，请确认启用双重验证。',
+  });
+});
+
+app.post('/2fa/enable/confirm', requireAuth, async (c) => {
+  const result = await confirmAccountChallenge(c, 'enable');
+  if ('response' in result) return result.response;
+  const recovery = createRecoveryCodes();
+  result.user.twoFactorEnabled = true;
+  result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
+  result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
+  await result.user.save();
+  return c.json({ ...(await issueAuthResponse(result.user)), recoveryCodes: recovery.codes });
+});
+
+app.post('/2fa/disable', requireAuth, async (c) => {
+  const result = await beginAccountTwoFactorChallenge(c, 'disable');
+  if ('response' in result) return result.response;
+  return c.json({
+    challengeToken: result.challengeToken,
+    message: '验证码已发送，请确认关闭双重验证。',
+  });
+});
+
+app.post('/2fa/disable/confirm', requireAuth, async (c) => {
+  const result = await confirmAccountChallenge(c, 'disable');
+  if ('response' in result) return result.response;
+  result.user.twoFactorEnabled = false;
+  result.user.twoFactorRecoveryCodeHashes = [];
+  result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
+  await result.user.save();
+  await TwoFactorChallengeModel.deleteMany({ userId: result.user._id });
+  return c.json(await issueAuthResponse(result.user));
+});
+
+app.post('/2fa/recovery-codes', requireAuth, async (c) => {
+  const result = await beginAccountTwoFactorChallenge(c, 'regenerate');
+  if ('response' in result) return result.response;
+  return c.json({
+    challengeToken: result.challengeToken,
+    message: '验证码已发送，请确认重新生成恢复码。',
+  });
+});
+
+app.post('/2fa/recovery-codes/confirm', requireAuth, async (c) => {
+  const result = await confirmAccountChallenge(c, 'regenerate');
+  if ('response' in result) return result.response;
+  const recovery = createRecoveryCodes();
+  result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
+  result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
+  await result.user.save();
+  return c.json({ ...(await issueAuthResponse(result.user)), recoveryCodes: recovery.codes });
 });
 
 app.get('/me', requireAuth, async (c) => {

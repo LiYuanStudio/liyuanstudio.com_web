@@ -44,6 +44,46 @@ describe('auth middleware', () => {
     await expect(verifyToken('not.a.token')).rejects.toThrow();
   });
 
+  it('rejects tokens with invalid payload contents', async () => {
+    const { SignJWT } = await import('jose');
+    const secret = new TextEncoder().encode('test-secret-must-be-at-least-32-characters');
+    const badToken = await new SignJWT({
+      email: 123,
+      role: 'tourist',
+      tokenVersion: 0,
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('user-123')
+      .setIssuer('liyuanstudio')
+      .setAudience('liyuanstudio-api')
+      .setExpirationTime('1h')
+      .sign(secret);
+
+    await expect(verifyToken(badToken)).rejects.toThrow('无效的令牌内容');
+  });
+
+  it('normalizes legacy user roles and defaults missing tokenVersion', async () => {
+    const { SignJWT } = await import('jose');
+    const secret = new TextEncoder().encode('test-secret-must-be-at-least-32-characters');
+    const legacyToken = await new SignJWT({
+      email: 'legacy@example.com',
+      role: 'user',
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('legacy-1')
+      .setIssuer('liyuanstudio')
+      .setAudience('liyuanstudio-api')
+      .setExpirationTime('1h')
+      .sign(secret);
+
+    await expect(verifyToken(legacyToken)).resolves.toEqual({
+      id: 'legacy-1',
+      email: 'legacy@example.com',
+      role: 'tourist',
+      tokenVersion: 0,
+    });
+  });
+
   it('allows requests with a valid bearer token', async () => {
     const app = new Hono();
     app.use('/me', requireAuth);
@@ -112,5 +152,19 @@ describe('auth middleware', () => {
     });
 
     expect(res.status).toBe(403);
+  });
+
+  it('returns 401 when token verification throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const app = new Hono();
+    app.use('/me', requireAuth);
+    app.get('/me', (c) => c.json({ ok: true }));
+
+    const res = await app.request('/me', {
+      headers: { Authorization: 'Bearer not.a.token' },
+    });
+
+    expect(res.status).toBe(401);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('token_verification_failed'));
   });
 });

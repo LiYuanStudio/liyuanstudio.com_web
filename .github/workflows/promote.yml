@@ -1,0 +1,252 @@
+name: Promote gray candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: GitHub gray deployment ID
+        required: true
+        type: string
+      sha:
+        description: Approved commit SHA
+        required: true
+        type: string
+      approved_by:
+        description: LA administrator recorded by the deploy console
+        required: true
+        type: string
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  promote:
+    name: Verify and deploy approved commit
+    runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: 22
+      CLOUDFLARE_PROJECT_NAME: liyuanstudiocom
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID || 'team_I2l4qs9iDsMVQTTvVZ3kNg5n' }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || 'prj_GWA2MHwmjPLxbQw3vqqWthutWY7Z' }}
+      APPROVED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      APPROVED_SHA: ${{ inputs.sha }}
+      APPROVED_BY: ${{ inputs.approved_by }}
+
+    steps:
+      - name: Verify latest gray deployment
+        id: verify
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deploymentId = Number(process.env.APPROVED_DEPLOYMENT_ID);
+            const sha = process.env.APPROVED_SHA;
+            if (!Number.isSafeInteger(deploymentId) || deploymentId <= 0 || !/^[0-9a-f]{40}$/i.test(sha)) {
+              core.setFailed('Invalid deployment ID or commit SHA');
+              return;
+            }
+
+            const latest = await github.rest.repos.listDeployments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment: 'gray',
+              per_page: 1,
+            });
+            const candidate = latest.data[0];
+            if (!candidate || candidate.id !== deploymentId || candidate.sha !== sha) {
+              core.setFailed('Approval is not for the latest gray deployment');
+              return;
+            }
+
+            const statuses = await github.rest.repos.listDeploymentStatuses({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deploymentId,
+              per_page: 1,
+            });
+            if (statuses.data[0]?.state !== 'success' || !statuses.data[0]?.environment_url) {
+              core.setFailed('The latest gray deployment is not ready');
+              return;
+            }
+
+            const production = await github.rest.repos.listDeployments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment: 'production',
+              sha,
+              per_page: 10,
+            });
+            for (const previous of production.data) {
+              const previousStatuses = await github.rest.repos.listDeploymentStatuses({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: previous.id,
+                per_page: 1,
+              });
+              const state = previousStatuses.data[0]?.state;
+              if (state === 'success' || state === 'pending' || state === 'in_progress') {
+                core.setFailed('This commit is already released or has an active production deployment');
+                return;
+              }
+            }
+
+      - name: Check production deployment secrets
+        run: |
+          missing_names=()
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID VERCEL_TOKEN; do
+            if [ -z "${!name}" ]; then
+              missing_names+=("$name")
+            fi
+          done
+          if [ "${#missing_names[@]}" -ne 0 ]; then
+            echo "::error::Missing production deployment secrets: ${missing_names[*]}"
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Create production deployment
+        id: production_deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: process.env.APPROVED_SHA,
+              environment: 'production',
+              auto_merge: false,
+              required_contexts: [],
+              description: `Approved through LA deploy console by ${process.env.APPROVED_BY}`,
+              payload: {
+                gray_deployment_id: Number(process.env.APPROVED_DEPLOYMENT_ID),
+                approved_by: process.env.APPROVED_BY,
+              },
+              transient_environment: false,
+              production_environment: true,
+            });
+            core.setOutput('id', deployment.data.id);
+
+      - name: Mark production deployment pending
+        uses: actions/github-script@v7
+        env:
+          PRODUCTION_DEPLOYMENT_ID: ${{ steps.production_deployment.outputs.id }}
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.PRODUCTION_DEPLOYMENT_ID),
+              state: 'pending',
+              environment: 'production',
+              description: 'Validating approved gray candidate',
+              auto_inactive: false,
+            });
+
+      - name: Checkout approved commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security scan
+        run: npm run check:secrets
+
+      - name: Run tests
+        run: npm test
+        env:
+          VITE_API_BASE_URL: /api
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build API
+        run: npm run build:api
+
+      - name: Build deploy console
+        run: npm run build:deploy-console
+
+      - name: Validate clean deployment tree
+        run: npm run guard:clean-deploy
+
+      - name: Deploy API to Vercel production
+        id: vercel_production
+        run: |
+          production_url="$(npx --yes vercel@50.28.0 deploy --prod --yes --token "$VERCEL_TOKEN")"
+          echo "url=$production_url" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy frontend to Cloudflare Pages production
+        id: cloudflare_production
+        run: npx wrangler pages deploy dist --project-name "$CLOUDFLARE_PROJECT_NAME" --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Mark production deployment successful
+        id: production_success
+        if: success()
+        uses: actions/github-script@v7
+        env:
+          PRODUCTION_DEPLOYMENT_ID: ${{ steps.production_deployment.outputs.id }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://liyuanstudio.com' }}
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.PRODUCTION_DEPLOYMENT_ID),
+              state: 'success',
+              environment: 'production',
+              environment_url: process.env.PRODUCTION_URL,
+              description: 'Approved gray candidate released to production',
+              auto_inactive: true,
+            });
+
+      - name: Deactivate promoted gray candidate
+        if: steps.production_success.outcome == 'success'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.APPROVED_DEPLOYMENT_ID),
+              state: 'inactive',
+              environment: 'gray',
+              description: 'Candidate promoted to production',
+              auto_inactive: false,
+            });
+
+      - name: Mark production deployment failed
+        if: always() && steps.production_deployment.outputs.id && steps.production_success.outcome != 'success'
+        uses: actions/github-script@v7
+        env:
+          PRODUCTION_DEPLOYMENT_ID: ${{ steps.production_deployment.outputs.id }}
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.PRODUCTION_DEPLOYMENT_ID),
+              state: 'failure',
+              environment: 'production',
+              description: 'Production deployment failed; gray candidate was not released',
+              auto_inactive: false,
+            });

@@ -10,6 +10,7 @@ function validPost(overrides = {}) {
     excerpt: 'Summary',
     category: 'Tech',
     tags: ['React', 'Product'],
+    blogNumber: 1,
     slug: 'unique-slug',
     content: 'Full content',
     image: 'https://example.com/cover.png',
@@ -38,9 +39,20 @@ describe('BlogModel', () => {
   });
 
   it('accepts a valid personal blog document', () => {
-    const doc = new BlogModel(validPost());
+    const doc = new BlogModel(validPost({ blogNumber: 1 }));
     const err = doc.validateSync();
     expect(err).toBeUndefined();
+  });
+
+  it('accepts legacy posts that do not have a blog number yet', () => {
+    const { blogNumber: _blogNumber, ...legacyPost } = validPost();
+    const doc = new BlogModel(legacyPost);
+    expect(doc.validateSync()).toBeUndefined();
+  });
+
+  it('rejects a non-positive blog number', () => {
+    const doc = new BlogModel(validPost({ blogNumber: 0 }));
+    expect(doc.validateSync()?.errors.blogNumber).toBeDefined();
   });
 
   it('allows optional excerpt, category, image and readTime', () => {
