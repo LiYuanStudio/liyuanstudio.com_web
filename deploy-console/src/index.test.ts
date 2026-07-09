@@ -39,7 +39,7 @@ function githubResponses(options?: {
   grayId?: number;
   graySha?: string;
   grayState?: string;
-  promoted?: boolean;
+  productionState?: string;
   upstreamUrl?: string;
 }) {
   const grayId = options?.grayId ?? 42;
@@ -56,12 +56,12 @@ function githubResponses(options?: {
       }]);
     }
     if (url.pathname.endsWith('/deployments') && url.searchParams.get('environment') === 'production') {
-      return options?.promoted
+      return options?.productionState
         ? json([{ id: 99, sha: graySha, created_at: '2026-07-09T11:00:00Z' }])
         : json([]);
     }
     if (url.pathname.endsWith('/deployments/99/statuses')) {
-      return json([{ state: 'success', environment_url: 'https://liyuanstudio.com' }]);
+      return json([{ state: options?.productionState, environment_url: 'https://liyuanstudio.com' }]);
     }
     if (url.pathname.endsWith('/actions/workflows/promote.yml/dispatches') && init?.method === 'POST') {
       return new Response(null, { status: 204 });
@@ -137,6 +137,7 @@ describe('deploy console', () => {
         sha: 'abc123',
         createdAt: '2026-07-09T10:00:00Z',
         state: 'success',
+        promotionState: null,
         promoted: false,
         previewUrl: 'https://gray.example.com/',
       },
@@ -251,6 +252,38 @@ describe('deploy console', () => {
       env,
     );
     expect(staleResponse.status).toBe(409);
+  });
+
+  it('rejects a duplicate approval while production is pending', async () => {
+    const { requests } = installFetch({
+      github: githubResponses({ productionState: 'pending' }),
+    });
+    const cookie = await login();
+    const dashboard = await app.request(
+      'https://console.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+
+    const response = await app.request(
+      'https://console.example.com/api/promote',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          'Content-Type': 'application/json',
+          Origin: env.CONSOLE_ORIGIN,
+          'X-CSRF-Token': csrf,
+        },
+        body: JSON.stringify({ deploymentId: 42, sha: 'abc123' }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: '该版本正在全量发布' });
+    expect(requests.some(({ url }) => url.pathname.endsWith('/dispatches'))).toBe(false);
   });
 
   it('proxies a protected preview without forwarding sessions or leaking bypass headers', async () => {

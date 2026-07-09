@@ -250,6 +250,7 @@ app.get('/api/deployment', async (c) => {
           sha: deployment.sha,
           createdAt: deployment.createdAt,
           state: deployment.state,
+          promotionState: deployment.promotionState,
           promoted: deployment.promoted,
           previewUrl: validVercelPreview(deployment)
             ? `${normalizedOrigin(c.env.PREVIEW_ORIGIN)}/`
@@ -292,6 +293,9 @@ app.post('/api/promote', async (c) => {
   }
   if (latest.promoted) {
     return c.json({ error: '该版本已经全量发布' }, 409);
+  }
+  if (latest.promotionState === 'pending' || latest.promotionState === 'in_progress') {
+    return c.json({ error: '该版本正在全量发布' }, 409);
   }
 
   await dispatchPromotion(c.env, latest, admin);
