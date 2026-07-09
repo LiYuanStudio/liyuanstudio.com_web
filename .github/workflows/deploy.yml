@@ -1,22 +1,23 @@
-name: Deploy
+name: Deploy gray candidate
 
 on:
   push:
     branches: [main]
 
 concurrency:
-  group: deploy-main
-  cancel-in-progress: true
+  group: release-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
 
 jobs:
   deploy:
-    name: Security check, build, and deploy
+    name: Build and deploy protected gray candidate
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       NODE_VERSION: 22
-      CLOUDFLARE_PROJECT_NAME: liyuanstudiocom
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID || 'team_I2l4qs9iDsMVQTTvVZ3kNg5n' }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || 'prj_GWA2MHwmjPLxbQw3vqqWthutWY7Z' }}
 
@@ -36,11 +37,11 @@ jobs:
       - name: Security scan
         run: npm run check:secrets
 
-      - name: Check deployment secrets
+      - name: Check gray deployment secrets
         id: deployment_secrets
         run: |
           missing_names=()
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID VERCEL_TOKEN; do
+          for name in VERCEL_TOKEN; do
             if [ -z "${!name}" ]; then
               missing_names+=("$name")
             fi
@@ -53,9 +54,10 @@ jobs:
             echo "missing_names=${missing_names[*]}" >> "$GITHUB_OUTPUT"
           fi
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Run tests
+        run: npm test
 
       - name: Build frontend
         run: npm run build
@@ -69,17 +71,68 @@ jobs:
       - name: Skip deployment
         if: steps.deployment_secrets.outputs.can_deploy != 'true'
         run: |
-          echo "::notice::Skipping deployment because required deployment secrets are not configured: ${{ steps.deployment_secrets.outputs.missing_names }}. Secret scan and builds completed successfully."
+          echo "::notice::Skipping gray deployment because required deployment secrets are not configured: ${{ steps.deployment_secrets.outputs.missing_names }}. Scans, tests, and builds completed successfully."
 
-      - name: Deploy to Cloudflare Pages
+      - name: Create gray deployment
+        id: gray_deployment
         if: steps.deployment_secrets.outputs.can_deploy == 'true'
-        run: npx wrangler pages deploy dist --project-name "$CLOUDFLARE_PROJECT_NAME" --branch main
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'gray',
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Protected LA admin gray candidate',
+              transient_environment: true,
+              production_environment: false,
+            });
+            core.setOutput('id', deployment.data.id);
 
-      - name: Deploy to Vercel
+      - name: Deploy full application to Vercel Preview
+        id: vercel_preview
         if: steps.deployment_secrets.outputs.can_deploy == 'true'
-        run: npx vercel deploy --prod --yes --token "$VERCEL_TOKEN"
+        run: |
+          preview_url="$(npx --yes vercel@latest deploy --yes --token "$VERCEL_TOKEN" --build-env VITE_API_BASE_URL=/api)"
+          echo "url=$preview_url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Mark gray deployment successful
+        if: steps.deployment_secrets.outputs.can_deploy == 'true' && success()
+        uses: actions/github-script@v7
+        env:
+          DEPLOYMENT_ID: ${{ steps.gray_deployment.outputs.id }}
+          PREVIEW_URL: ${{ steps.vercel_preview.outputs.url }}
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.DEPLOYMENT_ID),
+              state: 'success',
+              environment: 'gray',
+              environment_url: process.env.PREVIEW_URL,
+              description: 'Ready for LA admin review',
+              auto_inactive: false,
+            });
+
+      - name: Mark gray deployment failed
+        if: steps.deployment_secrets.outputs.can_deploy == 'true' && failure() && steps.gray_deployment.outputs.id
+        uses: actions/github-script@v7
+        env:
+          DEPLOYMENT_ID: ${{ steps.gray_deployment.outputs.id }}
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number(process.env.DEPLOYMENT_ID),
+              state: 'failure',
+              environment: 'gray',
+              description: 'Gray deployment failed',
+              auto_inactive: false,
+            });

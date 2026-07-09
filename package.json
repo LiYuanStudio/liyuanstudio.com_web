@@ -7,21 +7,24 @@
     "node": ">=22"
   },
   "workspaces": [
-    "server"
+    "server",
+    "deploy-console"
   ],
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "dev:web": "vite",
     "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build",
     "preview": "vite preview",
-    "test": "vitest run --config=vitest.config.ts && vitest run --config=server/vitest.config.ts",
+    "test": "vitest run --config=vitest.config.ts && vitest run --config=server/vitest.config.ts && npm run test --workspace=deploy-console",
     "test:web": "vitest run --config=vitest.config.ts",
     "test:api": "vitest run --config=server/vitest.config.ts",
+    "test:deploy-console": "npm run test --workspace=deploy-console",
     "coverage": "vitest run --coverage --config=vitest.config.ts && vitest run --coverage --config=server/vitest.config.ts",
     "coverage:web": "vitest run --coverage --config=vitest.config.ts",
     "coverage:api": "vitest run --coverage --config=server/vitest.config.ts",
     "dev:api": "npm run dev --workspace=server",
     "build:api": "npm run build --workspace=server",
+    "build:deploy-console": "npm run typecheck --workspace=deploy-console",
     "start:api": "npm run start --workspace=server",
     "seed:api": "npm run seed --workspace=server",
     "cleanup-mock:api": "npm run cleanup-mock-data --workspace=server",
