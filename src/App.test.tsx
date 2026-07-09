@@ -34,7 +34,7 @@ describe('App', () => {
     localStorage.clear();
   });
 
-  it('renders the hero, products, news and blog sections', () => {
+  it('renders the hero, products, news and blog sections', async () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockReturnValue(new Promise(() => {}));
 
@@ -51,7 +51,7 @@ describe('App', () => {
     expect(githubLinks[1]).toHaveAttribute('href', 'https://github.com/PapyrusOR/Papyrus_CLI');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
-    expect(screen.getAllByText('敬请期待')).toHaveLength(1);
+    expect(await screen.findAllByText('敬请期待')).toHaveLength(1);
     expect(container.querySelector('.blog-card')).not.toBeInTheDocument();
   });
 
