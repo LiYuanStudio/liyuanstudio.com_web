@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider, useAuth } from './AuthContext.js';
@@ -25,6 +26,25 @@ function TestConsumer() {
   }
 
   return <span data-testid="unauthenticated">Unauthenticated</span>;
+}
+
+function TwoFactorLoginConsumer() {
+  const { state, login, completeLoginTwoFactor } = useAuth();
+  const [challengeToken, setChallengeToken] = useState('');
+  if (state.status === 'loading') return <span>Loading</span>;
+  if (state.status === 'authenticated') return <span>{state.user.email}</span>;
+  return challengeToken ? (
+    <button onClick={() => completeLoginTwoFactor(challengeToken, { code: '123456' })}>
+      Verify 2FA
+    </button>
+  ) : (
+    <button onClick={async () => {
+      const challenge = await login('hello@example.com', 'password123');
+      setChallengeToken(challenge?.challengeToken ?? '');
+    }}>
+      Login with 2FA
+    </button>
+  );
 }
 
 describe('AuthProvider', () => {
@@ -176,5 +196,47 @@ describe('AuthProvider', () => {
       expect(screen.getByTestId('unauthenticated')).toBeInTheDocument();
     });
     expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
+  });
+
+  it('does not authenticate until the email two-factor challenge succeeds', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          twoFactorRequired: true,
+          challengeToken: 'challenge-token',
+          emailHint: 'he***@example.com',
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          token: 'verified-token',
+          user: {
+            id: '1',
+            email: 'hello@example.com',
+            displayName: 'Hello',
+            role: 'tourist',
+          },
+        }),
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AuthProvider>
+        <TwoFactorLoginConsumer />
+      </AuthProvider>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Login with 2FA' }));
+
+    expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify 2FA' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('hello@example.com')).toBeInTheDocument();
+      expect(localStorage.getItem('liyuan_auth_token')).toBe('verified-token');
+    });
   });
 });

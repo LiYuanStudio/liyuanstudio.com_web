@@ -688,15 +688,22 @@ app.post('/2fa/login/verify', async (c) => {
   let user: UserForResponse | null = null;
   if (recoveryCode) {
     const recoveryHash = hashToken(recoveryCode);
-    user = await UserModel.findOneAndUpdate(
+    const recoveryUser = await UserModel.findById(challenge.userId);
+    const matchedHash = recoveryUser?.twoFactorRecoveryCodeHashes?.find(
+      (storedHash) => hashesMatch(storedHash, recoveryHash),
+    );
+    user = matchedHash ? await UserModel.findOneAndUpdate(
       {
         _id: challenge.userId,
         twoFactorEnabled: true,
-        twoFactorRecoveryCodeHashes: recoveryHash,
+        twoFactorRecoveryCodeHashes: matchedHash,
       },
-      { $pull: { twoFactorRecoveryCodeHashes: recoveryHash } },
+      {
+        $pull: { twoFactorRecoveryCodeHashes: matchedHash },
+        $inc: { tokenVersion: 1 },
+      },
       { new: true },
-    );
+    ) : null;
     if (!user) {
       challenge.failedAttempts += 1;
       await challenge.save();
@@ -830,6 +837,12 @@ async function confirmAccountChallenge(
   const user = await UserModel.findById(c.get('userId'));
   if (!user) {
     return { response: jsonError(c, '用户不存在', 404) };
+  }
+  if (purpose === 'enable' && user.twoFactorEnabled) {
+    return { response: jsonError(c, '双重验证已启用', 409) };
+  }
+  if (purpose !== 'enable' && !user.twoFactorEnabled) {
+    return { response: jsonError(c, '双重验证尚未启用', 409) };
   }
   return { user };
 }

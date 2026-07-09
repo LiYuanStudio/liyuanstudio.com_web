@@ -72,7 +72,7 @@ describe('auth api helpers', () => {
     });
   });
 
-  it('login sends a POST request and stores token', async () => {
+  it('login returns credentials without storing a token before context accepts them', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -90,14 +90,70 @@ describe('auth api helpers', () => {
     } as Response));
 
     const { login, getStoredToken } = await importAuthApi();
-    await login('login@example.com', 'password123');
+    const response = await login('login@example.com', 'password123');
 
-    expect(getStoredToken()).toBe('xyz789');
+    expect(response).toEqual(expect.objectContaining({ token: 'xyz789' }));
+    expect(getStoredToken()).toBeNull();
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'login@example.com', password: 'password123' }),
     });
+  });
+
+  it('verifies a two-factor login challenge without an existing bearer token', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        token: 'verified-token',
+        user: { id: '2', displayName: 'Login', role: 'tourist' },
+      }),
+    } as Response));
+
+    const { verifyLoginTwoFactor } = await importAuthApi();
+    const response = await verifyLoginTwoFactor('challenge-token', { code: '123456' });
+
+    expect(response.token).toBe('verified-token');
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'challenge-token', code: '123456' }),
+    });
+  });
+
+  it('starts and confirms an authenticated two-factor settings action', async () => {
+    localStorage.setItem('liyuan_auth_token', 'my-token');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ challengeToken: 'settings-token', message: '已发送' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          token: 'new-token',
+          user: { id: '2', displayName: 'Login', role: 'tourist', twoFactorEnabled: true },
+          recoveryCodes: ['AAAA-BBBB-CCCC'],
+        }),
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { beginTwoFactorAction, confirmTwoFactorAction } = await importAuthApi();
+    await beginTwoFactorAction('enable', 'password123');
+    const response = await confirmTwoFactorAction('enable', 'settings-token', '123456');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://api.example.com/auth/2fa/enable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer my-token' },
+      body: JSON.stringify({ password: 'password123' }),
+    });
+    expect(response).toEqual(expect.objectContaining({
+      recoveryCodes: ['AAAA-BBBB-CCCC'],
+    }));
   });
 
   it('fetchMe sends Authorization header when token is stored', async () => {
