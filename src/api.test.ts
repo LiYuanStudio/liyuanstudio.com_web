@@ -30,7 +30,10 @@ describe('api helpers', () => {
     const data = await fetchNews();
     expect(data).toHaveLength(1);
     expect(data[0].title).toBe('Hello');
-    expect(fetch).toHaveBeenCalledWith('https://api.example.com/news');
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.example.com/news',
+      expect.objectContaining({ headers: {} }),
+    );
   });
 
   it('fetchBlogPosts resolves parsed JSON', async () => {
@@ -115,7 +118,10 @@ describe('api helpers', () => {
 
     const { fetchNews } = await importApi();
     await fetchNews();
-    expect(fetch).toHaveBeenCalledWith('/api/news');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/news',
+      expect.objectContaining({ headers: {} }),
+    );
   });
 });
 
