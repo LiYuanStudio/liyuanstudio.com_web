@@ -16,12 +16,36 @@ import {
 } from '../api/blog.js';
 import { useAuth } from '../context/AuthContext.js';
 import { getCroppedImg } from '../lib/crop-image.js';
-import type { BlogPost, BlogPostInput, BlogStatus, ProfileUpdateInput, User } from '../types.js';
+import type {
+  BlogPost,
+  BlogPostInput,
+  BlogStatus,
+  ProfileUpdateInput,
+  User,
+  UserRole,
+} from '../types.js';
 import { UserAvatar } from '../components/UserAvatar.js';
 import './profile.css';
 
 const BIO_MAX_LENGTH = 120;
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024;
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: '管理员',
+  member: '成员',
+  tourist: '游客',
+};
+
+function ProfileRoleBadge({ role }: { role: UserRole }) {
+  return (
+    <span
+      className={`profile-role-badge profile-role-badge-${role}`}
+      aria-label={`用户权限：${ROLE_LABELS[role]}`}
+    >
+      {ROLE_LABELS[role]}
+    </span>
+  );
+}
 
 function canWriteBlog(user?: User): boolean {
   return user?.role === 'member' || user?.role === 'admin';
@@ -382,6 +406,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
           <section className="profile-hero" aria-labelledby="profile-title">
             <div className="profile-avatar-frame">
               <UserAvatar src={profile.avatar} displayName={profile.displayName} />
+              <ProfileRoleBadge role={profile.role} />
             </div>
             <div>
               <h1 id="profile-title">{profile.displayName}</h1>
@@ -598,6 +623,7 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
             <div className="profile-avatar-frame">
               <UserAvatar src={user.avatar} displayName={user.displayName} alt="个人头像预览" />
               <div className="profile-avatar-overlay" aria-hidden="true"><span>更换头像</span></div>
+              <ProfileRoleBadge role={user.role} />
             </div>
           </label>
           <input ref={fileInputRef} id="profile-avatar-input" data-testid="avatar-input" type="file" accept="image/*" onChange={handleFileChange} hidden />
