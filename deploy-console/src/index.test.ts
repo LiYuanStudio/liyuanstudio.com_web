@@ -164,6 +164,22 @@ describe('deploy console', () => {
     expect(await response.text()).toContain('管理员权限无效');
   });
 
+  it('sends unauthenticated gray visitors to the deploy console instead of rendering a cross-origin login form', async () => {
+    const response = await app.request('https://gray.example.com/', undefined, env);
+
+    expect(response.status).toBe(401);
+    await expect(response.text()).resolves.toContain('href="https://console.example.com"');
+  });
+
+  it('allows the Cloudflare Insights beacon while retaining a restrictive content security policy', async () => {
+    const response = await app.request('https://console.example.com/', undefined, env);
+    const policy = response.headers.get('content-security-policy');
+
+    expect(policy).toContain("script-src 'self' https://static.cloudflareinsights.com");
+    expect(policy).toContain("connect-src 'self' https://cloudflareinsights.com");
+    expect(policy).toContain("object-src 'none'");
+  });
+
   it('expires the short-lived console session', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-09T10:00:00Z'));
