@@ -38,9 +38,15 @@ describe('BlogModel', () => {
   });
 
   it('accepts a valid personal blog document', () => {
-    const doc = new BlogModel(validPost());
+    const doc = new BlogModel(validPost({ blogNumber: 1 }));
     const err = doc.validateSync();
     expect(err).toBeUndefined();
+  });
+
+  it('rejects a non-positive blog number', () => {
+    const doc = new BlogModel(validPost({ blogNumber: 0 }));
+    const err = doc.validateSync();
+    expect(err?.errors.blogNumber).toBeDefined();
   });
 
   it('allows optional excerpt, category, image and readTime', () => {

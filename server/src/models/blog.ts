@@ -8,6 +8,7 @@ export interface BlogPost {
   excerpt?: string;
   category?: string;
   tags: string[];
+  blogNumber?: number;
   slug: string;
   content: string;
   image?: string;
@@ -38,6 +39,7 @@ const BlogSchema = new mongoose.Schema<BlogPost>(
         message: '标签最多 8 个，每个最多 20 个字符',
       },
     },
+    blogNumber: { type: Number, min: 1, unique: true, sparse: true, index: true },
     slug: {
       type: String,
       required: true,
