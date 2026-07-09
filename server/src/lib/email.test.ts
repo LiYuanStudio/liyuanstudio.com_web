@@ -134,4 +134,133 @@ describe('email helpers', () => {
     expect(body.html).toContain('654321');
     expect(body.html).toContain('Hello &lt;User&gt;');
   });
+
+  it('builds verification urls from APP_URL', async () => {
+    const { buildVerificationUrl } = await importEmail();
+
+    expect(buildVerificationUrl('tok en')).toBe(
+      'https://liyuanstudio.com/app/verify-email/?token=tok%20en',
+    );
+  });
+
+  it('logs verification links in mock email mode', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const { sendVerificationEmail } = await importEmail();
+
+    await sendVerificationEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      token: 'plain-token',
+    });
+
+    expect(log).toHaveBeenCalledWith(
+      '[email:mock] 验证 hello@example.com: https://liyuanstudio.com/app/verify-email/?token=plain-token',
+    );
+  });
+
+  it('sends verification emails through Resend', async () => {
+    vi.stubEnv('EMAIL_PROVIDER', 'resend');
+    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    } as Response));
+    const { sendVerificationEmail } = await importEmail();
+
+    await sendVerificationEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello <User>',
+      token: 'plain-token',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('https://api.resend.com/emails', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('验证你的 LiYuan Studio 账号'),
+    }));
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(body.html).toContain('Hello &lt;User&gt;');
+    expect(body.text).toContain('https://liyuanstudio.com/app/verify-email/?token=plain-token');
+  });
+
+  it('rejects unsupported email providers', async () => {
+    vi.stubEnv('EMAIL_PROVIDER', 'mailgun');
+    const { sendPasswordResetEmail, sendRegistrationCodeEmail, sendVerificationEmail } = await importEmail();
+
+    await expect(sendPasswordResetEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      token: 'tok',
+    })).rejects.toThrow('不支持的邮件服务商：mailgun');
+
+    await expect(sendRegistrationCodeEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      code: '123456',
+    })).rejects.toThrow('不支持的邮件服务商：mailgun');
+
+    await expect(sendVerificationEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      token: 'tok',
+    })).rejects.toThrow('不支持的邮件服务商：mailgun');
+  });
+
+  it('rejects Resend mode when API credentials are missing', async () => {
+    vi.stubEnv('EMAIL_PROVIDER', 'resend');
+    vi.stubEnv('RESEND_API_KEY', '');
+    vi.stubEnv('EMAIL_FROM', '');
+    const { sendPasswordResetEmail, sendRegistrationCodeEmail, sendVerificationEmail } = await importEmail();
+
+    await expect(sendPasswordResetEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      token: 'tok',
+    })).rejects.toThrow('缺少 Resend 邮件配置');
+
+    await expect(sendRegistrationCodeEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      code: '123456',
+    })).rejects.toThrow('缺少 Resend 邮件配置');
+
+    await expect(sendVerificationEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      token: 'tok',
+    })).rejects.toThrow('缺少 Resend 邮件配置');
+  });
+
+  it('throws when Resend returns a non-ok response', async () => {
+    vi.stubEnv('EMAIL_PROVIDER', 'resend');
+    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+    } as Response));
+    const {
+      sendPasswordResetEmail,
+      sendRegistrationCodeEmail,
+      sendVerificationEmail,
+    } = await importEmail();
+
+    await expect(sendPasswordResetEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      token: 'tok',
+    })).rejects.toThrow('Resend 邮件发送失败，状态码 502');
+
+    await expect(sendRegistrationCodeEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      code: '123456',
+    })).rejects.toThrow('Resend 邮件发送失败，状态码 502');
+
+    await expect(sendVerificationEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      token: 'tok',
+    })).rejects.toThrow('Resend 邮件发送失败，状态码 502');
+  });
 });

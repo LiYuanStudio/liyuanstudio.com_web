@@ -16,6 +16,7 @@ describe('promote-admins script', () => {
   let disconnectSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.resetModules();
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
     vi.stubEnv('API_KEY', 'secret-key');
     vi.stubEnv('JWT_SECRET', 'test-secret-must-be-at-least-32-characters');
@@ -60,5 +61,37 @@ describe('promote-admins script', () => {
     expect(logSpy).toHaveBeenCalledWith('Promoted 1 user(s) to admin.');
     expect(logSpy).toHaveBeenCalledWith('Repaired 1 admin username(s).');
     expect(disconnectSpy).toHaveBeenCalled();
+  });
+
+  it('exits early when ADMIN_EMAILS is empty', async () => {
+    vi.stubEnv('ADMIN_EMAILS', '');
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const { promoteAdmins } = await import('./promote-admins.js');
+    await promoteAdmins();
+
+    expect(logSpy).toHaveBeenCalledWith('ADMIN_EMAILS is not set, nothing to do.');
+    expect(mockConnectDB).not.toHaveBeenCalled();
+    expect(disconnectSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips username repair when usernames are already valid', async () => {
+    const user = {
+      _id: { toString: () => 'admin-1' },
+      email: 'admin@example.com',
+      displayName: 'LA',
+      username: 'admin',
+      save: vi.fn(),
+    };
+    mockUserModel.updateMany.mockResolvedValue({ modifiedCount: 0 } as never);
+    mockUserModel.find.mockResolvedValue([user] as never);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const { promoteAdmins } = await import('./promote-admins.js');
+    await promoteAdmins();
+
+    expect(user.save).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith('Repaired 0 admin username(s).');
+    expect(logSpy).toHaveBeenCalledWith('Checked 1 admin account(s).');
   });
 });
