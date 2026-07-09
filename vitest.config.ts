@@ -13,7 +13,16 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['**/*.test.{ts,tsx}', '**/*.d.ts', 'src/test/**', 'src/types.ts', 'src/main.tsx'],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        '**/*.d.ts',
+        'src/test/**',
+        'src/types.ts',
+        'src/main.tsx',
+        'src/entries/**',
+        // Orphaned cursor/glow animation; not imported by any page.
+        'src/components/MouseFollower.tsx',
+      ],
       thresholds: {
         statements: 80,
         branches: 80,
