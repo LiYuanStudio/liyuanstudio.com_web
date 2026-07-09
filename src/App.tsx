@@ -5,13 +5,13 @@ import React, {
   useState,
 } from 'react';
 import { IconGithub } from '@arco-design/web-react/icon';
-import { fetchBlogPosts } from './api.js';
+import { fetchBlogPosts, fetchNews } from './api.js';
 import { getErrorMessage } from './api/errors.js';
 import {
   applyBlogSettings,
   readBlogSettings,
 } from './blog-settings.js';
-import type { BlogPost } from './types.js';
+import type { BlogPost, NewsUpdate } from './types.js';
 import { AuthNav } from './components/AuthNav.js';
 import { MaskedHeading } from './components/MaskedHeading.js';
 import './styles.css';
@@ -78,6 +78,32 @@ export function Footer() {
 }
 
 export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
+  const [items, setItems] = useState<NewsUpdate[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchNews()
+      .then((list) => {
+        if (cancelled) return;
+        setItems(list);
+        setErrorMessage(null);
+        setStatus('ready');
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setItems([]);
+        setErrorMessage(getErrorMessage(error, '最新动态暂时无法加载，请稍后刷新。'));
+        setStatus('error');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <section
       ref={forwardedRef}
@@ -91,7 +117,33 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       <p className="news-lead">
         产品更新、品牌动向与团队成长的一线消息。
       </p>
-      <p className="news-lead">敬请期待</p>
+      {status === 'error' && (
+        <p className="news-status" role="status">
+          {errorMessage ?? '最新动态暂时无法加载，请稍后刷新。'}
+        </p>
+      )}
+      {status === 'ready' && items.length === 0 && (
+        <p className="news-status" role="status">
+          敬请期待
+        </p>
+      )}
+      <div className="news-grid" aria-busy={status === 'loading'}>
+        {items.map((item) => (
+          <article className="news-card" key={item._id || item.slug}>
+            <div className="news-card-hero" aria-hidden="true">
+              <h4>{item.tag || 'News'}</h4>
+            </div>
+            <div className="news-card-content">
+              <span className="news-tag">{item.tag}</span>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+              <div className="news-card-footer">
+                <span className="news-date">{item.date}</span>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 });

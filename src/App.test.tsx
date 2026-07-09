@@ -162,10 +162,30 @@ describe('Footer', () => {
 });
 
 describe('News component', () => {
-  it('renders heading and placeholder text', () => {
+  it('renders heading and empty placeholder', async () => {
+    mockFetchNews.mockResolvedValue([]);
     render(<News />);
     expect(screen.getByRole('heading', { name: '最新动态' })).toBeInTheDocument();
-    expect(screen.getByText('敬请期待')).toBeInTheDocument();
+    expect(await screen.findByText('敬请期待')).toBeInTheDocument();
+  });
+
+  it('renders news cards from the API', async () => {
+    mockFetchNews.mockResolvedValue([
+      {
+        _id: '1',
+        slug: 'site-refresh',
+        title: '官网视觉全新升级',
+        description: '更轻盈的界面',
+        tag: '品牌',
+        date: '2026-06-10',
+      },
+    ]);
+
+    render(<News />);
+
+    expect(await screen.findByText('官网视觉全新升级')).toBeInTheDocument();
+    expect(screen.getByText('更轻盈的界面')).toBeInTheDocument();
+    expect(screen.getByText('2026-06-10')).toBeInTheDocument();
   });
 });
 
