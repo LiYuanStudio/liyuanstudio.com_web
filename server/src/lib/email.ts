@@ -18,6 +18,20 @@ interface SendRegistrationCodeEmailInput {
   code: string;
 }
 
+interface SendTwoFactorCodeEmailInput {
+  email: string;
+  displayName: string;
+  code: string;
+  purpose: 'login' | 'enable' | 'disable' | 'regenerate';
+}
+
+const TWO_FACTOR_PURPOSE_LABELS: Record<SendTwoFactorCodeEmailInput['purpose'], string> = {
+  login: '登录',
+  enable: '启用双重验证',
+  disable: '关闭双重验证',
+  regenerate: '重新生成恢复码',
+};
+
 function buildAppUrl(): string {
   return env.APP_URL.replace(/\/$/, '');
 }
@@ -110,6 +124,50 @@ export async function sendRegistrationCodeEmail({
         '<p>验证码将在 10 分钟后失效。如果你没有请求注册，请忽略此邮件。</p>',
       ].join(''),
       text: `你好 ${displayName}，\n\n你的注册验证码是：${code}\n\n验证码将在 10 分钟后失效。如果你没有请求注册，请忽略此邮件。`,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Resend 邮件发送失败，状态码 ${response.status}`);
+  }
+}
+
+export async function sendTwoFactorCodeEmail({
+  email,
+  displayName,
+  code,
+  purpose,
+}: SendTwoFactorCodeEmailInput): Promise<void> {
+  const purposeLabel = TWO_FACTOR_PURPOSE_LABELS[purpose];
+  if (!env.EMAIL_PROVIDER) {
+    // eslint-disable-next-line no-console
+    console.log(`[email:mock] ${purposeLabel}验证码 ${email}: ${code}`);
+    return;
+  }
+
+  if (env.EMAIL_PROVIDER !== 'resend') {
+    throw new Error(`不支持的邮件服务商：${env.EMAIL_PROVIDER}`);
+  }
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+    throw new Error('缺少 Resend 邮件配置');
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: email,
+      subject: `LiYuan Studio ${purposeLabel}验证码`,
+      html: [
+        `<p>你好 ${escapeHtml(displayName)}，</p>`,
+        `<p>你的${purposeLabel}验证码是：<strong>${escapeHtml(code)}</strong></p>`,
+        '<p>验证码将在 10 分钟后失效，且只能使用一次。如果这不是你的操作，请立即修改密码。</p>',
+      ].join(''),
+      text: `你好 ${displayName}，\n\n你的${purposeLabel}验证码是：${code}\n\n验证码将在 10 分钟后失效，且只能使用一次。如果这不是你的操作，请立即修改密码。`,
     }),
   });
 

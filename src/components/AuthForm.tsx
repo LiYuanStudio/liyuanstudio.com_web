@@ -15,7 +15,15 @@ export function AuthForm({
   allowModeSwitch = true,
   onSuccess,
 }: AuthFormProps) {
-  const { state, login, sendRegistrationCode, verifyRegistrationCode, logout } = useAuth();
+  const {
+    state,
+    login,
+    completeLoginTwoFactor,
+    resendLoginTwoFactor,
+    sendRegistrationCode,
+    verifyRegistrationCode,
+    logout,
+  } = useAuth();
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -24,6 +32,11 @@ export function AuthForm({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [registerStep, setRegisterStep] = useState<'form' | 'code'>('form');
+  const [loginStep, setLoginStep] = useState<'form' | 'code'>('form');
+  const [challengeToken, setChallengeToken] = useState('');
+  const [emailHint, setEmailHint] = useState('');
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
@@ -53,6 +66,10 @@ export function AuthForm({
   const handleModeSwitch = (nextLogin: boolean) => {
     setIsLogin(nextLogin);
     setRegisterStep('form');
+    setLoginStep('form');
+    setChallengeToken('');
+    setUseRecoveryCode(false);
+    setRecoveryCode('');
     setCodeSent(false);
     setCode('');
     setError(null);
@@ -96,10 +113,49 @@ export function AuthForm({
     setLoading(true);
 
     try {
-      await login(email, password);
-      onSuccess?.();
+      const challenge = await login(email, password);
+      if (challenge) {
+        setChallengeToken(challenge.challengeToken);
+        setEmailHint(challenge.emailHint);
+        setLoginStep('code');
+        setCode('');
+        setCountdown(CODE_COUNTDOWN_SECONDS);
+      } else {
+        onSuccess?.();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyLoginTwoFactor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetForm();
+    setLoading(true);
+    try {
+      await completeLoginTwoFactor(
+        challengeToken,
+        useRecoveryCode ? { recoveryCode } : { code },
+      );
+      onSuccess?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '验证失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendLoginCode = async () => {
+    if (countdown > 0) return;
+    resetForm();
+    setLoading(true);
+    try {
+      await resendLoginTwoFactor(challengeToken);
+      setCountdown(CODE_COUNTDOWN_SECONDS);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发送失败');
     } finally {
       setLoading(false);
     }
@@ -141,7 +197,7 @@ export function AuthForm({
     <div className="auth-card">
       <h2>{isLogin ? '登录' : '注册'}</h2>
 
-      {isLogin ? (
+      {isLogin && loginStep === 'form' ? (
         <form className="auth-form" onSubmit={handleLogin}>
           <label htmlFor="auth-email">邮箱</label>
           <input
@@ -176,6 +232,68 @@ export function AuthForm({
 
           <button type="submit" className="auth-button" disabled={loading}>
             {loading ? '处理中...' : '登录'}
+          </button>
+        </form>
+      ) : isLogin ? (
+        <form className="auth-form" onSubmit={handleVerifyLoginTwoFactor}>
+          <p className="auth-lead">
+            {useRecoveryCode
+              ? '请输入启用双重验证时保存的一次性恢复码。'
+              : `验证码已发送至 ${emailHint}，请输入邮件中的 6 位验证码。`}
+          </p>
+
+          {useRecoveryCode ? (
+            <>
+              <label htmlFor="auth-recovery-code">恢复码</label>
+              <input
+                id="auth-recovery-code"
+                type="text"
+                value={recoveryCode}
+                onChange={(event) => setRecoveryCode(event.target.value.toUpperCase())}
+                required
+                autoComplete="one-time-code"
+                placeholder="XXXX-XXXX-XXXX"
+              />
+            </>
+          ) : codeInput}
+
+          {error && <p className="auth-error" role="alert">{error}</p>}
+
+          {!useRecoveryCode && (
+            <button
+              type="button"
+              className="auth-secondary-button"
+              onClick={() => void handleResendLoginCode()}
+              disabled={countdown > 0 || loading}
+            >
+              {countdown > 0 ? `${countdown} 秒后重新发送` : '重新发送验证码'}
+            </button>
+          )}
+          <button type="submit" className="auth-button" disabled={loading}>
+            {loading ? '验证中...' : '验证并登录'}
+          </button>
+          <button
+            type="button"
+            className="auth-text-button"
+            onClick={() => {
+              setUseRecoveryCode((value) => !value);
+              setError(null);
+            }}
+          >
+            {useRecoveryCode ? '使用邮件验证码' : '无法访问邮箱？使用恢复码'}
+          </button>
+          <button
+            type="button"
+            className="auth-text-button"
+            onClick={() => {
+              setLoginStep('form');
+              setChallengeToken('');
+              setCode('');
+              setRecoveryCode('');
+              setError(null);
+            }}
+          >
+            返回修改账号
           </button>
         </form>
       ) : registerStep === 'form' ? (

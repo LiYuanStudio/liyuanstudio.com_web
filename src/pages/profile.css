@@ -179,6 +179,49 @@
   color: #6e6e73;
 }
 
+.profile-security-description {
+  margin: 8px 0 0;
+  color: #6e6e73;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.profile-card-header .profile-security-on {
+  color: #137333;
+  font-weight: 600;
+}
+
+.profile-recovery-panel {
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 1px solid rgba(123, 225, 136, 0.5);
+  border-radius: 16px;
+  background: rgba(123, 225, 136, 0.08);
+}
+
+.profile-recovery-panel p {
+  color: #515154;
+  line-height: 1.5;
+}
+
+.profile-recovery-panel ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-recovery-panel code {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
+.profile-button.profile-button-danger {
+  background: #b42318;
+  color: #ffffff;
+}
+
 .profile-empty {
   margin: 48px 0;
   text-align: center;

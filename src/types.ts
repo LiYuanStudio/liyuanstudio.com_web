@@ -64,6 +64,7 @@ export interface User {
   username?: string;
   role: UserRole;
   emailVerified?: boolean;
+  twoFactorEnabled?: boolean;
   avatar?: string;
   bio?: string;
 }
@@ -76,6 +77,25 @@ export interface ProfileUpdateInput {
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface TwoFactorChallengeResponse {
+  twoFactorRequired: true;
+  challengeToken: string;
+  emailHint: string;
+}
+
+export type LoginResponse = AuthResponse | TwoFactorChallengeResponse;
+
+export type TwoFactorAction = 'enable' | 'disable' | 'recovery-codes';
+
+export interface SecurityChallengeResponse {
+  challengeToken: string;
+  message: string;
+}
+
+export interface RecoveryCodesResponse extends AuthResponse {
+  recoveryCodes: string[];
 }
 
 export interface MessageResponse {

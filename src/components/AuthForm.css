@@ -172,3 +172,17 @@
 .auth-secondary-button:hover {
   text-decoration: underline;
 }
+
+.auth-text-button {
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: #6e6e73;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.auth-text-button:hover {
+  color: #0071e3;
+  text-decoration: underline;
+}
