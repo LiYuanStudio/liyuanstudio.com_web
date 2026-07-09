@@ -3,6 +3,7 @@
 .vercel
 .dev.vars*
 !.dev.vars.example
+!deploy-console/.dev.vars.example
 .env*
 !.env.example
 !.env.production

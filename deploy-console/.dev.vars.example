@@ -1,0 +1,4 @@
+# Generate each value independently. Never commit real values.
+SESSION_SECRET=replace-with-at-least-32-random-characters
+GITHUB_TOKEN=github-fine-grained-token
+VERCEL_PROTECTION_BYPASS=vercel-preview-protection-bypass-secret

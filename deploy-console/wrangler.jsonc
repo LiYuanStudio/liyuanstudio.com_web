@@ -1,0 +1,18 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "liyuanstudio-deploy-console",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-09",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "LA_API_BASE_URL": "https://liyuanstudio-com-web.vercel.app/api",
+    "GITHUB_OWNER": "liyuanstudio",
+    "GITHUB_REPO": "liyuanstudio.com_web",
+    "PROMOTE_WORKFLOW": "promote.yml",
+    "CONSOLE_ORIGIN": "https://deploy.liyuanstudio.com",
+    "PREVIEW_ORIGIN": "https://gray.liyuanstudio.com",
+    "COOKIE_DOMAIN": ".liyuanstudio.com"
+  }
+}
