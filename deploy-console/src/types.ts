@@ -31,5 +31,6 @@ export type GrayDeployment = {
   createdAt: string;
   state: string;
   upstreamUrl: string | null;
+  promotionState: string | null;
   promoted: boolean;
 };

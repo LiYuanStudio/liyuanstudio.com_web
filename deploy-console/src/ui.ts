@@ -155,11 +155,12 @@ async function loadDeployment() {
     if (!data.deployment) return setUnavailable('main 分支尚未产生灰度部署。');
     current = data.deployment;
     version.textContent = current.sha;
-    status.textContent = current.promoted ? '已全量发布' : current.state;
+    const promoting = current.promotionState === 'pending' || current.promotionState === 'in_progress';
+    status.textContent = current.promoted ? '已全量发布' : (promoting ? '全量发布中' : current.state);
     deploymentId.textContent = String(current.id);
     createdAt.textContent = new Date(current.createdAt).toLocaleString('zh-CN');
     message.textContent = current.state === 'success'
-      ? (current.promoted ? '该版本已经完成全量发布。' : '请检查灰度版本，确认无误后再全量发布。')
+      ? (current.promoted ? '该版本已经完成全量发布。' : (promoting ? '生产工作流正在运行，请勿重复提交。' : '请检查灰度版本，确认无误后再全量发布。'))
       : '最新灰度构建尚未成功，不能验收或发布。';
     const ready = current.state === 'success' && Boolean(current.previewUrl);
     if (ready) {
@@ -171,7 +172,7 @@ async function loadDeployment() {
       previewLink.classList.add('is-disabled');
       previewLink.setAttribute('aria-disabled', 'true');
     }
-    promoteButton.disabled = !ready || current.promoted;
+    promoteButton.disabled = !ready || current.promoted || promoting;
   } catch (error) {
     setUnavailable(error instanceof Error ? error.message : '读取部署状态失败');
   }

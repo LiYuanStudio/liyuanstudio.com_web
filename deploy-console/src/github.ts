@@ -52,15 +52,18 @@ async function latestStatus(
   return statuses[0] ?? null;
 }
 
-async function wasPromoted(env: Bindings, sha: string): Promise<boolean> {
+async function productionState(env: Bindings, sha: string): Promise<string | null> {
   const deployments = await githubRequest<GitHubDeployment[]>(
     env,
     `${repositoryPath(env)}/deployments?environment=production&sha=${encodeURIComponent(sha)}&per_page=10`,
   );
+  let activeState: string | null = null;
   for (const deployment of deployments) {
-    if ((await latestStatus(env, deployment.id))?.state === 'success') return true;
+    const state = (await latestStatus(env, deployment.id))?.state;
+    if (state === 'success') return state;
+    if (state === 'pending' || state === 'in_progress') activeState = state;
   }
-  return false;
+  return activeState;
 }
 
 export async function getLatestGrayDeployment(
@@ -74,13 +77,15 @@ export async function getLatestGrayDeployment(
   if (!deployment) return null;
 
   const status = await latestStatus(env, deployment.id);
+  const promotionState = await productionState(env, deployment.sha);
   return {
     id: deployment.id,
     sha: deployment.sha,
     createdAt: deployment.created_at,
     state: status?.state ?? 'pending',
     upstreamUrl: status?.environment_url ?? null,
-    promoted: await wasPromoted(env, deployment.sha),
+    promotionState,
+    promoted: promotionState === 'success',
   };
 }
 
