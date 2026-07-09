@@ -114,4 +114,24 @@ describe('email helpers', () => {
     expect(body.html).toContain('Hello &lt;User&gt;');
     expect(body.text).toContain('123456');
   });
+
+  it('sends purpose-specific two-factor codes through Resend', async () => {
+    vi.stubEnv('EMAIL_PROVIDER', 'resend');
+    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 } as Response));
+    const { sendTwoFactorCodeEmail } = await importEmail();
+
+    await sendTwoFactorCodeEmail({
+      email: 'hello@example.com',
+      displayName: 'Hello <User>',
+      code: '654321',
+      purpose: 'login',
+    });
+
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+    expect(body.subject).toContain('登录验证码');
+    expect(body.html).toContain('654321');
+    expect(body.html).toContain('Hello &lt;User&gt;');
+  });
 });

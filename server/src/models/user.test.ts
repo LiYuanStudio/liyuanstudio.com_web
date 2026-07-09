@@ -49,4 +49,15 @@ describe('UserModel', () => {
     expect(user.passwordResetTokenHash).toBe('token-hash');
     expect(user.passwordResetExpiresAt).toEqual(expiresAt);
   });
+
+  it('keeps two-factor authentication disabled with no recovery codes by default', () => {
+    const user = new UserModel({
+      email: 'test@example.com',
+      passwordHash: 'hash',
+      displayName: 'Test User',
+    });
+
+    expect(user.twoFactorEnabled).toBe(false);
+    expect(user.twoFactorRecoveryCodeHashes).toEqual([]);
+  });
 });

@@ -15,7 +15,11 @@ describe('AuthForm', () => {
 
   const unauthMock = (overrides: Record<string, unknown> = {}) => ({
     state: { status: 'unauthenticated' as const },
-    login: vi.fn().mockResolvedValue(undefined),
+    login: vi.fn().mockResolvedValue(null),
+    completeLoginTwoFactor: vi.fn().mockResolvedValue(undefined),
+    resendLoginTwoFactor: vi.fn().mockResolvedValue(undefined),
+    beginTwoFactorAction: vi.fn().mockResolvedValue(undefined),
+    confirmTwoFactorAction: vi.fn().mockResolvedValue(null),
     sendRegistrationCode: vi.fn().mockResolvedValue(undefined),
     verifyRegistrationCode: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn(),
@@ -47,7 +51,7 @@ describe('AuthForm', () => {
   });
 
   it('submits login and calls onSuccess', async () => {
-    const login = vi.fn().mockResolvedValue(undefined);
+    const login = vi.fn().mockResolvedValue(null);
     const onSuccess = vi.fn();
     mockUseAuth.mockReturnValue(unauthMock({ login }) as ReturnType<typeof useAuth>);
     render(<AuthForm onSuccess={onSuccess} />);
@@ -59,6 +63,36 @@ describe('AuthForm', () => {
 
     await waitFor(() => {
       expect(login).toHaveBeenCalledWith('hello@example.com', 'password123');
+      expect(onSuccess).toHaveBeenCalled();
+    });
+  });
+
+  it('completes an email two-factor login challenge', async () => {
+    const login = vi.fn().mockResolvedValue({
+      twoFactorRequired: true,
+      challengeToken: 'challenge-token',
+      emailHint: 'he***@example.com',
+    });
+    const completeLoginTwoFactor = vi.fn().mockResolvedValue(undefined);
+    const onSuccess = vi.fn();
+    mockUseAuth.mockReturnValue(
+      unauthMock({ login, completeLoginTwoFactor }) as ReturnType<typeof useAuth>,
+    );
+    render(<AuthForm onSuccess={onSuccess} />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('邮箱'), 'hello@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    await user.click(screen.getByRole('button', { name: '登录' }));
+    await screen.findByText(/he\*\*\*@example.com/);
+    await user.type(screen.getByLabelText('验证码'), '123456');
+    await user.click(screen.getByRole('button', { name: '验证并登录' }));
+
+    await waitFor(() => {
+      expect(completeLoginTwoFactor).toHaveBeenCalledWith(
+        'challenge-token',
+        { code: '123456' },
+      );
       expect(onSuccess).toHaveBeenCalled();
     });
   });

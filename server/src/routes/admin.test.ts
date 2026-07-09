@@ -77,6 +77,9 @@ describe('admin routes', () => {
       expect(json.users[0]).toHaveProperty('id', 'user-1');
       expect(json.users[0]).not.toHaveProperty('_id');
       expect(json.users[0]).not.toHaveProperty('passwordHash');
+      expect(mockUserModel.find).toHaveBeenCalledWith({}, expect.objectContaining({
+        twoFactorRecoveryCodeHashes: 0,
+      }));
     });
 
     it('rejects non-admin users', async () => {
