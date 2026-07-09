@@ -43,6 +43,20 @@ export function loginPage(error?: string): string {
   );
 }
 
+export function previewAccessPage(consoleOrigin: string): string {
+  return document(
+    'LA 灰度发布',
+    `<main class="shell shell--narrow">
+      <section class="card">
+        <p class="eyebrow">LIYUAN STUDIO · INTERNAL</p>
+        <h1>需要管理员会话</h1>
+        <p class="muted">请先在部署控制台使用 LA 管理员账号登录，再返回此灰度地址。</p>
+        <a class="button" href="${escapeHtml(consoleOrigin)}">前往部署控制台</a>
+      </section>
+    </main>`,
+  );
+}
+
 export function dashboardPage(user: AdminUser, csrf: string): string {
   return document(
     'LA 灰度发布',
