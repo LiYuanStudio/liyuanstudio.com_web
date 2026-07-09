@@ -17,6 +17,15 @@ export interface NewsUpdate {
   updatedAt?: string;
 }
 
+export interface NewsInput {
+  title: string;
+  description: string;
+  tag: string;
+  date: string;
+  image?: string;
+  slug?: string;
+}
+
 export type BlogStatus = 'draft' | 'published';
 export type BlogVisibility = 'public' | 'unlisted';
 

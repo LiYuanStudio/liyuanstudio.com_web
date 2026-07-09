@@ -12,6 +12,15 @@ const ADMIN_USER = {
   emailVerified: true,
 };
 
+const NEWS_ITEM = {
+  _id: 'n1',
+  title: '官网视觉全新升级',
+  description: '更轻盈的界面',
+  tag: '品牌',
+  date: '2026-06-10',
+  slug: 'site-refresh',
+};
+
 describe('AdminPage', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com');
@@ -54,6 +63,73 @@ describe('AdminPage', () => {
     });
   });
 
+  it('loads and displays news for admin by default', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    mockFetch({
+      '/auth/me': () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: ADMIN_USER }),
+      }),
+      '/news': () => ({
+        ok: true,
+        status: 200,
+        json: async () => [NEWS_ITEM],
+      }),
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('官网视觉全新升级')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: '发布动态' })).toBeInTheDocument();
+  });
+
+  it('publishes a news item from the editor', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    const fetchMock = vi.fn().mockImplementation(async (url: string, options?: RequestInit) => {
+      const str = url.toString();
+      if (str.endsWith('/auth/me')) {
+        return { ok: true, status: 200, json: async () => ({ user: ADMIN_USER }) };
+      }
+      if (str.endsWith('/news') && options?.method === 'POST') {
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ ...NEWS_ITEM, _id: 'n2', title: '新动态' }),
+        };
+      }
+      if (str.endsWith('/news')) {
+        return { ok: true, status: 200, json: async () => [] };
+      }
+      return { ok: false, status: 404, json: async () => ({ error: 'not found' }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '发布动态' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: '发布动态' }));
+    await user.type(screen.getByLabelText('标题'), '新动态');
+    await user.type(screen.getByLabelText('摘要'), '内容摘要');
+    await user.type(screen.getByLabelText('标签'), '产品动态');
+    await user.clear(screen.getByLabelText('日期'));
+    await user.type(screen.getByLabelText('日期'), '2026-07-09');
+    await user.click(screen.getByRole('button', { name: '发布' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/news$/),
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
   it('loads and displays users for admin', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
@@ -61,6 +137,11 @@ describe('AdminPage', () => {
         ok: true,
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
+      }),
+      '/news': () => ({
+        ok: true,
+        status: 200,
+        json: async () => [],
       }),
       '/admin/users': () => ({
         ok: true,
@@ -75,6 +156,12 @@ describe('AdminPage', () => {
     });
 
     renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '账号管理' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('tab', { name: '账号管理' }));
 
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
@@ -90,6 +177,11 @@ describe('AdminPage', () => {
         ok: true,
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
+      }),
+      '/news': () => ({
+        ok: true,
+        status: 200,
+        json: async () => [],
       }),
       '/admin/users': () => ({
         ok: true,
@@ -109,6 +201,11 @@ describe('AdminPage', () => {
 
     renderPage();
     const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '账号管理' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('tab', { name: '账号管理' }));
 
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
@@ -132,6 +229,11 @@ describe('AdminPage', () => {
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
       }),
+      '/news': () => ({
+        ok: true,
+        status: 200,
+        json: async () => [],
+      }),
       '/admin/users': () => ({
         ok: true,
         status: 200,
@@ -150,6 +252,11 @@ describe('AdminPage', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '账号管理' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('tab', { name: '账号管理' }));
+
+    await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
 
@@ -160,7 +267,7 @@ describe('AdminPage', () => {
     });
   });
 
-  it('shows error when fetch fails', async () => {
+  it('shows error when news fetch fails', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
       '/auth/me': () => ({
@@ -168,7 +275,7 @@ describe('AdminPage', () => {
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
       }),
-      '/admin/users': () => ({
+      '/news': () => ({
         ok: false,
         status: 500,
         json: async () => ({ error: '加载失败', requestId: 'admin-page-req-1' }),
