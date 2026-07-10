@@ -345,6 +345,6 @@ These notes cover non-obvious caveats when running this project in a Cursor Clou
 ### Seed / mock data
 
 - `npm run seed:api` is a no-op: sample news/blog seed content was removed so gray/production no longer get placeholder「最新动态」cards. Create real news via the admin console.
-- On API connect, the backend purges the old seeded news slugs (`li-yuan-workbench-beta`, `site-refresh`, `cloudflare-startup`) and old seeded blog slugs once per process, so gray/production stop showing those placeholders after deploy.
-- `npm run cleanup-mock:api` also deletes those seed rows, plus known test avatars and `@example.com` test users. Point `server/.env` `MONGODB_URI` at the target database before running it.
+- To delete legacy seeded news/blog rows, run `npm run cleanup-mock:api -- --confirm` against the intended database. It is intentionally not performed during API startup or deployment.
+- `npm run cleanup-mock:api -- --confirm` also deletes those seed rows, plus known test avatars and `@example.com` test users. Point `server/.env` `MONGODB_URI` at the target database before running it.
 - With an empty news collection, the home News section shows「敬请期待」.

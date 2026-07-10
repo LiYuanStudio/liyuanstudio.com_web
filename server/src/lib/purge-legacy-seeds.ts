@@ -15,11 +15,9 @@ export const SEED_BLOG_SLUGS = [
   'living-tech',
 ] as const;
 
-let purgePromise: Promise<void> | null = null;
-
 /**
- * Idempotent removal of legacy seed/mock content. Safe to call on every
- * cold start; only the known placeholder slugs are targeted.
+ * Removal of legacy seed/mock content. This is intentionally called only by
+ * the explicit cleanup command; only the known placeholder slugs are targeted.
  */
 export async function purgeLegacySeedContent(): Promise<void> {
   const [news, blogs] = await Promise.all([
@@ -32,20 +30,4 @@ export async function purgeLegacySeedContent(): Promise<void> {
       `[purge-legacy-seeds] removed ${news.deletedCount} news and ${blogs.deletedCount} blog placeholder(s)`,
     );
   }
-}
-
-/** Run the purge at most once per process after the DB is connected. */
-export function purgeLegacySeedContentOnce(): Promise<void> {
-  if (!purgePromise) {
-    purgePromise = purgeLegacySeedContent().catch((error: unknown) => {
-      purgePromise = null;
-      console.error('[purge-legacy-seeds] failed:', error);
-    });
-  }
-  return purgePromise;
-}
-
-/** Test helper to reset the once-guard between cases. */
-export function resetLegacySeedPurgeGuard(): void {
-  purgePromise = null;
 }

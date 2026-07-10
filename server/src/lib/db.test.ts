@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import mongoose from 'mongoose';
 
-vi.mock('./purge-legacy-seeds.js', () => ({
-  purgeLegacySeedContentOnce: vi.fn().mockResolvedValue(undefined),
-}));
-
 describe('connectDB', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -72,19 +68,5 @@ describe('connectDB', () => {
 
     const globalCache = global as unknown as { mongooseCache?: { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null } };
     expect(globalCache.mongooseCache).toBeDefined();
-  });
-
-  it('purges legacy seed content after the first successful connect', async () => {
-    resetCache();
-    stubEnv();
-    const mockMongoose = { connection: 'connected' } as unknown as typeof mongoose;
-    vi.spyOn(mongoose, 'connect').mockResolvedValue(mockMongoose);
-
-    const { purgeLegacySeedContentOnce } = await import('./purge-legacy-seeds.js');
-    const { connectDB } = await import('./db.js');
-    await connectDB();
-    await connectDB();
-
-    expect(purgeLegacySeedContentOnce).toHaveBeenCalledTimes(1);
   });
 });

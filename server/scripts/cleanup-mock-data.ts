@@ -21,6 +21,12 @@ const MOCK_AVATAR_VALUES = [
 ];
 
 async function cleanup() {
+  if (!process.argv.includes('--confirm')) {
+    console.error('Refusing to delete mock data without the --confirm flag.');
+    process.exitCode = 1;
+    return;
+  }
+
   await connectDB();
 
   await purgeLegacySeedContent();
