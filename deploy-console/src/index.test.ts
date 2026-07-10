@@ -59,6 +59,7 @@ function githubResponses(options?: {
   graySha?: string;
   grayState?: string;
   productionState?: string;
+  vercelProductionState?: string;
   upstreamUrl?: string;
 }) {
   const grayId = options?.grayId ?? 42;
@@ -75,12 +76,34 @@ function githubResponses(options?: {
       }]);
     }
     if (url.pathname.endsWith('/deployments') && url.searchParams.get('environment') === 'production') {
-      return options?.productionState
-        ? json([{ id: 99, sha: graySha, created_at: '2026-07-09T11:00:00Z' }])
-        : json([]);
+      const deployments = [];
+      if (options?.vercelProductionState) {
+        deployments.push({
+          id: 100,
+          sha: graySha,
+          created_at: '2026-07-09T11:01:00Z',
+          creator: { login: 'vercel[bot]' },
+          description: null,
+          payload: {},
+        });
+      }
+      if (options?.productionState) {
+        deployments.push({
+          id: 99,
+          sha: graySha,
+          created_at: '2026-07-09T11:00:00Z',
+          creator: { login: 'github-actions[bot]' },
+          description: 'Approved through LA deploy console by admin@example.com (admin-id)',
+          payload: { gray_deployment_id: grayId, approved_by: 'admin@example.com (admin-id)' },
+        });
+      }
+      return json(deployments);
     }
     if (url.pathname.endsWith('/deployments/99/statuses')) {
       return json([{ state: options?.productionState, environment_url: 'https://liyuanstudio.com' }]);
+    }
+    if (url.pathname.endsWith('/deployments/100/statuses')) {
+      return json([{ state: options?.vercelProductionState, environment_url: 'https://preview.vercel.app' }]);
     }
     if (url.pathname.endsWith('/actions/workflows/promote.yml/dispatches') && init?.method === 'POST') {
       return new Response(null, { status: 204 });
@@ -199,6 +222,50 @@ describe('deploy console', () => {
         promotionState: null,
         promoted: false,
         previewUrl: 'https://gray.example.com/',
+      },
+    });
+  });
+
+  it('ignores successful Vercel production deployments for the gray SHA', async () => {
+    const { requests } = installFetch({
+      github: githubResponses({ vercelProductionState: 'success' }),
+    });
+    const cookie = await login();
+
+    const response = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      deployment: {
+        promotionState: null,
+        promoted: false,
+      },
+    });
+    expect(requests.some(({ url }) => url.pathname.endsWith('/deployments/100/statuses'))).toBe(false);
+  });
+
+  it.each([
+    ['in_progress', false],
+    ['success', true],
+  ])('recognizes an LA production deployment in state %s', async (productionState, promoted) => {
+    installFetch({ github: githubResponses({ productionState }) });
+    const cookie = await login();
+
+    const response = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      deployment: {
+        promotionState: productionState,
+        promoted,
       },
     });
   });
