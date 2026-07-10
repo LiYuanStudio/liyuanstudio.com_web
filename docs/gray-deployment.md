@@ -18,7 +18,7 @@ Vercel Preview 和 Production 的数据库、邮件、CORS 等环境变量应当
 Repository secrets：
 
 - `VERCEL_TOKEN`
-- `CLOUDFLARE_API_TOKEN` — must allow **Cloudflare Pages** deploy (for `promote.yml`) **and** **Workers Scripts Edit** (for `deploy-console` Worker via `.github/workflows/deploy-console.yml`)
+- `CLOUDFLARE_API_TOKEN` — must allow **Cloudflare Pages** deploy (for `promote.yml`), **Workers Scripts Edit**, and **Zone → Workers Routes Edit** (for `deploy-console` custom domains via `.github/workflows/deploy-console.yml`)
 - `CLOUDFLARE_ACCOUNT_ID`
 
 Repository variables（已有默认值，但建议显式配置）：
@@ -64,7 +64,7 @@ npx wrangler secret put VERCEL_PROTECTION_BYPASS --config deploy-console/wrangle
 npm run deploy --workspace=deploy-console
 ```
 
-合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。若该工作流报 Authentication error / code 10000，说明仓库里的 `CLOUDFLARE_API_TOKEN` 只有 Pages 权限，需要在 Cloudflare 控制台为同一 token（或新 token）补上 **Workers Scripts → Edit**，再重跑工作流。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
+合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。若该工作流报 Authentication error / code 10000，检查 token 是否同时具备 **Workers Scripts → Edit** 与 **Zone → Workers Routes → Edit**（自定义域名路由）。脚本上传成功但 `/zones/.../workers/routes` 失败时，通常只缺 Routes 权限；域名若已绑定，新代码可能已生效，但仍应补权限以免下次部署失败。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
 
 `SESSION_SECRET` 至少 32 个随机字符。`GITHUB_TOKEN` 使用 fine-grained token，仅授权当前仓库，并只开放读取 deployments/contents 和触发 Actions 所需的最小权限。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
 

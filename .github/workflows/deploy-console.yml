@@ -60,5 +60,5 @@ jobs:
       - name: Fail with Workers permission guidance
         if: steps.deploy.outcome == 'failure'
         run: |
-          echo "::error::wrangler deploy failed. CLOUDFLARE_API_TOKEN must include Workers Scripts Edit (and Account Settings Read) in addition to Cloudflare Pages permissions used by promote.yml. Update the token in the Cloudflare dashboard, then re-run this workflow."
+          echo "::error::wrangler deploy failed. CLOUDFLARE_API_TOKEN needs: Workers Scripts Edit, Zone Workers Routes Edit (for custom domains deploy.liyuanstudio.com / gray.liyuanstudio.com), plus Cloudflare Pages for promote.yml. Update the token, then re-run this workflow."
           exit 1
