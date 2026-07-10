@@ -238,7 +238,6 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   const upstream = new URL(`${incoming.pathname}${incoming.search}`, upstreamOrigin);
   const headers = new Headers(c.req.raw.headers);
   for (const header of [
-    'authorization',
     'cf-connecting-ip',
     'cf-ipcountry',
     'cf-ray',
