@@ -633,7 +633,7 @@ describe('deploy console', () => {
     expect(requests.some(({ url }) => url.pathname.endsWith('/dispatches'))).toBe(false);
   });
 
-  it('proxies a protected preview without forwarding sessions or leaking bypass headers', async () => {
+  it('proxies a protected preview without forwarding console cookies or leaking bypass headers', async () => {
     const { requests } = installFetch({
       upstream: async () => new Response('candidate', {
         headers: {
@@ -662,7 +662,35 @@ describe('deploy console', () => {
     const upstream = requests.find(({ url }) => url.hostname === 'candidate.vercel.app');
     const headers = new Headers(upstream?.init?.headers);
     expect(headers.get('cookie')).toBeNull();
-    expect(headers.get('authorization')).toBeNull();
+    expect(headers.get('authorization')).toBe('Bearer browser-secret');
     expect(headers.get('x-vercel-protection-bypass')).toBe('bypass-secret');
+  });
+
+  it('forwards site Authorization bearer tokens to the preview API', async () => {
+    const { requests } = installFetch({
+      upstream: async () => new Response(JSON.stringify({ user: { id: 'u1' } }), {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    });
+    const cookie = await login();
+
+    const response = await app.request(
+      'https://gray.example.com/api/auth/me',
+      {
+        headers: {
+          Cookie: cookie,
+          Authorization: 'Bearer site-jwt-token',
+        },
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    const upstream = requests.find(
+      ({ url }) => url.hostname === 'candidate.vercel.app' && url.pathname === '/api/auth/me',
+    );
+    const headers = new Headers(upstream?.init?.headers);
+    expect(headers.get('authorization')).toBe('Bearer site-jwt-token');
+    expect(headers.get('cookie')).toBeNull();
   });
 });
