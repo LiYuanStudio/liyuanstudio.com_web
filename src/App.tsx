@@ -117,8 +117,13 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       <p className="news-lead">
         产品更新、品牌动向与团队成长的一线消息。
       </p>
-      {status === 'error' && (
+      {status === 'loading' && (
         <p className="news-status" role="status">
+          加载中...
+        </p>
+      )}
+      {status === 'error' && (
+        <p className="news-status" role="alert">
           {errorMessage ?? '最新动态暂时无法加载，请稍后刷新。'}
         </p>
       )}
@@ -207,8 +212,13 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       <p className="blog-lead">
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
-      {status === 'error' && (
+      {status === 'loading' && (
         <p className="blog-status" role="status">
+          加载中...
+        </p>
+      )}
+      {status === 'error' && (
+        <p className="blog-status" role="alert">
           {errorMessage ?? '博客内容暂时无法加载，请稍后刷新。'}
         </p>
       )}
@@ -229,7 +239,11 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
               {settings.showExcerpt && <p>{post.excerpt || '暂无摘要。'}</p>}
               <div className="blog-card-footer">
                 <span className="blog-date">{formatPostDate(post)} · {post.readTime || '1 分钟阅读'}</span>
-                <a className="product-card-button" href={getPublicPostPath(post.authorUsername, post.blogNumber)}>
+                <a
+                  className="product-card-button"
+                  href={getPublicPostPath(post.authorUsername, post.blogNumber)}
+                  aria-label={`阅读 ${post.title}`}
+                >
                   阅读
                 </a>
               </div>
@@ -243,6 +257,11 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
 
 function getPublicPostPath(username: string, blogNumber: number) {
   return `/${encodeURIComponent(username)}/${encodeURIComponent(String(blogNumber))}/`;
+}
+
+function getScrollBehavior(): ScrollBehavior {
+  if (typeof window === 'undefined') return 'smooth';
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
 export function App() {
@@ -269,6 +288,10 @@ export function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const scrollToSection = (target: HTMLElement | null) => {
+    target?.scrollIntoView({ behavior: getScrollBehavior() });
+  };
+
   return (
     <>
       <main className="page-shell">
@@ -282,27 +305,21 @@ export function App() {
               <button
                 type="button"
                 className="nav-item"
-                onClick={() =>
-                  productsRef.current?.scrollIntoView({ behavior: 'smooth' })
-                }
+                onClick={() => scrollToSection(productsRef.current)}
               >
                 产品
               </button>
               <button
                 type="button"
                 className="nav-item"
-                onClick={() =>
-                  newsRef.current?.scrollIntoView({ behavior: 'smooth' })
-                }
+                onClick={() => scrollToSection(newsRef.current)}
               >
                 动态
               </button>
               <button
                 type="button"
                 className="nav-item"
-                onClick={() =>
-                  blogRef.current?.scrollIntoView({ behavior: 'smooth' })
-                }
+                onClick={() => scrollToSection(blogRef.current)}
               >
                 博客
               </button>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '../context/AuthContext.js';
 import { ProfilePage } from './ProfilePage.js';
@@ -858,6 +858,109 @@ describe('ProfilePage', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '截取头像' })).not.toBeInTheDocument());
     await waitFor(() => expect(input).toHaveFocus());
+  });
+
+  it('re-parses the route on popstate', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/me')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.includes('/auth/users/LA') || href.includes('/blog/user/LA')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => (href.includes('/blog/user/') ? [] : { user: MEMBER_USER }),
+        } as Response;
+      }
+      if (href.endsWith('/blog/me')) {
+        return { ok: true, status: 200, json: async () => [] } as Response;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/');
+    await screen.findByRole('heading', { name: '我的文章' });
+    expect(document.title).toBe('我的文章 | LiYuan Studio');
+
+    await act(async () => {
+      window.history.pushState({}, '', '/profile/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    await screen.findByRole('heading', { name: '账号设置' });
+    expect(document.title).toBe('账号设置 | LiYuan Studio');
+  });
+
+  it('shows the real API error when my posts fail to load', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/me')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog/me')) {
+        return {
+          ok: false,
+          status: 503,
+          headers: new Headers(),
+          json: async () => ({ error: '博客服务暂时不可用' }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/');
+    expect(await screen.findByRole('alert')).toHaveTextContent('博客服务暂时不可用');
+  });
+
+  it('shows the real API error when the editor fails to load a post', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/me')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog/me')) {
+        return {
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          json: async () => ({ error: '无法读取文章列表' }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/post-1/edit/');
+    expect(await screen.findByRole('alert')).toHaveTextContent('无法读取文章列表');
+  });
+
+  it('marks public profile errors as alerts', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/users/missing-user')) {
+        return {
+          ok: false,
+          status: 404,
+          headers: new Headers(),
+          json: async () => ({ error: '用户不存在' }),
+        } as Response;
+      }
+      if (href.includes('/blog/user/')) {
+        return { ok: true, status: 200, json: async () => [] } as Response;
+      }
+      return {
+        ok: false,
+        status: 401,
+        headers: new Headers(),
+        json: async () => ({ error: '未授权' }),
+      } as Response;
+    }));
+
+    renderPage('/missing-user/');
+    expect(await screen.findByRole('alert')).toHaveTextContent('个人主页不存在或还未初始化。');
   });
 
 });

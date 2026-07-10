@@ -314,4 +314,22 @@ describe('BlogPage release form', () => {
     });
     expect(screen.getByRole('button', { name: '发布' })).not.toBeDisabled();
   });
+
+  it('updates document.title for blog index and release routes', async () => {
+    mockFetchBlogPosts.mockResolvedValue([]);
+    renderBlogPage('/blog/');
+    await waitFor(() => {
+      expect(document.title).toBe('博客 | LiYuan Studio');
+    });
+
+    window.history.pushState({}, '', '/blog/release/');
+    render(
+      <AuthProvider>
+        <BlogPage />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(document.title).toBe('发布博客 | LiYuan Studio');
+    });
+  });
 });

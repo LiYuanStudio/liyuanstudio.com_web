@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useAuth } from '../context/AuthContext.js';
 import { deleteUser, fetchUsers, updateUser } from '../api/admin.js';
 import { createNews, deleteNews, fetchNews, updateNews } from '../api/news.js';
@@ -475,6 +475,39 @@ function NewsPanel() {
 export function AdminPage() {
   const { state, logout } = useAuth();
   const [tab, setTab] = useState<AdminTab>('news');
+  const [focusTabId, setFocusTabId] = useState<AdminTab | null>(null);
+  const tabs: AdminTab[] = ['news', 'users'];
+  const tabLabels: Record<AdminTab, string> = {
+    news: '最新动态',
+    users: '账号管理',
+  };
+
+  useEffect(() => {
+    if (!focusTabId) return;
+    document.getElementById(`admin-tab-${focusTabId}`)?.focus();
+    setFocusTabId(null);
+  }, [focusTabId, tab]);
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') {
+      return;
+    }
+    event.preventDefault();
+    const currentIndex = tabs.indexOf(tab);
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else {
+      nextIndex = tabs.length - 1;
+    }
+    const next = tabs[nextIndex];
+    setTab(next);
+    setFocusTabId(next);
+  };
 
   if (state.status === 'loading') {
     return (
@@ -518,31 +551,27 @@ export function AdminPage() {
       </nav>
 
       <main className="admin-main">
-        <div className="admin-tabs" role="tablist" aria-label="后台分区">
-          <button
-            id="admin-tab-news"
-            type="button"
-            role="tab"
-            aria-selected={tab === 'news'}
-            aria-controls="admin-panel-news"
-            tabIndex={tab === 'news' ? 0 : -1}
-            className={tab === 'news' ? 'admin-tab admin-tab-active' : 'admin-tab'}
-            onClick={() => setTab('news')}
-          >
-            最新动态
-          </button>
-          <button
-            id="admin-tab-users"
-            type="button"
-            role="tab"
-            aria-selected={tab === 'users'}
-            aria-controls="admin-panel-users"
-            tabIndex={tab === 'users' ? 0 : -1}
-            className={tab === 'users' ? 'admin-tab admin-tab-active' : 'admin-tab'}
-            onClick={() => setTab('users')}
-          >
-            账号管理
-          </button>
+        <div
+          className="admin-tabs"
+          role="tablist"
+          aria-label="后台分区"
+          onKeyDown={handleTabKeyDown}
+        >
+          {tabs.map((tabId) => (
+            <button
+              key={tabId}
+              id={`admin-tab-${tabId}`}
+              type="button"
+              role="tab"
+              aria-selected={tab === tabId}
+              aria-controls={`admin-panel-${tabId}`}
+              tabIndex={tab === tabId ? 0 : -1}
+              className={tab === tabId ? 'admin-tab admin-tab-active' : 'admin-tab'}
+              onClick={() => setTab(tabId)}
+            >
+              {tabLabels[tabId]}
+            </button>
+          ))}
         </div>
 
         {tab === 'news' ? (

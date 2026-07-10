@@ -90,6 +90,46 @@ describe('AdminPage', () => {
     expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'admin-tab-news');
   });
 
+  it('switches tabs with arrow keys', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    mockFetch({
+      '/auth/me': () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: ADMIN_USER }),
+      }),
+      '/news': () => ({
+        ok: true,
+        status: 200,
+        json: async () => [NEWS_ITEM],
+      }),
+      '/admin/users': () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ users: [] }),
+      }),
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    const newsTab = await screen.findByRole('tab', { name: '最新动态' });
+    newsTab.focus();
+    await user.keyboard('{ArrowRight}');
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '账号管理' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tab', { name: '账号管理' })).toHaveFocus();
+    });
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'admin-tab-users');
+
+    await user.keyboard('{ArrowLeft}');
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '最新动态' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tab', { name: '最新动态' })).toHaveFocus();
+    });
+  });
+
   it('publishes a news item from the editor', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     const fetchMock = vi.fn().mockImplementation(async (url: string, options?: RequestInit) => {

@@ -15,6 +15,7 @@ This is the marketing site for **LiYuan Studio**. It is a client-side rendered R
   - MongoDB Atlas used as the database via Mongoose.
   - Admin write endpoints for news/blog (POST/PATCH/DELETE) are protected by `X-API-Key`.
   - Authentication endpoints use bcrypt + JWT (`jose`), with rate limiting and throttling.
+  - Independent gray/production release console (`deploy-console/`) as a Cloudflare Worker.
 
 ## Tech stack
 
@@ -40,6 +41,7 @@ This is the marketing site for **LiYuan Studio**. It is a client-side rendered R
 
 - **Frontend:** Cloudflare Pages / Wrangler, serving the `dist/` directory as static assets.
 - **API:** Vercel Serverless Function via `api/index.ts`.
+- **Deploy console:** Cloudflare Worker in `deploy-console/` (not part of the marketing-site `dist/`).
 
 Key configuration files:
 
@@ -110,6 +112,7 @@ Key configuration files:
 │   │   ├── forgot-password.tsx
 │   │   ├── reset-password.tsx
 │   │   ├── admin.tsx
+│   │   ├── blog.tsx
 │   │   └── profile.tsx
 │   ├── pages/              # Page-level React components
 │   │   ├── LoginPage.tsx
@@ -118,18 +121,23 @@ Key configuration files:
 │   │   ├── ResetPasswordPage.tsx
 │   │   ├── ProfilePage.tsx
 │   │   ├── AdminPage.tsx
+│   │   ├── BlogPage.tsx
 │   │   └── PapyrusDesktopPage.tsx
 │   ├── components/         # Shared React components
 │   │   ├── AuthForm.tsx
-│   │   ├── MouseFollower.tsx
+│   │   ├── AuthNav.tsx
+│   │   ├── UserAvatar.tsx
 │   │   └── MaskedHeading.tsx
 │   ├── context/
 │   │   └── AuthContext.tsx # Global auth state provider
 │   ├── api/
-│   │   ├── api.ts          # fetchNews / fetchBlogPosts helpers
+│   │   ├── news.ts         # fetchNews helpers
+│   │   ├── blog.ts         # Blog CRUD / public post helpers
 │   │   ├── auth.ts         # Login/register/forgot/reset/profile API helpers
-│   │   └── admin.ts        # Admin API helpers
+│   │   ├── admin.ts        # Admin API helpers
+│   │   └── errors.ts       # Shared API error parsing
 │   ├── App.tsx             # Home page layout + shared components (Footer, News, Blog, etc.)
+│   ├── api.ts              # Re-exports fetchNews / fetchBlogPosts for the home page
 │   ├── api.test.ts         # API helper tests
 │   ├── App.test.tsx        # Home page component tests
 │   ├── config/
@@ -139,6 +147,15 @@ Key configuration files:
 │   │   └── setup.ts        # Vitest setup: jsdom canvas mock + jest-dom matchers
 │   ├── types.ts            # Shared TS types
 │   └── styles.css          # Global and component styles
+├── deploy-console/         # Independent Cloudflare Worker for gray/production release console
+│   ├── package.json
+│   ├── wrangler.jsonc
+│   ├── src/
+│   │   ├── index.ts        # Worker entry (login, 2FA, promote API, gray proxy)
+│   │   ├── ui.ts           # HTML UI templates
+│   │   ├── session.ts      # Encrypted session / challenge cookies
+│   │   └── github.ts       # GitHub Deployments / Actions helpers
+│   └── .dev.vars.example
 ├── public/
 │   └── png/                # Static image assets (logo, favicons)
 └── dist/                   # Frontend build output (generated, gitignored)
@@ -150,16 +167,17 @@ Key configuration files:
 - **Home page components live in `src/App.tsx`:**
   - `App` — top-level layout (nav, hero, products, news, blog).
   - `AuthNav` — renders login/register or user/admin links based on `AuthContext` state.
-  - `MouseFollower` — fixed-position cursor glow that follows the mouse.
-  - `MaskedHeading` — renders two stacked text layers and reveals a white overlay clipped to a circle near the cursor.
-  - `News` / `Blog` — currently render placeholder content; wired to fetch dynamic data in `src/api.ts`.
+  - `MaskedHeading` — renders expressive section headings used across the home page.
+  - `News` / `Blog` — fetch and render dynamic content via `src/api.ts` (re-exporting `src/api/news.ts` and `src/api/blog.ts`).
   - `Footer` — site footer.
 - **Auth pages** (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `ProfilePage`) wrap `AuthForm` or forms and use `AuthContext`.
 - **Admin page** (`AdminPage`) lists users and allows role changes/deletion for admin users.
-- **Data fetching:** `src/api.ts` exports `fetchNews()` and `fetchBlogPosts()`; `src/api/auth.ts` and `src/api/admin.ts` handle authenticated requests. All helpers call `${env.API_BASE_URL}/...`.
+- **Blog page** (`BlogPage`) lists public posts and hosts the `/blog/release/` authoring flow.
+- **Data fetching:** `src/api/news.ts` and `src/api/blog.ts` export content helpers; `src/api.ts` re-exports the home-page fetchers. `src/api/auth.ts` and `src/api/admin.ts` handle authenticated requests. All helpers call `${env.API_BASE_URL}/...`.
 - **Authentication state:** `src/context/AuthContext.tsx` provides global auth state, token storage in `localStorage`, and profile update helpers.
 - **Environment access:** `src/config/env.ts` validates `import.meta.env.VITE_API_BASE_URL` at runtime. Local dev uses `/api`; production uses a full URL from `.env.production`.
 - **Static assets:** images referenced from `/png/...` live in `public/png/`. Vite serves `public/` at the site root in dev and copies it to `dist/` on build. Favicons are referenced explicitly in each page's `index.html`.
+- **Deploy console:** `deploy-console/` is a separate npm workspace (Cloudflare Worker). It is not part of the Vite MPA and does not ship in `dist/`. Locally run `npm run dev --workspace=deploy-console`; deploy with `npm run deploy --workspace=deploy-console` (see `docs/gray-deployment.md`).
 
 If the site grows, prefer splitting components into `src/components/` and data/constants into `src/data/` or similar, keeping the current structure otherwise.
 
@@ -199,14 +217,21 @@ npm run preview
 npm run check:secrets
 
 # Run tests
-npm run test          # frontend + backend
+npm run test          # frontend + backend + deploy-console
 npm run test:web      # frontend only
 npm run test:api      # backend only
+npm run test:deploy-console  # gray release console only
+npm run test:workflows       # GitHub workflow structure checks
 
 # Run tests with coverage
 npm run coverage      # frontend + backend
 npm run coverage:web  # frontend only
 npm run coverage:api  # backend only
+
+# Deploy-console (independent Worker; see docs/gray-deployment.md)
+npm run dev --workspace=deploy-console
+npm run build:deploy-console
+npm run deploy --workspace=deploy-console
 ```
 
 Dev details:
@@ -276,7 +301,6 @@ Tests run with **Vitest**. Frontend tests use `jsdom` and `@testing-library/reac
 - Prefer **functional components** and React hooks.
 - Event listeners added in `useEffect` must be removed in the cleanup function.
 - Keep component props typed with inline TypeScript interfaces/types.
-- Keep runtime constants that depend on CSS values in sync with `styles.css` (e.g., `GLOW_RADIUS` in `MouseFollower.tsx` must match the `.mouse-glow` diameter).
 - Validate environment variables explicitly; do not assume `import.meta.env` or `process.env` values exist.
 - CSS:
   - Use CSS custom properties sparingly; the current palette is hard-coded in `styles.css`.
@@ -317,5 +341,6 @@ These files are either gitignored or contain only non-functional placeholders an
 - `npm run dev` now starts the API first and waits for `/api/health` before launching Vite. If the backend cannot start (e.g., missing `MONGODB_URI`), `npm run dev` will fail after a timeout.
 - `server/` is an npm workspace. You can run backend scripts either from inside `server/` or from the root with `npm run <script> --workspace=server`; root aliases like `dev:api` and `build:api` are provided for convenience.
 - The frontend is an MPA. When adding a new page, create both an `src/entries/<page>.tsx` and a top-level `<page>/index.html`, then add the entry to `vite.config.ts` `rollupOptions.input`.
+- `deploy-console/` is an npm workspace and a separate Cloudflare Worker. Do not add it to Vite `rollupOptions.input` or expect it under `dist/`. Prefer root scripts (`test:deploy-console`, `build:deploy-console`) or `npm run <script> --workspace=deploy-console`.
 - `localStorage` is used for the auth token on the client. Clearing site data / localStorage logs the user out.
 - When adding dependencies, keep the bundle small; this is a lightweight landing page.

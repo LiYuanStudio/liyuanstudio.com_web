@@ -79,6 +79,10 @@ function BlogIndex() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    document.title = '博客 | LiYuan Studio';
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     fetchBlogPosts()
       .then((list) => {
@@ -110,9 +114,9 @@ function BlogIndex() {
           <a className="blog-page-button" href="/blog/release/">发布</a>
         </section>
 
-        {status === 'loading' && <p className="blog-page-status">加载中...</p>}
+        {status === 'loading' && <p className="blog-page-status" role="status">加载中...</p>}
         {status === 'error' && <p className="blog-page-error" role="alert">{error}</p>}
-        {status === 'ready' && posts.length === 0 && <p className="blog-page-status">暂无博客内容。</p>}
+        {status === 'ready' && posts.length === 0 && <p className="blog-page-status" role="status">暂无博客内容。</p>}
         <div className="blog-page-list" aria-busy={status === 'loading'}>
           {posts.map((post) => (
             <article className="blog-page-post" key={`${post.authorUsername}/${post.blogNumber}`}>
@@ -171,6 +175,10 @@ function BlogRelease() {
   const [error, setError] = useState<string | null>(null);
   const [successPath, setSuccessPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    document.title = '发布博客 | LiYuan Studio';
+  }, []);
 
   const tagText = useMemo(() => getTagsText(form.tags), [form.tags]);
 

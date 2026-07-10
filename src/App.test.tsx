@@ -61,6 +61,16 @@ describe('App', () => {
 
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: false,
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    } as MediaQueryList);
 
     renderApp();
     const user = userEvent.setup();
@@ -71,6 +81,30 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '动态' }));
     await user.click(screen.getByRole('button', { name: '博客' }));
     expect(scrollIntoView).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses instant scrolling when prefers-reduced-motion is enabled', async () => {
+    mockFetchNews.mockResolvedValue([]);
+    mockFetchBlogPosts.mockResolvedValue([]);
+
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: true,
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    } as MediaQueryList);
+
+    renderApp();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '产品' }));
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto' });
   });
 
   it('links authenticated users with a valid username to their public profile from the homepage', async () => {
@@ -169,6 +203,18 @@ describe('News component', () => {
     expect(await screen.findByText('敬请期待')).toBeInTheDocument();
   });
 
+  it('shows a loading status while news is fetching', () => {
+    mockFetchNews.mockReturnValue(new Promise(() => {}));
+    render(<News />);
+    expect(screen.getByRole('status')).toHaveTextContent('加载中...');
+  });
+
+  it('shows an error alert when the news API fails', async () => {
+    mockFetchNews.mockRejectedValue(new Error('offline'));
+    render(<News />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('offline');
+  });
+
   it('renders news cards from the API', async () => {
     mockFetchNews.mockResolvedValue([
       {
@@ -233,16 +279,16 @@ describe('Blog component', () => {
       expect(screen.getByText('API blog one')).toBeInTheDocument();
     });
     expect(screen.getByText('API summary one')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/LA/50/');
+    expect(screen.getAllByRole('link', { name: '阅读 API blog one' })[0]).toHaveAttribute('href', '/LA/50/');
   });
 
-  it('shows an error status without demo posts when the API fails', async () => {
+  it('shows an error alert without demo posts when the API fails', async () => {
     mockFetchBlogPosts.mockRejectedValue(new Error('offline'));
 
     render(<Blog />);
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('offline');
+      expect(screen.getByRole('alert')).toHaveTextContent('offline');
     });
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
   });
@@ -256,6 +302,22 @@ describe('Blog component', () => {
       expect(screen.getByRole('status')).toHaveTextContent('暂无博客内容。');
     });
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
+  });
+
+  it('labels blog card links with the post title', async () => {
+    mockFetchBlogPosts.mockResolvedValue(API_POSTS);
+
+    render(<Blog />);
+
+    expect(await screen.findByRole('link', { name: '阅读 API blog one' })).toHaveAttribute('href', '/LA/50/');
+  });
+
+  it('shows a loading status while blog posts are fetching', () => {
+    mockFetchBlogPosts.mockReturnValue(new Promise(() => {}));
+
+    render(<Blog />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('加载中...');
   });
 
   it('applies blog display settings from local storage', async () => {

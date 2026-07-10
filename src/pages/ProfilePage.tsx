@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
@@ -14,6 +14,7 @@ import {
   fetchUserBlogPosts,
   updateBlogPost,
 } from '../api/blog.js';
+import { getErrorMessage } from '../api/errors.js';
 import { useAuth } from '../context/AuthContext.js';
 import { getCroppedImg } from '../lib/crop-image.js';
 import type {
@@ -30,12 +31,17 @@ import './profile.css';
 
 const BIO_MAX_LENGTH = 120;
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024;
+const DOCUMENT_TITLE_SUFFIX = ' | LiYuan Studio';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: '管理员',
   member: '成员',
   tourist: '游客',
 };
+
+function setDocumentTitle(title: string) {
+  document.title = `${title}${DOCUMENT_TITLE_SUFFIX}`;
+}
 
 function ProfileRoleBadge({ role }: { role: UserRole }) {
   return (
@@ -197,21 +203,28 @@ function UsernameRequiredPrompt({ user, onLogout }: { user: User; onLogout: () =
 function MyPostsPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadPosts = useCallback(async () => {
     setStatus('loading');
+    setError(null);
     try {
       setPosts(await fetchMyBlogPosts());
       setStatus('ready');
-    } catch {
+    } catch (err) {
       setStatus('error');
+      setError(getErrorMessage(err, '文章加载失败。'));
     }
   }, []);
 
   useEffect(() => {
     void loadPosts();
   }, [loadPosts]);
+
+  useEffect(() => {
+    setDocumentTitle('我的文章');
+  }, []);
 
   const handleDelete = async (post: BlogPost) => {
     if (!post._id) return;
@@ -234,8 +247,8 @@ function MyPostsPage() {
           <a className="profile-button" href="/me/posts/new/">新建文章</a>
         </div>
         {message && <p className={message.startsWith('删除失败') ? 'profile-error' : 'profile-success'} role={message.startsWith('删除失败') ? 'alert' : 'status'}>{message}</p>}
-        {status === 'loading' && <p className="profile-empty">加载中...</p>}
-        {status === 'error' && <p className="profile-error" role="alert">文章加载失败。</p>}
+        {status === 'loading' && <p className="profile-empty" role="status">加载中...</p>}
+        {status === 'error' && <p className="profile-error" role="alert">{error ?? '文章加载失败。'}</p>}
         {status === 'ready' && posts.length === 0 && <p className="profile-empty">还没有文章。</p>}
         {posts.length > 0 && (
           <div className="profile-post-list">
@@ -269,6 +282,10 @@ function BlogEditorPage({ id }: { id?: string }) {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    setDocumentTitle(id ? '编辑文章' : '写文章');
+  }, [id]);
+
+  useEffect(() => {
     if (!id) return;
     let cancelled = false;
     fetchMyBlogPosts()
@@ -293,7 +310,10 @@ function BlogEditorPage({ id }: { id?: string }) {
           visibility: post.visibility,
         });
       })
-      .catch(() => setError('文章加载失败。'))
+      .catch((err) => {
+        if (cancelled) return;
+        setError(getErrorMessage(err, '文章加载失败。'));
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -328,7 +348,7 @@ function BlogEditorPage({ id }: { id?: string }) {
   };
 
   if (loading) {
-    return <main className="profile-main"><p className="profile-empty">加载中...</p></main>;
+    return <main className="profile-main"><p className="profile-empty" role="status">加载中...</p></main>;
   }
 
   return (
@@ -381,6 +401,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
     let cancelled = false;
     setStatus('loading');
     setError(null);
+    setDocumentTitle(username);
 
     fetchPublicProfile(username)
       .then(async (profileResponse) => {
@@ -401,11 +422,13 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
         setProfile(publicProfile);
         setPosts(postList);
         setStatus('ready');
+        setDocumentTitle(publicProfile.displayName || publicProfile.username || username);
       })
       .catch((err) => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : null);
         setStatus('error');
+        setDocumentTitle('个人主页');
       });
     return () => {
       cancelled = true;
@@ -417,10 +440,10 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
 
   return (
     <main className="profile-main">
-      {status === 'loading' && <p className="profile-empty">加载中...</p>}
+      {status === 'loading' && <p className="profile-empty" role="status">加载中...</p>}
       {status === 'error' && (
         <section className="profile-card">
-          <p className="profile-error">
+          <p className="profile-error" role="alert">
             {error?.includes('调试 ID')
               ? `个人主页不存在或还未初始化。 ${error}`
               : '个人主页不存在或还未初始化。'}
@@ -518,6 +541,7 @@ function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber
 
   useEffect(() => {
     let cancelled = false;
+    setDocumentTitle('文章');
     fetchBlogPost(blogNumber)
       .then((item) => {
         if (cancelled) return;
@@ -531,17 +555,26 @@ function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber
         }
         setPost(item);
         setStatus('ready');
+        setDocumentTitle(item.title);
       })
-      .catch(() => setStatus('error'));
+      .catch(() => {
+        if (cancelled) return;
+        setStatus('error');
+        setDocumentTitle('文章不存在');
+      });
     return () => {
       cancelled = true;
     };
-  }, [blogNumber]);
+  }, [blogNumber, username]);
 
   return (
     <main className="profile-main profile-article-main">
-      {status === 'loading' && <p className="profile-empty">加载中...</p>}
-      {status === 'error' && <section className="profile-card"><p className="profile-error">文章不存在或暂不可访问。</p></section>}
+      {status === 'loading' && <p className="profile-empty" role="status">加载中...</p>}
+      {status === 'error' && (
+        <section className="profile-card">
+          <p className="profile-error" role="alert">文章不存在或暂不可访问。</p>
+        </section>
+      )}
       {status === 'ready' && post && (
         <article className="profile-article">
           <header className="profile-article-header">
@@ -585,6 +618,10 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    setDocumentTitle('账号设置');
+  }, []);
 
   const handleCropComplete = useCallback((_: Area, pixels: Area) => {
     setCroppedAreaPixels(pixels);
@@ -778,10 +815,22 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
 
 export function ProfilePage() {
   const { state, logout, updateAvatar, updateProfile } = useAuth();
-  const route = useMemo(() => parseRoute(), []);
+  const [route, setRoute] = useState(() => parseRoute());
+
+  useEffect(() => {
+    const handlePopState = () => setRoute(parseRoute());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (route.kind === 'not-found') {
+      setDocumentTitle('页面不存在');
+    }
+  }, [route]);
 
   if (state.status === 'loading') {
-    return <div className="profile-page"><main className="profile-main"><p className="profile-empty">加载中...</p></main></div>;
+    return <div className="profile-page"><main className="profile-main"><p className="profile-empty" role="status">加载中...</p></main></div>;
   }
 
   const user = state.status === 'authenticated' ? state.user : undefined;
@@ -807,7 +856,13 @@ export function ProfilePage() {
       {route.kind === 'edit-post' && <BlogEditorPage id={route.id} />}
       {route.kind === 'public-profile' && <PublicProfilePage username={route.username} currentUser={user} />}
       {route.kind === 'post-detail' && <BlogDetailPage username={route.username} blogNumber={route.blogNumber} />}
-      {route.kind === 'not-found' && <main className="profile-main"><section className="profile-card"><p className="profile-error">页面不存在。</p></section></main>}
+      {route.kind === 'not-found' && (
+        <main className="profile-main">
+          <section className="profile-card">
+            <p className="profile-error" role="alert">页面不存在。</p>
+          </section>
+        </main>
+      )}
     </div>
   );
 }

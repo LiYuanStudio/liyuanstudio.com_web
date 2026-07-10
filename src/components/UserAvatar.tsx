@@ -16,6 +16,7 @@ export function UserAvatar({
 }: UserAvatarProps) {
   const [loadFailed, setLoadFailed] = useState(false);
   const canRenderImage = isRenderableAvatarSrc(src) && !loadFailed;
+  const accessibleName = alt.trim() || displayName;
 
   useEffect(() => {
     setLoadFailed(false);
@@ -35,9 +36,10 @@ export function UserAvatar({
   return (
     <span
       className={className ? `${className} user-avatar-fallback` : 'user-avatar-fallback'}
-      aria-hidden={alt === '' ? true : undefined}
+      role="img"
+      aria-label={accessibleName}
     >
-      {getAvatarFallback(displayName)}
+      <span aria-hidden="true">{getAvatarFallback(displayName)}</span>
     </span>
   );
 }

@@ -15,18 +15,19 @@ describe('UserAvatar', () => {
     expect(image).toHaveAttribute('src', 'https://example.com/avatar.png');
   });
 
-  it('falls back to initials when src is missing', () => {
+  it('falls back to initials with an accessible name when src is missing', () => {
     render(<UserAvatar displayName="LiYuan" />);
 
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'LiYuan' })).toBeInTheDocument();
     expect(screen.getByText('L')).toBeInTheDocument();
   });
 
-  it('falls back to initials when image loading fails', () => {
+  it('keeps the accessible name when image loading fails', () => {
     const { container } = render(
       <UserAvatar
         src="https://example.com/broken.png"
         displayName="LiYuan"
+        alt="个人头像预览"
       />,
     );
 
@@ -37,6 +38,7 @@ describe('UserAvatar', () => {
     }
 
     expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '个人头像预览' })).toBeInTheDocument();
     expect(screen.getByText('L')).toBeInTheDocument();
   });
 });
