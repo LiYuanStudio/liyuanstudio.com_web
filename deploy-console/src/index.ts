@@ -1,16 +1,12 @@
 import { Hono, type Context } from 'hono';
 import { dispatchPromotion, getLatestGrayDeployment } from './github.js';
 import { createSession, readSession, removeSession, writeSession } from './session.js';
-import type { AdminUser, Bindings, GrayDeployment, Session } from './types.js';
+import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
 import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles } from './ui.js';
 
-type RequestVariables = {
-  requestId: string;
-};
+type AppContext = Context<AppEnv>;
 
-type AppContext = Context<{ Bindings: Bindings; Variables: RequestVariables }>;
-
-const app = new Hono<{ Bindings: Bindings; Variables: RequestVariables }>();
+const app = new Hono<AppEnv>();
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/;
 const INVALID_ORIGIN_MESSAGE = '当前页面的访问来源无效，请从规范的部署控制台重新登录。';
