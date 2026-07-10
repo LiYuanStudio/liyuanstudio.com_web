@@ -172,13 +172,69 @@ describe('AuthProvider', () => {
 
   it('logs out and clears the token', async () => {
     localStorage.setItem('liyuan_auth_token', 'token');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        user: { _id: '1', email: 'hello@example.com', avatar: 'avatar.png' },
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/auth/logout')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ message: '已退出登录' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: { _id: '1', email: 'hello@example.com', avatar: 'avatar.png' },
+        }),
+      } as Response;
+    }));
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('email')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Logout' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('unauthenticated')).toBeInTheDocument();
+    });
+    expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/auth\/logout$/),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token',
+        }),
       }),
-    } as Response));
+    );
+  });
+
+  it('clears the local session even when logout API fails', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/auth/logout')) {
+        return {
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          json: async () => ({ error: '服务器内部错误' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: { _id: '1', email: 'hello@example.com', avatar: 'avatar.png' },
+        }),
+      } as Response;
+    }));
 
     render(
       <AuthProvider>

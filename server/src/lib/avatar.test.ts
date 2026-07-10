@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_AVATAR } from '../models/user.js';
 import { AVATAR_MAX_LENGTH, validateAvatarValue } from './avatar.js';
 
 describe('validateAvatarValue', () => {
@@ -12,8 +11,14 @@ describe('validateAvatarValue', () => {
     expect(validateAvatarValue(avatar)).toBe(avatar);
   });
 
-  it('accepts the default svg avatar', () => {
-    expect(validateAvatarValue(DEFAULT_AVATAR)).toBe(DEFAULT_AVATAR);
+  it('rejects svg data URLs', () => {
+    expect(() => validateAvatarValue("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E")).toThrow(
+      '头像链接格式不正确',
+    );
+  });
+
+  it('rejects http avatar URLs', () => {
+    expect(() => validateAvatarValue('http://example.com/avatar.png')).toThrow('头像链接格式不正确');
   });
 
   it('rejects empty values', () => {

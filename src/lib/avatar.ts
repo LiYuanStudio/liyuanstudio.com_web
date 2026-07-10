@@ -8,7 +8,7 @@ export function isRenderableAvatarSrc(src: string | undefined): src is string {
   }
 
   const trimmed = src.trim();
-  return /^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed);
+  return /^https:\/\//i.test(trimmed) || /^data:image\/(jpeg|png|webp)/i.test(trimmed);
 }
 
 export function isValidCroppedAvatarDataUrl(value: string): boolean {
