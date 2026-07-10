@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   deploymentKey,
   deriveDeploymentView,
+  isActivePromotionState,
+  isFailedPromotionState,
+  isPartialPromotion,
   pollErrorMessage,
   shouldApplyPoll,
   type DeploymentStatus,
+  type LastPromotionStatus,
 } from './ui-state.js';
 import { applicationScript } from './ui.js';
 
@@ -44,6 +48,44 @@ describe('deploy console UI state', () => {
       false,
       null,
     ).promoteDisabled).toBe(false);
+    expect(isActivePromotionState('pending')).toBe(true);
+    expect(isFailedPromotionState('error')).toBe(true);
+  });
+
+  it('keeps showing a previous candidate failure after a newer gray appears', () => {
+    const newer: DeploymentStatus = {
+      id: 43,
+      sha: 'def456',
+      state: 'success',
+      promotionState: null,
+      promoted: false,
+      previewUrl: 'https://gray.example.com/',
+    };
+    const lastPromotion: LastPromotionStatus = {
+      deploymentId: 42,
+      sha: 'abc123ffffffffffffffffffffffffffffffff',
+      dispatchedAt: Date.parse('2026-07-09T11:00:00Z'),
+      state: 'failure',
+      description: 'Production deployment failed',
+    };
+    const view = deriveDeploymentView(newer, false, null, lastPromotion);
+    expect(view.promoteDisabled).toBe(false);
+    expect(view.message).toContain('上一候选');
+    expect(view.message).toContain('abc123f');
+    expect(view.message).toContain('当前显示最新灰度');
+  });
+
+  it('surfaces partial promotion failures from deployment descriptions', () => {
+    const lastPromotion: LastPromotionStatus = {
+      deploymentId: 42,
+      sha: 'abc123ffffffffffffffffffffffffffffffff',
+      dispatchedAt: Date.parse('2026-07-09T11:00:00Z'),
+      state: 'failure',
+      description: 'partial: vercel=success; cloudflare=failure; rollback_vercel=failure',
+    };
+    expect(isPartialPromotion(lastPromotion.description)).toBe(true);
+    const view = deriveDeploymentView(ready, false, null, lastPromotion);
+    expect(view.message).toContain('部分失败');
   });
 
   it('rejects stale poll responses and preserves the last good state message', () => {

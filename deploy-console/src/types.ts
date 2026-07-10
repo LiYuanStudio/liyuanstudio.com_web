@@ -27,11 +27,18 @@ export type AdminUser = {
   role: 'admin';
 };
 
+export type LastDispatch = {
+  deploymentId: number;
+  sha: string;
+  dispatchedAt: number;
+};
+
 export type Session = {
   token: string;
   user: AdminUser;
   csrf: string;
   expiresAt: number;
+  lastDispatch?: LastDispatch;
 };
 
 export type PendingChallenge = {
@@ -47,5 +54,14 @@ export type GrayDeployment = {
   state: string;
   upstreamUrl: string | null;
   promotionState: string | null;
+  promotionDescription: string | null;
   promoted: boolean;
+};
+
+export type LastPromotion = {
+  deploymentId: number;
+  sha: string;
+  dispatchedAt: number;
+  state: string | null;
+  description: string | null;
 };

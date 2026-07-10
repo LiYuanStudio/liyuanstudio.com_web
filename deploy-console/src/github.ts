@@ -13,7 +13,13 @@ type GitHubDeployment = {
 
 type GitHubDeploymentStatus = {
   state: string;
+  description?: string | null;
   environment_url: string | null;
+};
+
+export type PromotionLookup = {
+  state: string;
+  description: string | null;
 };
 
 async function githubRequest<T>(
@@ -73,18 +79,27 @@ function isConsolePromotion(deployment: GitHubDeployment, grayDeploymentId: numb
   );
 }
 
-async function productionState(
+/**
+ * Resolve the latest LA production attempt for a gray candidate.
+ * An active production deployment with no status yet is treated as pending
+ * so the console blocks duplicate dispatch during the status-write window.
+ */
+export async function lookupPromotion(
   env: Bindings,
   sha: string,
   grayDeploymentId: number,
-): Promise<string | null> {
+): Promise<PromotionLookup | null> {
   const deployments = await githubRequest<GitHubDeployment[]>(
     env,
     `${repositoryPath(env)}/deployments?environment=production&sha=${encodeURIComponent(sha)}&per_page=10`,
   );
   for (const deployment of deployments) {
     if (!isConsolePromotion(deployment, grayDeploymentId)) continue;
-    return (await latestStatus(env, deployment.id))?.state ?? null;
+    const status = await latestStatus(env, deployment.id);
+    return {
+      state: status?.state ?? 'pending',
+      description: status?.description ?? null,
+    };
   }
   return null;
 }
@@ -100,15 +115,16 @@ export async function getLatestGrayDeployment(
   if (!deployment) return null;
 
   const status = await latestStatus(env, deployment.id);
-  const promotionState = await productionState(env, deployment.sha, deployment.id);
+  const promotion = await lookupPromotion(env, deployment.sha, deployment.id);
   return {
     id: deployment.id,
     sha: deployment.sha,
     createdAt: deployment.created_at,
     state: status?.state ?? 'pending',
     upstreamUrl: status?.environment_url ?? null,
-    promotionState,
-    promoted: promotionState === 'success',
+    promotionState: promotion?.state ?? null,
+    promotionDescription: promotion?.description ?? null,
+    promoted: promotion?.state === 'success',
   };
 }
 

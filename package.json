@@ -19,6 +19,7 @@
     "test:web": "vitest run --config=vitest.config.ts",
     "test:api": "vitest run --config=server/vitest.config.ts",
     "test:deploy-console": "npm run test --workspace=deploy-console",
+    "test:workflows": "vitest run --config=deploy-console/vitest.config.ts deploy-console/src/workflow-structure.test.ts",
     "coverage": "vitest run --coverage --config=vitest.config.ts && vitest run --coverage --config=server/vitest.config.ts",
     "coverage:web": "vitest run --coverage --config=vitest.config.ts",
     "coverage:api": "vitest run --coverage --config=server/vitest.config.ts",

@@ -80,7 +80,8 @@ npm run deploy --workspace=deploy-console
 - 网关删除浏览器 Cookie 和 Authorization 后再访问 Vercel，并在服务端附加 protection bypass；该 secret 不会返回浏览器。
 - 点击全量发布时，控制台实时调用 `/auth/me` 复核角色，并检查 CSRF、deployment ID、SHA、成功状态和重复发布状态。
 - 打开灰度网关和读取部署状态也会实时复核 `/auth/me`；账号、角色或 token 失效时会清除控制台会话。状态轮询发生临时错误时保留最后一次成功状态，并显示响应调试 ID。
-- GitHub production deployment 记录审批 LA 账号和发布结果。控制台和生产工作流都只判断该灰度候选最新一次匹配 LA 审批记录（payload 中数字或字符串形式的 ID 都可识别），不会让较旧的成功记录掩盖较新的失败重试。实际 Vercel 或 Cloudflare 发布失败会尽力写入失败状态；GitHub status API 写入本身失败不会被误报成实际部署失败。
+- GitHub production deployment 记录审批 LA 账号和发布结果。控制台和生产工作流都只判断该灰度候选最新一次匹配 LA 审批记录（payload 中数字或字符串形式的 ID 都可识别），不会让较旧的成功记录掩盖较新的失败重试。若 production deployment 已创建但尚未写入 status，控制台将其视为发布中，避免重复 dispatch；`promote.yml` 写入 pending status 失败时会直接终止，不会继续部署。
+- 实际 Vercel 或 Cloudflare 目标失败会写入带目标明细的 failure / partial / compensated 描述；补偿回滚失败时保留 `partial:` 前缀供控制台展示。灰度网关登录门页与代理响应都会带上 CSP、`X-Frame-Options`、request ID 等安全头，并拒绝带用户名/密码的 Vercel URL。
 
 ## 日常操作
 
@@ -92,7 +93,30 @@ npm run deploy --workspace=deploy-console
 
 ## 回滚
 
-不要直接选择历史灰度 deployment。回滚应当在 Git 中 revert 需要撤销的提交并合入 `main`，由该新提交生成最新灰度候选，验收后再全量发布。这样回滚也经过同样的 LA 审批、测试和审计链路。
+不要直接选择历史灰度 deployment。有意回滚应当在 Git 中 revert 需要撤销的提交并合入 `main`，由该新提交生成最新灰度候选，验收后再全量发布。这样回滚也经过同样的 LA 审批、测试和审计链路。
+
+### 生产部分失败与自动补偿
+
+`promote.yml` 会把 Vercel API 与 Cloudflare Pages 视为两个独立目标：
+
+1. 实际发布前记录上一成功 production 的 SHA（仅 LA 控制台审批产生的成功记录）。
+2. 两个目标都尝试部署；任一侧失败时，对**已经变更成功**的目标用上一成功 SHA 重新构建并补偿部署。
+3. GitHub production deployment status 的 description 会写明每个目标结果与回滚结果，例如：
+   - `vercel=success; cloudflare=success`（完整成功）
+   - `compensated: vercel=success; cloudflare=failure; rollback_vercel=success; ...`（部分失败且补偿成功）
+   - `partial: vercel=success; cloudflare=failure; rollback_vercel=failure; ...`（部分失败且补偿失败，需人工处理）
+
+控制台会把带 `partial:` 前缀的失败视为显式部分失败状态，并在会话中保留最近一次 dispatch 的候选与时间；即使随后出现更新的灰度候选，仍继续展示上一发布的 failure / cancelled / partial 结果。
+
+### 人工恢复（补偿失败时）
+
+当 description 以 `partial:` 开头且 `rollback_*=failure` 时，生产两端可能不一致。按以下顺序处理：
+
+1. 打开对应 Promote 工作流 run，确认哪个目标停留在新 SHA、哪个仍是旧版或部署失败。
+2. 用上一成功 SHA（description 中的 `previous_sha`）在受控环境重新部署失败的补偿目标，或按标准流程 revert 后走完整灰度验收再全量发布。
+3. 冒烟检查生产 API 与前端版本一致后，再在控制台处理新的灰度候选。不要在两端版本不一致时继续点击全量发布。
+
+灰度构建（`gray-release`）与生产发布（`production-release`）使用不同的 concurrency group，因此长时间 promote 不会阻塞新的灰度候选构建；生产发布本身仍然串行。
 
 ## 本地验证
 

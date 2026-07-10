@@ -59,10 +59,13 @@ function githubResponses(options?: {
   graySha?: string;
   grayState?: string;
   productionState?: string;
+  productionDescription?: string;
+  productionStatusMissing?: boolean;
   olderProductionState?: string;
   stringGrayDeploymentId?: boolean;
   vercelProductionState?: string;
   upstreamUrl?: string;
+  extraGray?: { id: number; sha: string; state?: string; productionState?: string; productionDescription?: string };
 }) {
   const grayId = options?.grayId ?? 42;
   const graySha = options?.graySha ?? 'abc123';
@@ -78,8 +81,9 @@ function githubResponses(options?: {
       }]);
     }
     if (url.pathname.endsWith('/deployments') && url.searchParams.get('environment') === 'production') {
+      const sha = url.searchParams.get('sha');
       const deployments = [];
-      if (options?.vercelProductionState) {
+      if (options?.vercelProductionState && sha === graySha) {
         deployments.push({
           id: 100,
           sha: graySha,
@@ -89,7 +93,7 @@ function githubResponses(options?: {
           payload: {},
         });
       }
-      if (options?.productionState) {
+      if ((options?.productionState || options?.productionStatusMissing) && sha === graySha) {
         deployments.push({
           id: 99,
           sha: graySha,
@@ -102,7 +106,7 @@ function githubResponses(options?: {
           },
         });
       }
-      if (options?.olderProductionState) {
+      if (options?.olderProductionState && sha === graySha) {
         deployments.push({
           id: 98,
           sha: graySha,
@@ -112,16 +116,38 @@ function githubResponses(options?: {
           payload: { gray_deployment_id: grayId },
         });
       }
+      if (options?.extraGray && sha === options.extraGray.sha) {
+        deployments.push({
+          id: 97,
+          sha: options.extraGray.sha,
+          created_at: '2026-07-09T09:00:00Z',
+          creator: { login: 'github-actions[bot]' },
+          description: 'Approved through LA deploy console by admin@example.com (admin-id)',
+          payload: { gray_deployment_id: options.extraGray.id },
+        });
+      }
       return json(deployments);
     }
     if (url.pathname.endsWith('/deployments/99/statuses')) {
-      return json([{ state: options?.productionState, environment_url: 'https://liyuanstudio.com' }]);
+      if (options?.productionStatusMissing) return json([]);
+      return json([{
+        state: options?.productionState,
+        description: options?.productionDescription ?? null,
+        environment_url: 'https://liyuanstudio.com',
+      }]);
     }
     if (url.pathname.endsWith('/deployments/100/statuses')) {
       return json([{ state: options?.vercelProductionState, environment_url: 'https://preview.vercel.app' }]);
     }
     if (url.pathname.endsWith('/deployments/98/statuses')) {
       return json([{ state: options?.olderProductionState, environment_url: 'https://liyuanstudio.com' }]);
+    }
+    if (url.pathname.endsWith('/deployments/97/statuses')) {
+      return json([{
+        state: options?.extraGray?.productionState ?? 'failure',
+        description: options?.extraGray?.productionDescription ?? 'Production deployment failed',
+        environment_url: 'https://liyuanstudio.com',
+      }]);
     }
     if (url.pathname.endsWith('/actions/workflows/promote.yml/dispatches') && init?.method === 'POST') {
       return new Response(null, { status: 204 });
@@ -426,9 +452,11 @@ describe('deploy console', () => {
         createdAt: '2026-07-09T10:00:00Z',
         state: 'success',
         promotionState: null,
+        promotionDescription: null,
         promoted: false,
         previewUrl: 'https://gray.example.com/',
       },
+      lastPromotion: null,
     });
   });
 
@@ -727,7 +755,144 @@ describe('deploy console', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get('X-Request-Id')).toBeTruthy();
+    expect(response.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+    expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
     await expect(response.text()).resolves.toContain('href="https://console.example.com"');
+  });
+
+  it('applies security headers to proxied gray responses', async () => {
+    installFetch({
+      upstream: async () => new Response('candidate', {
+        headers: { 'Content-Type': 'text/html' },
+      }),
+    });
+    const cookie = await login();
+    const response = await app.request(
+      'https://gray.example.com/',
+      { headers: { Cookie: cookie, 'X-Request-Id': 'gray-proxy-1' } },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-Id')).toBe('gray-proxy-1');
+    expect(response.headers.get('Content-Security-Policy')).toContain("default-src 'self'");
+    expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
+  });
+
+  it('rejects Vercel preview URLs that embed credentials', async () => {
+    installFetch({
+      github: githubResponses({
+        upstreamUrl: 'https://user:pass@candidate.vercel.app',
+      }),
+    });
+    const cookie = await login();
+    const response = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      deployment: { previewUrl: null, state: 'success' },
+    });
+  });
+
+  it('treats an active production deployment without status as promoting', async () => {
+    installFetch({
+      github: githubResponses({ productionStatusMissing: true }),
+    });
+    const cookie = await login();
+    const response = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      deployment: { promotionState: 'pending', promoted: false },
+    });
+
+    const dashboard = await app.request(
+      'https://console.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+    const promote = await app.request(
+      'https://console.example.com/api/promote',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          'Content-Type': 'application/json',
+          Origin: env.CONSOLE_ORIGIN,
+          'X-CSRF-Token': csrf,
+        },
+        body: JSON.stringify({ deploymentId: 42, sha: 'abc123' }),
+      },
+      env,
+    );
+    expect(promote.status).toBe(409);
+    await expect(promote.json()).resolves.toEqual({ error: '该版本正在全量发布' });
+  });
+
+  it('keeps showing a previous candidate promote failure after a newer gray appears', async () => {
+    installFetch();
+    const cookie = await login();
+    const dashboard = await app.request(
+      'https://console.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+    const promote = await app.request(
+      'https://console.example.com/api/promote',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          'Content-Type': 'application/json',
+          Origin: env.CONSOLE_ORIGIN,
+          'X-CSRF-Token': csrf,
+        },
+        body: JSON.stringify({ deploymentId: 42, sha: 'abc123' }),
+      },
+      env,
+    );
+    expect(promote.status).toBe(202);
+    const sessionCookie = cookieFrom(promote);
+
+    installFetch({
+      github: githubResponses({
+        grayId: 43,
+        graySha: 'def456',
+        extraGray: {
+          id: 42,
+          sha: 'abc123',
+          productionState: 'failure',
+          productionDescription: 'Production deployment failed; vercel=failure; cloudflare=skipped',
+        },
+      }),
+    });
+
+    const response = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: sessionCookie } },
+      env,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      deployment: { id: 43, sha: 'def456', promotionState: null, promoted: false },
+      lastPromotion: {
+        deploymentId: 42,
+        sha: 'abc123',
+        state: 'failure',
+      },
+    });
   });
 
   it('allows the Cloudflare Insights beacon while retaining a restrictive content security policy', async () => {

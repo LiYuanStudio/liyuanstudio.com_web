@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { dispatchPromotion, getLatestGrayDeployment } from './github.js';
+import { dispatchPromotion, getLatestGrayDeployment, lookupPromotion } from './github.js';
 import {
   createLoginFormToken,
   createSession,
@@ -11,8 +11,9 @@ import {
   writePendingChallenge,
   writeSession,
 } from './session.js';
-import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
+import type { AdminUser, AppEnv, Bindings, GrayDeployment, LastPromotion, Session } from './types.js';
 import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles, twoFactorPage } from './ui.js';
+import { isActivePromotionState } from './ui-state.js';
 
 type AppContext = Context<AppEnv>;
 
@@ -20,6 +21,16 @@ const app = new Hono<AppEnv>();
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/;
 const INVALID_ORIGIN_MESSAGE = '当前页面的访问来源无效，请从规范的部署控制台重新登录。';
+const SECURITY_HEADERS: Record<string, string> = {
+  'Cache-Control': 'no-store',
+  'Content-Security-Policy':
+    "default-src 'self'; base-uri 'none'; connect-src 'self' https://cloudflareinsights.com; form-action 'self'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'",
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-Robots-Tag': 'noindex, nofollow',
+};
 
 function normalizedOrigin(value: string): string {
   return new URL(value).origin;
@@ -34,6 +45,13 @@ function normalizeRequestId(value: string | undefined): string {
 
 function getRequestId(c: AppContext): string {
   return c.get('requestId') || 'unknown';
+}
+
+function applySecurityHeaders(headers: Headers, requestId: string): void {
+  headers.set('X-Request-Id', requestId);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
 }
 
 function isConsoleRequest(c: AppContext): boolean {
@@ -243,41 +261,66 @@ async function requireRevalidatedSession(
   return { session, admin: validation.user };
 }
 
-function validVercelPreview(deployment: GrayDeployment): URL | null {
+export function validVercelPreview(deployment: GrayDeployment): URL | null {
   if (deployment.state !== 'success' || !deployment.upstreamUrl) return null;
   try {
     const url = new URL(deployment.upstreamUrl);
-    if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app')) return null;
+    if (
+      url.protocol !== 'https:' ||
+      !url.hostname.endsWith('.vercel.app') ||
+      url.username ||
+      url.password
+    ) {
+      return null;
+    }
     return url;
   } catch {
     return null;
   }
 }
 
+async function gatePreviewResponse(
+  c: AppContext,
+  body: string,
+  status: 401 | 502 | 503,
+  asHtml: boolean,
+): Promise<Response> {
+  const response = asHtml
+    ? await c.html(body, status)
+    : await c.text(body, status);
+  applySecurityHeaders(response.headers, getRequestId(c));
+  return response;
+}
+
 async function proxyPreview(c: AppContext): Promise<Response> {
+  const requestId = getRequestId(c);
   const session = await readSession(c);
   if (!session) {
-    return c.html(
+    return gatePreviewResponse(
+      c,
       previewAccessPage(normalizedOrigin(c.env.CONSOLE_ORIGIN)),
       401,
-      { 'Cache-Control': 'no-store' },
+      true,
     );
   }
   const validation = await revalidateAdmin(c.env, session);
   if (validation.status === 'invalid') {
     removeSession(c);
-    return c.html(previewAccessPage(normalizedOrigin(c.env.CONSOLE_ORIGIN)), 401, {
-      'Cache-Control': 'no-store',
-    });
+    return gatePreviewResponse(
+      c,
+      previewAccessPage(normalizedOrigin(c.env.CONSOLE_ORIGIN)),
+      401,
+      true,
+    );
   }
   if (validation.status === 'unavailable') {
-    return c.text('LA 身份服务暂时不可用。', 502, { 'Cache-Control': 'no-store' });
+    return gatePreviewResponse(c, 'LA 身份服务暂时不可用。', 502, false);
   }
 
   const deployment = await getLatestGrayDeployment(c.env);
   const upstreamOrigin = deployment && validVercelPreview(deployment);
   if (!deployment || !upstreamOrigin) {
-    return c.text('最新灰度版本尚未部署成功。', 503, { 'Cache-Control': 'no-store' });
+    return gatePreviewResponse(c, '最新灰度版本尚未部署成功。', 503, false);
   }
 
   const incoming = new URL(c.req.url);
@@ -309,8 +352,8 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   responseHeaders.delete('set-cookie');
   responseHeaders.delete('x-vercel-protection-bypass');
   responseHeaders.delete('x-vercel-set-bypass-cookie');
+  applySecurityHeaders(responseHeaders, requestId);
   responseHeaders.set('Cache-Control', 'private, no-store');
-  responseHeaders.set('X-Robots-Tag', 'noindex, nofollow');
 
   const location = responseHeaders.get('Location');
   if (location) {
@@ -332,29 +375,39 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   });
 }
 
+async function resolveLastPromotion(
+  env: Bindings,
+  session: Session,
+): Promise<LastPromotion | null> {
+  const lastDispatch = session.lastDispatch;
+  if (!lastDispatch) return null;
+  const promotion = await lookupPromotion(env, lastDispatch.sha, lastDispatch.deploymentId);
+  return {
+    deploymentId: lastDispatch.deploymentId,
+    sha: lastDispatch.sha,
+    dispatchedAt: lastDispatch.dispatchedAt,
+    state: promotion?.state ?? null,
+    description: promotion?.description ?? null,
+  };
+}
+
 app.use('*', async (c, next) => {
   const requestId = normalizeRequestId(c.req.header('x-request-id'));
   c.set('requestId', requestId);
-  c.header('X-Request-Id', requestId);
   await next();
-  c.header('X-Request-Id', requestId);
+  // Console routes use Hono responses; apply headers after handlers so early
+  // returns (including gray gate pages) still receive CSP / frame protections.
+  if (!isPreviewRequest(c)) {
+    applySecurityHeaders(c.res.headers, requestId);
+  } else {
+    c.res.headers.set('X-Request-Id', requestId);
+  }
 });
 
 app.use('*', async (c, next) => {
   if (isPreviewRequest(c)) return proxyPreview(c);
   if (!isConsoleRequest(c)) return c.text('Not found', 404);
   await next();
-});
-
-app.use('*', async (c, next) => {
-  await next();
-  c.header('Cache-Control', 'no-store');
-  c.header('Content-Security-Policy', "default-src 'self'; base-uri 'none'; connect-src 'self' https://cloudflareinsights.com; form-action 'self'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'");
-  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  c.header('Referrer-Policy', 'no-referrer');
-  c.header('X-Content-Type-Options', 'nosniff');
-  c.header('X-Frame-Options', 'DENY');
-  c.header('X-Robots-Tag', 'noindex, nofollow');
 });
 
 app.get('/styles.css', (c) => c.body(styles, 200, { 'Content-Type': 'text/css; charset=UTF-8' }));
@@ -519,6 +572,7 @@ app.get('/api/deployment', async (c) => {
   if (authenticated instanceof Response) return authenticated;
 
   const deployment = await getLatestGrayDeployment(c.env);
+  const lastPromotion = await resolveLastPromotion(c.env, authenticated.session);
   return c.json({
     deployment: deployment
       ? {
@@ -527,12 +581,14 @@ app.get('/api/deployment', async (c) => {
           createdAt: deployment.createdAt,
           state: deployment.state,
           promotionState: deployment.promotionState,
+          promotionDescription: deployment.promotionDescription,
           promoted: deployment.promoted,
           previewUrl: validVercelPreview(deployment)
             ? `${normalizedOrigin(c.env.PREVIEW_ORIGIN)}/`
             : null,
         }
       : null,
+    lastPromotion,
   });
 });
 
@@ -574,11 +630,20 @@ app.post('/api/promote', async (c) => {
   if (latest.promoted) {
     return c.json({ error: '该版本已经全量发布' }, 409);
   }
-  if (latest.promotionState === 'pending' || latest.promotionState === 'in_progress') {
+  if (isActivePromotionState(latest.promotionState)) {
     return c.json({ error: '该版本正在全量发布' }, 409);
   }
 
   await dispatchPromotion(c.env, latest, admin);
+  await writeSession(c, {
+    ...session,
+    user: admin,
+    lastDispatch: {
+      deploymentId: latest.id,
+      sha: latest.sha,
+      dispatchedAt: Date.now(),
+    },
+  });
   return c.json({ ok: true }, 202);
 });
 
@@ -595,5 +660,5 @@ app.onError((error, c) => {
   return loginErrorPage(c, '服务暂时不可用，请稍后重试。', 502);
 });
 
-export { app };
+export { app, SECURITY_HEADERS };
 export default app;

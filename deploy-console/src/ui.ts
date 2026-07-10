@@ -2,6 +2,9 @@ import type { AdminUser } from './types.js';
 import {
   deploymentKey,
   deriveDeploymentView,
+  isActivePromotionState,
+  isFailedPromotionState,
+  isPartialPromotion,
   pollErrorMessage,
   shouldApplyPoll,
 } from './ui-state.js';
@@ -202,6 +205,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 export const applicationScript = `
 ${deploymentKey.toString()}
+${isActivePromotionState.toString()}
+${isFailedPromotionState.toString()}
+${isPartialPromotion.toString()}
 ${deriveDeploymentView.toString()}
 ${shouldApplyPoll.toString()}
 ${pollErrorMessage.toString()}
@@ -216,6 +222,7 @@ const promoteButton = document.querySelector('#promote-button');
 let current = null;
 let submitting = false;
 let submittedDeployment = null;
+let lastPromotion = null;
 let loadSequence = 0;
 
 function setBadge(kind) {
@@ -258,14 +265,15 @@ async function loadDeployment() {
     if (!shouldApplyPoll(sequence, loadSequence)) return;
     if (!data.deployment) return setUnavailable('main 分支尚未产生灰度部署。');
     current = data.deployment;
+    lastPromotion = data.lastPromotion || null;
     if (
       submittedDeployment &&
-      (submittedDeployment !== String(current.id) + ':' + current.sha ||
+      (submittedDeployment !== deploymentKey(current) ||
         current.promoted ||
-        (current.promotionState && current.promotionState !== 'pending' && current.promotionState !== 'in_progress'))
+        (current.promotionState && !isActivePromotionState(current.promotionState)))
     ) submittedDeployment = null;
     version.textContent = current.sha;
-    const view = deriveDeploymentView(current, submitting, submittedDeployment);
+    const view = deriveDeploymentView(current, submitting, submittedDeployment, lastPromotion);
     status.textContent = view.statusText;
     setBadge(view.badge);
     deploymentId.textContent = String(current.id);
@@ -315,7 +323,7 @@ promoteButton.addEventListener('click', async () => {
   } finally {
     submitting = false;
     if (current) {
-      promoteButton.disabled = deriveDeploymentView(current, submitting, submittedDeployment).promoteDisabled;
+      promoteButton.disabled = deriveDeploymentView(current, submitting, submittedDeployment, lastPromotion).promoteDisabled;
     }
   }
 });

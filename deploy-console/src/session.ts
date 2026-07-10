@@ -88,6 +88,19 @@ async function decryptObject(value: string, secret: string): Promise<Record<stri
   }
 }
 
+function validLastDispatch(value: unknown): value is Session['lastDispatch'] {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.deploymentId === 'number' &&
+    Number.isSafeInteger(candidate.deploymentId) &&
+    candidate.deploymentId > 0 &&
+    typeof candidate.sha === 'string' &&
+    candidate.sha.length > 0 &&
+    typeof candidate.dispatchedAt === 'number' &&
+    Number.isSafeInteger(candidate.dispatchedAt);
+}
+
 async function decrypt(value: string, secret: string): Promise<Session | null> {
   try {
     const candidate = await decryptObject(value, secret) as Partial<Session> | null;
@@ -101,7 +114,8 @@ async function decrypt(value: string, secret: string): Promise<Session | null> {
       typeof candidate.user.id !== 'string' ||
       typeof candidate.user.email !== 'string' ||
       typeof candidate.user.displayName !== 'string' ||
-      candidate.user.role !== 'admin'
+      candidate.user.role !== 'admin' ||
+      !validLastDispatch(candidate.lastDispatch)
     ) {
       return null;
     }
