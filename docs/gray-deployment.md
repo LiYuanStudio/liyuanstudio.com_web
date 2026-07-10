@@ -27,7 +27,7 @@ Repository variables（已有默认值，但建议显式配置）：
 - `VERCEL_PROJECT_ID`
 - `PRODUCTION_URL`，例如 `https://liyuanstudio.com`
 
-`.github/workflows/deploy.yml` 只创建 `gray` deployment，不再自动生产发布。`.github/workflows/promote.yml` 只能通过 `workflow_dispatch` 启动，并在部署前重新查询最新 GitHub deployment。
+`.github/workflows/deploy.yml` 只创建 `gray` deployment，不再自动生产发布。缺少 `VERCEL_TOKEN` 会使灰度工作流明确失败，而不是跳过部署后显示成功。`.github/workflows/promote.yml` 只能通过 `workflow_dispatch` 启动，并在构建完成、实际发布开始前再次查询最新 GitHub deployment。两个阶段都会拒绝不是 HTTPS `*.vercel.app` 的 Vercel CLI / deployment status URL。
 
 ### Vercel Preview
 
@@ -64,7 +64,7 @@ npx wrangler secret put VERCEL_PROTECTION_BYPASS --config deploy-console/wrangle
 npm run deploy --workspace=deploy-console
 ```
 
-合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。该日常发布只更新 Worker 脚本和变量，需要 **Workers Scripts → Edit**；不要把 custom domains 重新加入 `wrangler.jsonc`，否则 Wrangler 会在每次发布时调用 Zone routes API。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
+合入 `deploy-console/**`、根目录 `package.json` / `package-lock.json`，或手动触发 GitHub Actions **Deploy deploy-console Worker** 都会执行 `wrangler deploy`。该日常发布只更新 Worker 脚本和变量，需要 **Workers Scripts → Edit**；不要把 custom domains 重新加入 `wrangler.jsonc`，否则 Wrangler 会在每次发布时调用 Zone routes API。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
 
 `SESSION_SECRET` 至少 32 个随机字符。`GITHUB_TOKEN` 使用 fine-grained token，仅授权当前仓库，并只开放读取 deployments/contents 和触发 Actions 所需的最小权限。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
 
@@ -79,7 +79,7 @@ npm run deploy --workspace=deploy-console
 - 灰度网关每次只解析 GitHub 中最新的 `gray` deployment。旧 URL 或旧 deployment ID 不能选择。
 - 网关删除浏览器 Cookie 和 Authorization 后再访问 Vercel，并在服务端附加 protection bypass；该 secret 不会返回浏览器。
 - 点击全量发布时，控制台实时调用 `/auth/me` 复核角色，并检查 CSRF、deployment ID、SHA、成功状态和重复发布状态。
-- GitHub production deployment 记录审批 LA 账号和发布结果。生产任一步骤失败都会写入失败状态，不会把候选标记为已发布。
+- GitHub production deployment 记录审批 LA 账号和发布结果。控制台和生产工作流都只判断该灰度候选最新一次匹配 LA 审批记录（payload 中数字或字符串形式的 ID 都可识别），不会让较旧的成功记录掩盖较新的失败重试。实际 Vercel 或 Cloudflare 发布失败会尽力写入失败状态；GitHub status API 写入本身失败不会被误报成实际部署失败。
 
 ## 日常操作
 

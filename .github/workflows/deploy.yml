@@ -38,20 +38,10 @@ jobs:
         run: npm run check:secrets
 
       - name: Check gray deployment secrets
-        id: deployment_secrets
         run: |
-          missing_names=()
-          for name in VERCEL_TOKEN; do
-            if [ -z "${!name}" ]; then
-              missing_names+=("$name")
-            fi
-          done
-
-          if [ "${#missing_names[@]}" -eq 0 ]; then
-            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
-            echo "missing_names=${missing_names[*]}" >> "$GITHUB_OUTPUT"
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not configured"
+            exit 1
           fi
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -73,14 +63,8 @@ jobs:
       - name: Validate clean deployment tree
         run: npm run guard:clean-deploy
 
-      - name: Skip deployment
-        if: steps.deployment_secrets.outputs.can_deploy != 'true'
-        run: |
-          echo "::notice::Skipping gray deployment because required deployment secrets are not configured: ${{ steps.deployment_secrets.outputs.missing_names }}. Scans, tests, and builds completed successfully."
-
       - name: Create gray deployment
         id: gray_deployment
-        if: steps.deployment_secrets.outputs.can_deploy == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -99,15 +83,16 @@ jobs:
 
       - name: Deploy full application to Vercel Preview
         id: vercel_preview
-        if: steps.deployment_secrets.outputs.can_deploy == 'true'
         run: |
           preview_url="$(npx --yes vercel@50.28.0 deploy --yes --token "$VERCEL_TOKEN" --build-env VITE_API_BASE_URL=/api)"
+          node -e "const url = new URL(process.argv[1]); if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app') || url.username || url.password) process.exit(1)" "$preview_url" ||
+            { echo "::error::Vercel returned an invalid preview URL"; exit 1; }
           echo "url=$preview_url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
       - name: Mark gray deployment successful
-        if: steps.deployment_secrets.outputs.can_deploy == 'true' && success()
+        if: success()
         uses: actions/github-script@v7
         env:
           DEPLOYMENT_ID: ${{ steps.gray_deployment.outputs.id }}
@@ -126,7 +111,8 @@ jobs:
             });
 
       - name: Mark gray deployment failed
-        if: steps.deployment_secrets.outputs.can_deploy == 'true' && failure() && steps.gray_deployment.outputs.id
+        if: always() && steps.gray_deployment.outputs.id && steps.vercel_preview.outcome != 'success'
+        continue-on-error: true
         uses: actions/github-script@v7
         env:
           DEPLOYMENT_ID: ${{ steps.gray_deployment.outputs.id }}

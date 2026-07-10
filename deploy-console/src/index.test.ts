@@ -59,6 +59,8 @@ function githubResponses(options?: {
   graySha?: string;
   grayState?: string;
   productionState?: string;
+  olderProductionState?: string;
+  stringGrayDeploymentId?: boolean;
   vercelProductionState?: string;
   upstreamUrl?: string;
 }) {
@@ -94,7 +96,20 @@ function githubResponses(options?: {
           created_at: '2026-07-09T11:00:00Z',
           creator: { login: 'github-actions[bot]' },
           description: 'Approved through LA deploy console by admin@example.com (admin-id)',
-          payload: { gray_deployment_id: grayId, approved_by: 'admin@example.com (admin-id)' },
+          payload: {
+            gray_deployment_id: options?.stringGrayDeploymentId ? String(grayId) : grayId,
+            approved_by: 'admin@example.com (admin-id)',
+          },
+        });
+      }
+      if (options?.olderProductionState) {
+        deployments.push({
+          id: 98,
+          sha: graySha,
+          created_at: '2026-07-09T10:59:00Z',
+          creator: { login: 'github-actions[bot]' },
+          description: 'Approved through LA deploy console by previous@example.com (previous-id)',
+          payload: { gray_deployment_id: grayId },
         });
       }
       return json(deployments);
@@ -104,6 +119,9 @@ function githubResponses(options?: {
     }
     if (url.pathname.endsWith('/deployments/100/statuses')) {
       return json([{ state: options?.vercelProductionState, environment_url: 'https://preview.vercel.app' }]);
+    }
+    if (url.pathname.endsWith('/deployments/98/statuses')) {
+      return json([{ state: options?.olderProductionState, environment_url: 'https://liyuanstudio.com' }]);
     }
     if (url.pathname.endsWith('/actions/workflows/promote.yml/dispatches') && init?.method === 'POST') {
       return new Response(null, { status: 204 });
@@ -268,6 +286,28 @@ describe('deploy console', () => {
         promoted,
       },
     });
+  });
+
+  it('uses only the latest LA promotion attempt and accepts a string gray ID', async () => {
+    const { requests } = installFetch({
+      github: githubResponses({
+        productionState: 'failure',
+        olderProductionState: 'success',
+        stringGrayDeploymentId: true,
+      }),
+    });
+    const cookie = await login();
+
+    const response = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      deployment: { promotionState: 'failure', promoted: false },
+    });
+    expect(requests.some(({ url }) => url.pathname.endsWith('/deployments/98/statuses'))).toBe(false);
   });
 
   it('rejects an LA account without the admin role', async () => {

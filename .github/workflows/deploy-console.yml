@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'deploy-console/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/deploy-console.yml'
 
 concurrency:

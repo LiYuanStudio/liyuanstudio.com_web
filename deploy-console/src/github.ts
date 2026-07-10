@@ -67,7 +67,9 @@ function isConsolePromotion(deployment: GitHubDeployment, grayDeploymentId: numb
   if (!deployment.payload || typeof deployment.payload !== 'object') return false;
   return (
     'gray_deployment_id' in deployment.payload &&
-    deployment.payload.gray_deployment_id === grayDeploymentId
+    (typeof deployment.payload.gray_deployment_id === 'number' ||
+      typeof deployment.payload.gray_deployment_id === 'string') &&
+    String(deployment.payload.gray_deployment_id) === String(grayDeploymentId)
   );
 }
 
@@ -80,14 +82,11 @@ async function productionState(
     env,
     `${repositoryPath(env)}/deployments?environment=production&sha=${encodeURIComponent(sha)}&per_page=10`,
   );
-  let activeState: string | null = null;
   for (const deployment of deployments) {
     if (!isConsolePromotion(deployment, grayDeploymentId)) continue;
-    const state = (await latestStatus(env, deployment.id))?.state;
-    if (state === 'success') return state;
-    if (state === 'pending' || state === 'in_progress') activeState = state;
+    return (await latestStatus(env, deployment.id))?.state ?? null;
   }
-  return activeState;
+  return null;
 }
 
 export async function getLatestGrayDeployment(
