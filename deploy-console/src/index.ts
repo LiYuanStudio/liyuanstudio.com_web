@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { dispatchPromotion, getLatestGrayDeployment } from './github.js';
 import { createSession, readSession, removeSession, writeSession } from './session.js';
 import type { AdminUser, Bindings, GrayDeployment, Session } from './types.js';
-import { applicationScript, dashboardPage, loginPage, styles } from './ui.js';
+import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles } from './ui.js';
 
 type AppContext = Context<{ Bindings: Bindings }>;
 
@@ -120,7 +120,7 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   const session = await readSession(c);
   if (!session) {
     return c.html(
-      loginPage('请先在部署控制台使用 LA 管理员账号登录。'),
+      previewAccessPage(normalizedOrigin(c.env.CONSOLE_ORIGIN)),
       401,
       { 'Cache-Control': 'no-store' },
     );
@@ -193,7 +193,7 @@ app.use('*', async (c, next) => {
 app.use('*', async (c, next) => {
   await next();
   c.header('Cache-Control', 'no-store');
-  c.header('Content-Security-Policy', "default-src 'self'; base-uri 'none'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'");
+  c.header('Content-Security-Policy', "default-src 'self'; base-uri 'none'; connect-src 'self' https://cloudflareinsights.com; form-action 'self'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'");
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   c.header('Referrer-Policy', 'no-referrer');
   c.header('X-Content-Type-Options', 'nosniff');
