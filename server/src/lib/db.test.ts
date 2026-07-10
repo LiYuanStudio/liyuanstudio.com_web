@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import mongoose from 'mongoose';
 
+vi.mock('./purge-legacy-seeds.js', () => ({
+  purgeLegacySeedContentOnce: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe('connectDB', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -25,6 +29,8 @@ describe('connectDB', () => {
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
     vi.stubEnv('API_KEY', 'secret');
     vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
+    vi.stubEnv('JWT_SECRET', 'local-dev-jwt-secret-at-least-32-chars');
+    vi.stubEnv('APP_URL', 'http://localhost:5173');
   }
 
   it('returns cached connection on subsequent calls', async () => {
@@ -66,5 +72,19 @@ describe('connectDB', () => {
 
     const globalCache = global as unknown as { mongooseCache?: { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null } };
     expect(globalCache.mongooseCache).toBeDefined();
+  });
+
+  it('purges legacy seed content after the first successful connect', async () => {
+    resetCache();
+    stubEnv();
+    const mockMongoose = { connection: 'connected' } as unknown as typeof mongoose;
+    vi.spyOn(mongoose, 'connect').mockResolvedValue(mockMongoose);
+
+    const { purgeLegacySeedContentOnce } = await import('./purge-legacy-seeds.js');
+    const { connectDB } = await import('./db.js');
+    await connectDB();
+    await connectDB();
+
+    expect(purgeLegacySeedContentOnce).toHaveBeenCalledTimes(1);
   });
 });

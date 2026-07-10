@@ -99,7 +99,8 @@ Key configuration files:
 │   │   ├── test/
 │   │   │   └── setup.ts    # Vitest setup: mocks Hono logger in tests
 │   │   ├── *.test.ts       # Co-located unit tests for env, lib, models, routes, and app
-│   │   └── scripts/seed.ts # Seed sample news/blog posts
+│   │   └── scripts/seed.ts # No-op (sample seed content removed)
+│   │   └── scripts/cleanup-mock-data.ts # Delete old seed/mock rows
 │   │   └── scripts/promote-admins.ts # Promote users to admin by email
 ├── src/
 │   ├── entries/            # One entry file per MPA page
@@ -186,8 +187,11 @@ npm run build:api
 # Start the compiled backend
 npm run start:api
 
-# Seed the database with sample news/blog posts
+# Sample news/blog seeding is disabled (no-op); create real content via admin
 npm run seed:api
+
+# Delete old seeded mock news/blog rows and other test placeholders
+npm run cleanup-mock:api
 
 # Promote one or more users to admin by email
 npm run promote-admins:api -- admin@example.com another@example.com
@@ -338,6 +342,9 @@ These notes cover non-obvious caveats when running this project in a Cursor Clou
 
 - With `EMAIL_PROVIDER` empty, registration, 2FA, and password-reset codes/links are printed to the backend console instead of being emailed. Grep the API output for `[email:mock]` to retrieve them during end-to-end auth testing.
 
-### Seed data
+### Seed / mock data
 
-- `npm run seed:api` inserts 3 news items and 3 blog posts. Seeded blog posts are `draft`/unpublished, so `GET /api/blog` returns `[]` until a post is published — this is expected, not a failure. News (`GET /api/news`) returns the 3 seeded items immediately.
+- `npm run seed:api` is a no-op: sample news/blog seed content was removed so gray/production no longer get placeholder「最新动态」cards. Create real news via the admin console.
+- On API connect, the backend purges the old seeded news slugs (`li-yuan-workbench-beta`, `site-refresh`, `cloudflare-startup`) and old seeded blog slugs once per process, so gray/production stop showing those placeholders after deploy.
+- `npm run cleanup-mock:api` also deletes those seed rows, plus known test avatars and `@example.com` test users. Point `server/.env` `MONGODB_URI` at the target database before running it.
+- With an empty news collection, the home News section shows「敬请期待」.

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { env } from '../config/env.js';
+import { purgeLegacySeedContentOnce } from './purge-legacy-seeds.js';
 
 type MongooseCache = {
   conn: typeof mongoose | null;
@@ -28,5 +29,7 @@ export async function connectDB(): Promise<typeof mongoose> {
   }
 
   cached.conn = await cached.promise;
+  // Drop old seed/mock news+blog placeholders so gray/production stop showing them.
+  await purgeLegacySeedContentOnce();
   return cached.conn;
 }

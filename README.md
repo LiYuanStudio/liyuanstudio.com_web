@@ -42,10 +42,12 @@ cp server/.env.example server/.env
 
 本地开发可以不配置邮件服务：保持 `EMAIL_PROVIDER=` 为空，注册时后端会在控制台打印邮箱验证链接。不要把 `.env`、API Key、token、密码或真实数据库连接提交到仓库。
 
-### 3. 初始化数据库示例数据
+### 3. 清理历史 mock 数据（可选）
+
+若数据库里还留着旧的示例「最新动态」/种子博客，可在配置好 `server/.env` 后执行：
 
 ```bash
-npm run seed:api
+npm run cleanup-mock:api
 ```
 
 ### 4. 同时启动前后端
@@ -67,7 +69,8 @@ npm run dev
 | `npm run build:api` | 编译后端 TypeScript |
 | `npm run build:deploy-console` | 检查独立灰度发布控制台 |
 | `npm run test:deploy-console` | 测试灰度发布控制台 |
-| `npm run seed:api` | 向后端数据库写入示例新闻/博客数据 |
+| `npm run seed:api` | 已停用示例种子数据（no-op，便于兼容旧脚本） |
+| `npm run cleanup-mock:api` | 删除旧种子新闻/博客与测试账号等 mock 数据 |
 | `npm run check:secrets` | 扫描仓库中可能的密钥泄漏 |
 
 ## 账号系统
