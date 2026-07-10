@@ -1,6 +1,8 @@
 import type { Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import type { Bindings, Session } from './types.js';
+import type { AppEnv, Bindings, Session } from './types.js';
+
+type SessionContext = Context<AppEnv>;
 
 const COOKIE_NAME = '__Host-liyuan_deploy';
 const DOMAIN_COOKIE_NAME = 'liyuan_deploy';
@@ -77,7 +79,7 @@ async function decrypt(value: string, secret: string): Promise<Session | null> {
   }
 }
 
-function cookieOptions(c: Context<{ Bindings: Bindings }>) {
+function cookieOptions(c: SessionContext) {
   const domain = c.env.COOKIE_DOMAIN?.trim() || undefined;
   return {
     path: '/',
@@ -99,7 +101,7 @@ export function createSession(token: string, user: Session['user']): Session {
 }
 
 export async function readSession(
-  c: Context<{ Bindings: Bindings }>,
+  c: SessionContext,
 ): Promise<Session | null> {
   const value = getCookie(c, cookieName(c.env));
   if (!value) return null;
@@ -107,7 +109,7 @@ export async function readSession(
 }
 
 export async function writeSession(
-  c: Context<{ Bindings: Bindings }>,
+  c: SessionContext,
   session: Session,
 ): Promise<void> {
   setCookie(c, cookieName(c.env), await encrypt(session, c.env.SESSION_SECRET), {
@@ -116,6 +118,6 @@ export async function writeSession(
   });
 }
 
-export function removeSession(c: Context<{ Bindings: Bindings }>): void {
+export function removeSession(c: SessionContext): void {
   deleteCookie(c, cookieName(c.env), cookieOptions(c));
 }

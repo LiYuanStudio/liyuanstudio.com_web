@@ -1,15 +1,29 @@
 import { Hono, type Context } from 'hono';
 import { dispatchPromotion, getLatestGrayDeployment } from './github.js';
 import { createSession, readSession, removeSession, writeSession } from './session.js';
-import type { AdminUser, Bindings, GrayDeployment, Session } from './types.js';
+import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
 import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles } from './ui.js';
 
-type AppContext = Context<{ Bindings: Bindings }>;
+type AppContext = Context<AppEnv>;
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<AppEnv>();
+
+const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/;
+const INVALID_ORIGIN_MESSAGE = '当前页面的访问来源无效，请从规范的部署控制台重新登录。';
 
 function normalizedOrigin(value: string): string {
   return new URL(value).origin;
+}
+
+function normalizeRequestId(value: string | undefined): string {
+  if (value && REQUEST_ID_PATTERN.test(value)) {
+    return value;
+  }
+  return crypto.randomUUID();
+}
+
+function getRequestId(c: AppContext): string {
+  return c.get('requestId') || 'unknown';
 }
 
 function isConsoleRequest(c: AppContext): boolean {
@@ -22,7 +36,29 @@ function isPreviewRequest(c: AppContext): boolean {
 
 function sameOrigin(c: AppContext): boolean {
   const origin = c.req.header('Origin');
-  return !origin || origin === normalizedOrigin(c.env.CONSOLE_ORIGIN);
+  const consoleOrigin = normalizedOrigin(c.env.CONSOLE_ORIGIN);
+  if (origin === consoleOrigin) return true;
+  // Reject opaque / forged origins explicitly; do not treat "null" as missing.
+  if (origin) return false;
+  // Privacy browsers may omit Origin on same-tab navigational form POSTs.
+  return c.req.header('Sec-Fetch-Site') === 'same-origin';
+}
+
+function loginErrorPage(
+  c: AppContext,
+  message: string,
+  status: 400 | 401 | 403 | 502,
+  options?: { includeConsoleLink?: boolean },
+) {
+  return c.html(
+    loginPage(message, {
+      requestId: getRequestId(c),
+      consoleOrigin: options?.includeConsoleLink
+        ? normalizedOrigin(c.env.CONSOLE_ORIGIN)
+        : undefined,
+    }),
+    status,
+  );
 }
 
 type AuthSuccess = { ok: true; token: string; user: AdminUser };
@@ -239,6 +275,14 @@ async function proxyPreview(c: AppContext): Promise<Response> {
 }
 
 app.use('*', async (c, next) => {
+  const requestId = normalizeRequestId(c.req.header('x-request-id'));
+  c.set('requestId', requestId);
+  c.header('X-Request-Id', requestId);
+  await next();
+  c.header('X-Request-Id', requestId);
+});
+
+app.use('*', async (c, next) => {
   if (isPreviewRequest(c)) return proxyPreview(c);
   if (!isConsoleRequest(c)) return c.text('Not found', 404);
   await next();
@@ -264,19 +308,21 @@ app.get('/', async (c) => {
 });
 
 app.post('/auth/login', async (c) => {
-  if (!sameOrigin(c)) return c.html(loginPage('请求来源无效。'), 403);
+  if (!sameOrigin(c)) {
+    return loginErrorPage(c, INVALID_ORIGIN_MESSAGE, 403, { includeConsoleLink: true });
+  }
 
   const body = await c.req.parseBody();
   const email = body.email;
   const password = body.password;
   if (typeof email !== 'string' || typeof password !== 'string') {
-    return c.html(loginPage('请输入邮箱和密码。'), 400);
+    return loginErrorPage(c, '请输入邮箱和密码。', 400);
   }
 
   const authenticated = await authenticateAdmin(c.env, email, password);
   if (!authenticated.ok) {
     const failure = loginFailureMessage(authenticated.reason);
-    return c.html(loginPage(failure.message), failure.status);
+    return loginErrorPage(c, failure.message, failure.status);
   }
 
   await writeSession(c, createSession(authenticated.token, authenticated.user));
@@ -361,10 +407,13 @@ app.onError((error, c) => {
   console.error(JSON.stringify({
     event: 'deploy_console.request_failed',
     path: c.req.path,
+    requestId: getRequestId(c),
     error: error instanceof Error ? error.message : String(error),
   }));
-  if (c.req.path.startsWith('/api/')) return c.json({ error: '服务暂时不可用' }, 502);
-  return c.html(loginPage('服务暂时不可用，请稍后重试。'), 502);
+  if (c.req.path.startsWith('/api/')) {
+    return c.json({ error: '服务暂时不可用', requestId: getRequestId(c) }, 502);
+  }
+  return loginErrorPage(c, '服务暂时不可用，请稍后重试。', 502);
 });
 
 export { app };
