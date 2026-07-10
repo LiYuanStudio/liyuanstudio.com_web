@@ -319,3 +319,25 @@ These files are either gitignored or contain only non-functional placeholders an
 - The frontend is an MPA. When adding a new page, create both an `src/entries/<page>.tsx` and a top-level `<page>/index.html`, then add the entry to `vite.config.ts` `rollupOptions.input`.
 - `localStorage` is used for the auth token on the client. Clearing site data / localStorage logs the user out.
 - When adding dependencies, keep the bundle small; this is a lightweight landing page.
+
+## Cursor Cloud specific instructions
+
+These notes cover non-obvious caveats when running this project in a Cursor Cloud VM (Linux). Dependencies are refreshed automatically by the startup update script (`npm install`); do not repeat install steps here.
+
+### Services and how to run them (Linux)
+
+- **MongoDB is required.** The backend's DB-connect middleware runs on every request, including `/api/health`, so the API will not report healthy without a reachable MongoDB. A local MongoDB server is installed in the VM; start it (once per session) before the API, e.g. in a background/tmux session:
+  `mongod --dbpath /data/db --bind_ip 127.0.0.1 --port 27017`
+- **Env files are gitignored** and must exist for the app to run. Local dev values that work in the VM:
+  - `server/.env`: `MONGODB_URI=mongodb://127.0.0.1:27017/liyuanstudio`, `API_KEY=local-dev-admin-key`, `JWT_SECRET=` (any string ≥32 chars), `CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174`, `APP_URL=http://localhost:5173`, `EMAIL_PROVIDER=` (leave empty), `admin_emails=admin@example.com`.
+  - `.env` (frontend): see the Vite proxy note below for the value to use.
+- **Do not use `npm run dev` on Linux.** `scripts/dev.ts` detects busy ports with `lsof ... | map(Number)`; when `lsof` returns nothing (port free) the empty string becomes `0`, so it always thinks port 3000 is occupied and aborts with `port 3000 is still in use after cleanup`. Run the two documented commands directly in separate sessions instead: `npm run dev:api` and `npm run dev:web`.
+- **The Vite dev proxy for `/api` does not work.** `profileRewrite()` in `vite.config.ts` rewrites every `/api/*` request to `/profile/` (because `api` is not in its `NON_PROFILE_SEGMENTS` allowlist), so relative `/api` calls return the profile HTML page instead of JSON. For browser testing, point the frontend directly at the backend by setting `VITE_API_BASE_URL=http://localhost:3000/api` in `.env` (CORS already whitelists `localhost:5173`), then restart `dev:web`.
+
+### Verification / email codes
+
+- With `EMAIL_PROVIDER` empty, registration, 2FA, and password-reset codes/links are printed to the backend console instead of being emailed. Grep the API output for `[email:mock]` to retrieve them during end-to-end auth testing.
+
+### Seed data
+
+- `npm run seed:api` inserts 3 news items and 3 blog posts. Seeded blog posts are `draft`/unpublished, so `GET /api/blog` returns `[]` until a post is published — this is expected, not a failure. News (`GET /api/news`) returns the 3 seeded items immediately.
