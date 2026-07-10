@@ -4,13 +4,18 @@ import { extname, relative, resolve } from 'node:path';
 
 const ALLOWLIST = new Set([
   '.env.example',
-  '.env.production',
   'server/.env.example',
+  'deploy-console/.dev.vars.example',
   'README.md',
   'AGENTS.md',
   '.gitignore',
   'scripts/check-secrets.ts',
   '.github/workflows/secret-scan.yml',
+]);
+
+/** Files that may exist in the repo, but must still pass secret pattern checks. */
+const CONTENT_SCAN_ONLY = new Set([
+  '.env.production',
 ]);
 
 const SKIP_DIRS = new Set([
@@ -52,8 +57,13 @@ const PATTERNS = [
   { name: 'API_KEY assignment', regex: /^API_KEY\s*=\s*(?!your-|test-|secret-key)[^\s'"`]+/m },
   { name: 'JWT_SECRET assignment', regex: /^JWT_SECRET\s*=\s*(?!your-|test-)[^\s'"`]+/m },
   { name: 'RESEND_API_KEY assignment', regex: /^RESEND_API_KEY\s*=\s*(?!your-|test-|$)[^\s'"`]+/m },
-  { name: 'Token assignment', regex: /^(?:TOKEN|ACCESS_TOKEN|AUTH_TOKEN)\s*=\s*(?!your-|test-|abc|xyz)[^\s'"`]+/m },
+  { name: 'SESSION_SECRET assignment', regex: /^SESSION_SECRET\s*=\s*(?!your-|test-|replace-|$)[^\s'"`]+/m },
+  { name: 'Token assignment', regex: /^(?:TOKEN|ACCESS_TOKEN|AUTH_TOKEN|GITHUB_TOKEN|VERCEL_PROTECTION_BYPASS)\s*=\s*(?!your-|test-|abc|xyz|github-|vercel-)[^\s'"`]+/m },
   { name: 'Password assignment', regex: /^(?:PASSWORD|PASS|PWD)\s*=\s*(?!your-|test-|password)[^\s'"`]+/m },
+  { name: 'GitHub personal access token', regex: /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/ },
+  { name: 'OpenAI-style secret key', regex: /\bsk-[A-Za-z0-9]{20,}\b/ },
+  { name: 'AWS access key', regex: /\bAKIA[0-9A-Z]{16}\b/ },
+  { name: 'Private key block', regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
 ];
 
 function isBinary(filePath: string): boolean {
@@ -101,7 +111,7 @@ for (const file of files) {
   if (SKIP_DIRS.has(rel.split('/')[0])) continue;
   if (isBinary(file)) continue;
 
-  if (rel.includes('.env') && !rel.endsWith('.example')) {
+  if (rel.includes('.env') && !rel.endsWith('.example') && !CONTENT_SCAN_ONLY.has(rel)) {
     console.error(`Found potential env file in repo: ${rel}`);
     findings++;
     continue;

@@ -12,6 +12,7 @@ import {
   fetchMe,
   getStoredToken,
   login as apiLogin,
+  logout as apiLogout,
   resendLoginTwoFactor as apiResendLoginTwoFactor,
   sendRegistrationCode as apiSendRegistrationCode,
   verifyRegistrationCode as apiVerifyRegistrationCode,
@@ -53,7 +54,7 @@ interface AuthContextValue {
   ) => Promise<RecoveryCodesResponse | null>;
   sendRegistrationCode: (email: string, password: string, displayName: string) => Promise<void>;
   verifyRegistrationCode: (email: string, code: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateAvatar: (avatarUrl: string) => Promise<void>;
   updateProfile: (profile: ProfileUpdateInput) => Promise<void>;
 }
@@ -144,9 +145,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ status: 'authenticated', user });
   }, []);
 
-  const logout = useCallback(() => {
-    setStoredToken(null);
-    setState({ status: 'unauthenticated' });
+  const logout = useCallback(async () => {
+    try {
+      if (getStoredToken()) {
+        await apiLogout();
+      }
+    } catch {
+      // Always clear the local session even if server revocation fails.
+    } finally {
+      setStoredToken(null);
+      setState({ status: 'unauthenticated' });
+    }
   }, []);
 
   const updateAvatar = useCallback(async (avatarUrl: string) => {

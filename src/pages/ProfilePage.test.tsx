@@ -239,11 +239,11 @@ describe('ProfilePage', () => {
     expect(screen.getByText('const answer = 42;')).toBeInTheDocument();
     expect(screen.getAllByText('Markdown').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('target', '_blank');
-    expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('rel', 'noreferrer');
+    expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
   it('does not inject raw html from markdown content', async () => {
-    vi.stubGlobal('fetch', mockBlogDetailFetch('Safe paragraph\n\n<script>alert(1)</script>\n\n<img src=x onerror=alert(1) />'));
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Safe paragraph\n\n<script>alert(1)</script>\n\n<img src=x onerror=alert(1) />\n\n[bad](javascript:alert(1))\n\n<iframe src="https://evil.example"></iframe>'));
 
     const { container } = renderPage('/LA/1/');
 
@@ -252,6 +252,11 @@ describe('ProfilePage', () => {
     });
     expect(container.querySelector('.profile-article-body script')).toBeNull();
     expect(container.querySelector('.profile-article-body img')).toBeNull();
+    expect(container.querySelector('.profile-article-body iframe')).toBeNull();
+    const badLink = screen.queryByRole('link', { name: 'bad' });
+    if (badLink) {
+      expect(badLink.getAttribute('href')).not.toMatch(/^javascript:/i);
+    }
   });
 
   it('keeps plain text article content readable', async () => {
