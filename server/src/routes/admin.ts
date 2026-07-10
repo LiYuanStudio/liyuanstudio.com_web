@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import mongoose from 'mongoose';
 import { UserModel } from '../models/user.js';
+import { BlogModel } from '../models/blog.js';
 import { isAdminEmail } from '../config/env.js';
 import { isUserRole, normalizeUserRole, type UserRole } from '../lib/roles.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
@@ -56,12 +57,18 @@ app.patch('/users/:id', async (c) => {
     return jsonError(c, '用户 ID 格式不正确', 400);
   }
 
-  const body = await c.req.json();
-  if (body.role === undefined) {
-    return jsonError(c, '只能修改用户角色', 400);
+  let body: { role?: unknown };
+  let role: UserRole;
+  try {
+    body = await c.req.json();
+    if (body.role === undefined) {
+      return jsonError(c, '只能修改用户角色', 400);
+    }
+    role = validateRole(body.role);
+  } catch (error) {
+    return jsonError(c, error instanceof Error ? error.message : '请求无效', 400);
   }
 
-  const role = validateRole(body.role);
   if (id === c.get('userId') && role !== 'admin') {
     return jsonError(c, '不能降低自己的管理员角色', 403);
   }
@@ -104,6 +111,7 @@ app.delete('/users/:id', async (c) => {
     return jsonError(c, '不能删除最高权限管理员账号', 403);
   }
 
+  await BlogModel.deleteMany({ authorId: id });
   await UserModel.findByIdAndDelete(id);
   return c.json({ ok: true });
 });

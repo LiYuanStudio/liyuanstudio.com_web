@@ -543,6 +543,28 @@ describe('auth routes', () => {
       purpose: 'login',
       code: expect.stringMatching(/^\d{6}$/),
     }));
+    expect(mockAuthThrottleModel.findOneAndUpdate).toHaveBeenCalled();
+  });
+
+  it('POST /api/auth/login does not record 2FA send throttle when email fails', async () => {
+    const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const user = userDoc({ twoFactorEnabled: true });
+    mockUserModel.findOne.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockTwoFactorChallengeModel.create.mockResolvedValue(challengeDoc() as never);
+    mockSendTwoFactorCodeEmail.mockRejectedValue(new Error('smtp unavailable'));
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password: 'password123' }),
+    });
+
+    expect(res.status).toBe(502);
+    expect(mockAuthThrottleModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(mockTwoFactorChallengeModel.deleteOne).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('POST /api/auth/2fa/login/verify consumes a valid email code and signs in', async () => {
@@ -656,6 +678,36 @@ describe('auth routes', () => {
     expect(challenge.failedAttempts).toBe(3);
     expect(challenge.save).toHaveBeenCalled();
     expect(mockSendTwoFactorCodeEmail).toHaveBeenCalledOnce();
+    expect(mockAuthThrottleModel.findOneAndUpdate).toHaveBeenCalled();
+  });
+
+  it('rolls back login challenge and skips throttle when resend email fails', async () => {
+    const app = await makeApp();
+    const previousCodeHash = hashToken('654321');
+    const previousLastSentAt = new Date(Date.now() - 120_000);
+    const previousExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const challenge = challengeDoc({
+      codeHash: previousCodeHash,
+      lastSentAt: previousLastSentAt,
+      expiresAt: previousExpiresAt,
+    });
+    const user = userDoc({ twoFactorEnabled: true });
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockUserModel.findById.mockResolvedValue(user as never);
+    mockSendTwoFactorCodeEmail.mockRejectedValue(new Error('smtp unavailable'));
+
+    const res = await app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32) }),
+    });
+
+    expect(res.status).toBe(502);
+    expect(challenge.codeHash).toBe(previousCodeHash);
+    expect(challenge.lastSentAt).toBe(previousLastSentAt);
+    expect(challenge.expiresAt).toBe(previousExpiresAt);
+    expect(challenge.save).toHaveBeenCalledTimes(2);
+    expect(mockAuthThrottleModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('does not let a locked login challenge bypass lockout by resending', async () => {
@@ -1004,23 +1056,34 @@ describe('auth routes', () => {
 
   it('POST /api/auth/login returns 429 after repeated failures', async () => {
     const app = await makeApp();
-    const emailThrottle = {
-      attempts: 4,
-      expiresAt: new Date(Date.now() + 60_000),
-      lockedUntil: undefined as Date | undefined,
-      save: vi.fn().mockResolvedValue(undefined),
-    };
-    const ipThrottle = {
-      attempts: 4,
-      expiresAt: new Date(Date.now() + 60_000),
-      lockedUntil: undefined as Date | undefined,
-      save: vi.fn().mockResolvedValue(undefined),
-    };
     mockAuthThrottleModel.findOne
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(emailThrottle as never)
-      .mockResolvedValueOnce(ipThrottle as never);
+      .mockResolvedValueOnce(null);
+    mockAuthThrottleModel.findOneAndUpdate
+      .mockResolvedValueOnce({
+        key: 'login:email:hello@liyuanstudio.com',
+        attempts: 5,
+        expiresAt: new Date(Date.now() + 60_000),
+        lockedUntil: undefined,
+      } as never)
+      .mockResolvedValueOnce({
+        key: 'login:email:hello@liyuanstudio.com',
+        attempts: 5,
+        expiresAt: new Date(Date.now() + 60_000),
+        lockedUntil: new Date(Date.now() + 60_000),
+      } as never)
+      .mockResolvedValueOnce({
+        key: 'login:ip:203.0.113.10',
+        attempts: 5,
+        expiresAt: new Date(Date.now() + 60_000),
+        lockedUntil: undefined,
+      } as never)
+      .mockResolvedValueOnce({
+        key: 'login:ip:203.0.113.10',
+        attempts: 5,
+        expiresAt: new Date(Date.now() + 60_000),
+        lockedUntil: new Date(Date.now() + 60_000),
+      } as never);
     mockUserModel.findOne.mockResolvedValue(null);
 
     const res = await app.request('/api/auth/login', {
@@ -1030,10 +1093,16 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(429);
-    expect(emailThrottle.attempts).toBe(5);
-    expect(ipThrottle.attempts).toBe(5);
-    expect(emailThrottle.lockedUntil).toEqual(expect.any(Date));
-    expect(ipThrottle.lockedUntil).toEqual(expect.any(Date));
+    expect(mockAuthThrottleModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { key: 'login:email:hello@liyuanstudio.com', expiresAt: { $gt: expect.any(Date) } },
+      { $inc: { attempts: 1 }, $set: { expiresAt: expect.any(Date) } },
+      { new: true },
+    );
+    expect(mockAuthThrottleModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { key: 'login:ip:203.0.113.10', expiresAt: { $gt: expect.any(Date) } },
+      { $inc: { attempts: 1 }, $set: { expiresAt: expect.any(Date) } },
+      { new: true },
+    );
   });
 
   it('POST /api/auth/login clears throttles after successful login', async () => {

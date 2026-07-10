@@ -241,6 +241,10 @@ function validateBlogInput(body: BlogInput, partial = false): Partial<BlogPost> 
   if (status !== undefined) data.status = status;
   if (visibility !== undefined) data.visibility = visibility;
 
+  if (partial && Object.keys(data).length === 0) {
+    throw new Error('没有可更新的字段');
+  }
+
   return data;
 }
 

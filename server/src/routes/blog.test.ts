@@ -485,6 +485,21 @@ describe('blog routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 for an empty patch body', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+
+    const res = await app.request('/api/blog/64a000000000000000000010', {
+      method: 'PATCH',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '没有可更新的字段' }));
+    expect(mockBlogModel.findById).not.toHaveBeenCalled();
+  });
+
   it('returns 409 when a patch causes a duplicate slug', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue(author as never);

@@ -55,6 +55,21 @@ describe('connectDB', () => {
     expect(await p1).toBe(await p2);
   });
 
+  it('clears the cached promise after a failed connection so later calls can retry', async () => {
+    resetCache();
+    stubEnv();
+    vi.spyOn(mongoose, 'connect')
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ connection: 'connected' } as unknown as typeof mongoose);
+
+    const { connectDB } = await import('./db.js');
+    await expect(connectDB()).rejects.toThrow('boom');
+
+    const recovered = await connectDB();
+    expect(mongoose.connect).toHaveBeenCalledTimes(2);
+    expect(recovered).toEqual({ connection: 'connected' });
+  });
+
   it('initializes the global cache when missing', async () => {
     deleteCache();
     stubEnv();

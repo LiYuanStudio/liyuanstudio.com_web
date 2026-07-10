@@ -268,29 +268,50 @@ async function hasLockedThrottle(keys: string[], now: Date): Promise<boolean> {
 }
 
 async function recordLoginFailure(key: string, now: Date): Promise<boolean> {
-  const throttle = await AuthThrottleModel.findOne({ key });
-  if (!throttle || throttle.expiresAt <= now) {
-    const lockedUntil = LOGIN_MAX_ATTEMPTS <= 1 ? new Date(now.getTime() + LOGIN_LOCK_MS) : undefined;
-    await AuthThrottleModel.findOneAndUpdate(
-      { key },
-      {
-        key,
-        attempts: 1,
-        lockedUntil,
-        expiresAt: new Date(now.getTime() + LOGIN_WINDOW_MS),
-      },
-      { upsert: true, new: true },
-    );
-    return Boolean(lockedUntil);
+  const expiresAt = new Date(now.getTime() + LOGIN_WINDOW_MS);
+  const lockedUntil = new Date(now.getTime() + LOGIN_LOCK_MS);
+
+  const updated = await AuthThrottleModel.findOneAndUpdate(
+    { key, expiresAt: { $gt: now } },
+    {
+      $inc: { attempts: 1 },
+      $set: { expiresAt },
+    },
+    { new: true },
+  );
+  if (updated) {
+    if (updated.attempts >= LOGIN_MAX_ATTEMPTS) {
+      const locked = await AuthThrottleModel.findOneAndUpdate(
+        {
+          key,
+          attempts: { $gte: LOGIN_MAX_ATTEMPTS },
+          $or: [
+            { lockedUntil: { $exists: false } },
+            { lockedUntil: null },
+            { lockedUntil: { $lte: now } },
+          ],
+        },
+        { $set: { lockedUntil } },
+        { new: true },
+      );
+      return isActiveDate((locked ?? updated).lockedUntil, now) || updated.attempts >= LOGIN_MAX_ATTEMPTS;
+    }
+    return isActiveDate(updated.lockedUntil, now);
   }
 
-  throttle.attempts = (throttle.attempts ?? 0) + 1;
-  throttle.expiresAt = new Date(now.getTime() + LOGIN_WINDOW_MS);
-  if (throttle.attempts >= LOGIN_MAX_ATTEMPTS) {
-    throttle.lockedUntil = new Date(now.getTime() + LOGIN_LOCK_MS);
-  }
-  await throttle.save();
-  return isActiveDate(throttle.lockedUntil, now);
+  const created = await AuthThrottleModel.findOneAndUpdate(
+    { key },
+    {
+      $set: {
+        key,
+        attempts: 1,
+        lockedUntil: LOGIN_MAX_ATTEMPTS <= 1 ? lockedUntil : null,
+        expiresAt,
+      },
+    },
+    { upsert: true, new: true },
+  );
+  return isActiveDate(created?.lockedUntil, now);
 }
 
 async function clearThrottleKeys(keys: string[]): Promise<void> {
@@ -342,24 +363,33 @@ async function isForgotPasswordLimited(keys: string[], now: Date): Promise<boole
 }
 
 async function recordForgotPasswordAttempt(key: string, now: Date): Promise<void> {
-  const throttle = await AuthThrottleModel.findOne({ key });
-  if (!throttle || throttle.expiresAt <= now) {
-    await AuthThrottleModel.findOneAndUpdate(
-      { key },
-      {
-        key,
-        attempts: 1,
-        lockedUntil: new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS),
-        expiresAt: new Date(now.getTime() + FORGOT_PASSWORD_WINDOW_MS),
-      },
-      { upsert: true, new: true },
-    );
+  const cooldownUntil = new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS);
+  const windowExpiresAt = new Date(now.getTime() + FORGOT_PASSWORD_WINDOW_MS);
+
+  const updated = await AuthThrottleModel.findOneAndUpdate(
+    { key, expiresAt: { $gt: now } },
+    {
+      $inc: { attempts: 1 },
+      $set: { lockedUntil: cooldownUntil },
+    },
+    { new: true },
+  );
+  if (updated) {
     return;
   }
 
-  throttle.attempts = (throttle.attempts ?? 0) + 1;
-  throttle.lockedUntil = new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS);
-  await throttle.save();
+  await AuthThrottleModel.findOneAndUpdate(
+    { key },
+    {
+      $set: {
+        key,
+        attempts: 1,
+        lockedUntil: cooldownUntil,
+        expiresAt: windowExpiresAt,
+      },
+    },
+    { upsert: true, new: true },
+  );
 }
 
 async function isRegistrationSendLimited(keys: string[], now: Date): Promise<boolean> {
@@ -783,9 +813,9 @@ app.post('/login', async (c) => {
     if (await isForgotPasswordLimited(sendKeys, now)) {
       return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
     }
-    await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
     try {
       const challengeToken = await startTwoFactorChallenge(user, 'login');
+      await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
       return c.json({
         twoFactorRequired: true,
         challengeToken,
@@ -965,11 +995,13 @@ app.post('/2fa/login/resend', async (c) => {
   }
 
   const code = createRegistrationCode();
+  const previousCodeHash = challenge.codeHash;
+  const previousLastSentAt = challenge.lastSentAt;
+  const previousExpiresAt = challenge.expiresAt;
   challenge.codeHash = hashToken(code);
   challenge.lastSentAt = now;
   challenge.expiresAt = new Date(now.getTime() + TWO_FACTOR_CHALLENGE_TTL_MS);
   await challenge.save();
-  await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
   try {
     await sendTwoFactorCodeEmail({
       email: user.email,
@@ -977,7 +1009,12 @@ app.post('/2fa/login/resend', async (c) => {
       code,
       purpose: 'login',
     });
+    await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
   } catch (error) {
+    challenge.codeHash = previousCodeHash;
+    challenge.lastSentAt = previousLastSentAt;
+    challenge.expiresAt = previousExpiresAt;
+    await challenge.save();
     return jsonError(c, '双重验证邮件发送失败', 502);
   }
   return c.json({ message: '验证码已重新发送。' });
@@ -1016,9 +1053,10 @@ async function beginAccountTwoFactorChallenge(
   if (await isForgotPasswordLimited(sendKeys, now)) {
     return { response: jsonError(c, '验证码发送过于频繁，请稍后再试', 429) };
   }
-  await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
   try {
-    return { user, challengeToken: await startTwoFactorChallenge(user, purpose) };
+    const challengeToken = await startTwoFactorChallenge(user, purpose);
+    await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+    return { user, challengeToken };
   } catch (error) {
     return { response: jsonError(c, '双重验证邮件发送失败', 502) };
   }

@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
 import { UserModel } from '../models/user.js';
+import { BlogModel } from '../models/blog.js';
 import { signToken } from '../middleware/auth.js';
 
 vi.mock('../lib/db.js', () => ({
   connectDB: vi.fn().mockResolvedValue({}),
 }));
 vi.mock('../models/user.js');
+vi.mock('../models/blog.js');
 
 const mockUserModel = vi.mocked(UserModel);
+const mockBlogModel = vi.mocked(BlogModel);
 
 const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
 
@@ -56,6 +59,8 @@ describe('admin routes', () => {
     mockUserModel.findById.mockResolvedValue(adminAuthDoc() as never);
     mockUserModel.findByIdAndUpdate.mockReset();
     mockUserModel.findByIdAndDelete.mockReset();
+    mockBlogModel.deleteMany.mockReset();
+    mockBlogModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
   });
 
   describe('GET /api/admin/users', () => {
@@ -227,6 +232,43 @@ describe('admin routes', () => {
       expect(await res.json()).toEqual(expect.objectContaining({ error: '只能修改用户角色' }));
     });
 
+    it('returns 400 for an invalid role', async () => {
+      const app = await makeApp();
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
+
+      const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ role: 'superadmin' }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(expect.objectContaining({
+        error: '角色必须是 tourist、member 或 admin',
+      }));
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 for invalid JSON', async () => {
+      const app = await makeApp();
+      const token = await signToken({ id: 'admin-1', email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
+
+      const res = await app.request('/api/admin/users/507f1f77bcf86cd799439011', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: '{',
+      });
+
+      expect(res.status).toBe(400);
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
     it('prevents demoting admin_emails users', async () => {
       const app = await makeApp();
       mockUserModel.findById
@@ -301,6 +343,8 @@ describe('admin routes', () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ok: true });
+      expect(mockBlogModel.deleteMany).toHaveBeenCalledWith({ authorId: '507f1f77bcf86cd799439011' });
+      expect(mockUserModel.findByIdAndDelete).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
     });
 
     it('prevents admin from deleting themselves', async () => {
