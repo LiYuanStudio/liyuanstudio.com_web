@@ -17,6 +17,7 @@ const mockUserModel = vi.mocked(UserModel);
 const AUTHOR_ID = '64a000000000000000000001';
 const OTHER_ID = '64a000000000000000000002';
 const ADMIN_ID = '64a000000000000000000003';
+const POST_ID = '64a000000000000000000010';
 
 const author = {
   _id: { toString: () => AUTHOR_ID },
@@ -47,7 +48,7 @@ const admin = {
 };
 
 const publishedPost = {
-  _id: 'post-1',
+  _id: POST_ID,
   title: 'Published',
   excerpt: 'Summary',
   category: 'Tech',
@@ -286,7 +287,7 @@ describe('blog routes', () => {
     mockUserModel.findById.mockResolvedValue(otherUser as never);
     mockBlogModel.findById.mockResolvedValue({ ...publishedPost, save: vi.fn() } as never);
 
-    const res = await app.request('/api/blog/post-1', {
+    const res = await app.request('/api/blog/64a000000000000000000010', {
       method: 'PATCH',
       headers: authHeaders(await tokenFor(otherUser)),
       body: JSON.stringify(validInput({ title: 'Bad edit' })),
@@ -301,7 +302,7 @@ describe('blog routes', () => {
     mockUserModel.findById.mockResolvedValue(admin as never);
     mockBlogModel.findById.mockResolvedValue({ ...publishedPost, save } as never);
 
-    const res = await app.request('/api/blog/post-1', {
+    const res = await app.request('/api/blog/64a000000000000000000010', {
       method: 'PATCH',
       headers: authHeaders(await tokenFor(admin)),
       body: JSON.stringify({ title: 'Admin edit' }),
@@ -317,7 +318,7 @@ describe('blog routes', () => {
     mockBlogModel.findById.mockReturnValue({ lean: vi.fn().mockResolvedValue(publishedPost) } as never);
     mockBlogModel.findByIdAndDelete.mockReturnValue({ lean: vi.fn().mockResolvedValue(publishedPost) } as never);
 
-    const res = await app.request('/api/blog/post-1', {
+    const res = await app.request('/api/blog/64a000000000000000000010', {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${await tokenFor(author)}` },
     });
@@ -447,7 +448,7 @@ describe('blog routes', () => {
     mockUserModel.findById.mockResolvedValue(otherUser as never);
     mockBlogModel.findById.mockReturnValue({ lean: vi.fn().mockResolvedValue(publishedPost) } as never);
 
-    const res = await app.request('/api/blog/post-1', {
+    const res = await app.request('/api/blog/64a000000000000000000010', {
       method: 'DELETE',
       headers: authHeaders(await tokenFor(otherUser)),
     });
@@ -461,7 +462,7 @@ describe('blog routes', () => {
     mockUserModel.findById.mockResolvedValue(author as never);
     mockBlogModel.findById.mockResolvedValue(null as never);
 
-    const res = await app.request('/api/blog/post-1', {
+    const res = await app.request('/api/blog/64a000000000000000000010', {
       method: 'PATCH',
       headers: authHeaders(await tokenFor(author)),
       body: JSON.stringify({ title: 'Updated' }),
@@ -475,7 +476,7 @@ describe('blog routes', () => {
     mockUserModel.findById.mockResolvedValue(author as never);
     mockBlogModel.findById.mockResolvedValue({ ...publishedPost, save: vi.fn() } as never);
 
-    const res = await app.request('/api/blog/post-1', {
+    const res = await app.request('/api/blog/64a000000000000000000010', {
       method: 'PATCH',
       headers: authHeaders(await tokenFor(author)),
       body: JSON.stringify({ slug: 'bad slug!' }),
@@ -490,13 +491,58 @@ describe('blog routes', () => {
     const save = vi.fn().mockRejectedValue({ code: 11000 });
     mockBlogModel.findById.mockResolvedValue({ ...publishedPost, save } as never);
 
-    const res = await app.request('/api/blog/post-1', {
+    const res = await app.request('/api/blog/64a000000000000000000010', {
       method: 'PATCH',
       headers: authHeaders(await tokenFor(author)),
       body: JSON.stringify({ slug: 'taken' }),
     });
 
     expect(res.status).toBe(409);
+  });
+
+  it('returns 400 for an invalid blog id on patch', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+
+    const res = await app.request('/api/blog/not-an-id', {
+      method: 'PATCH',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify({ title: 'Updated' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '文章 ID 格式不正确' }));
+    expect(mockBlogModel.findById).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an invalid blog id on delete', async () => {
+    const app = await makeApp();
+    mockUserModel.findById.mockResolvedValue(author as never);
+
+    const res = await app.request('/api/blog/not-an-id', {
+      method: 'DELETE',
+      headers: authHeaders(await tokenFor(author)),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '文章 ID 格式不正确' }));
+    expect(mockBlogModel.findByIdAndDelete).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when create hits a concurrent duplicate slug', async () => {
+    const app = await makeApp();
+    mockCounterForBlogCreate();
+    mockUserModel.findById.mockResolvedValue(author as never);
+    mockBlogModel.create.mockRejectedValue({ code: 11000 });
+
+    const res = await app.request('/api/blog', {
+      method: 'POST',
+      headers: authHeaders(await tokenFor(author)),
+      body: JSON.stringify(validInput({ slug: 'taken-slug' })),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '该 slug 已被使用' }));
   });
 
   it('rejects unauthenticated access to the me endpoint', async () => {

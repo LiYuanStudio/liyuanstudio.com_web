@@ -62,6 +62,10 @@ app.patch('/users/:id', async (c) => {
   }
 
   const role = validateRole(body.role);
+  if (id === c.get('userId') && role !== 'admin') {
+    return jsonError(c, '不能降低自己的管理员角色', 403);
+  }
+
   const existingUser = await UserModel.findById(id);
   if (!existingUser) {
     return jsonError(c, '用户不存在', 404);

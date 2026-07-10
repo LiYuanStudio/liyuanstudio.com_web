@@ -5,6 +5,7 @@ import { UserModel } from '../models/user.js';
 import { PendingRegistrationModel } from '../models/pending-registration.js';
 import { AuthThrottleModel } from '../models/auth-throttle.js';
 import { TwoFactorChallengeModel } from '../models/two-factor-challenge.js';
+import { BlogModel } from '../models/blog.js';
 import { signToken, verifyToken } from '../middleware/auth.js';
 import {
   sendPasswordResetEmail,
@@ -23,6 +24,7 @@ vi.mock('../models/user.js');
 vi.mock('../models/pending-registration.js');
 vi.mock('../models/auth-throttle.js');
 vi.mock('../models/two-factor-challenge.js');
+vi.mock('../models/blog.js');
 vi.mock('../lib/email.js', () => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
   sendRegistrationCodeEmail: vi.fn().mockResolvedValue(undefined),
@@ -34,6 +36,7 @@ const mockUserModel = vi.mocked(UserModel);
 const mockPendingRegistrationModel = vi.mocked(PendingRegistrationModel);
 const mockAuthThrottleModel = vi.mocked(AuthThrottleModel);
 const mockTwoFactorChallengeModel = vi.mocked(TwoFactorChallengeModel);
+const mockBlogModel = vi.mocked(BlogModel);
 const mockBcrypt = vi.mocked(bcrypt);
 const mockSendPasswordResetEmail = vi.mocked(sendPasswordResetEmail);
 const mockSendRegistrationCodeEmail = vi.mocked(sendRegistrationCodeEmail);
@@ -110,6 +113,7 @@ describe('auth routes', () => {
     mockUserModel.create.mockReset();
     mockPendingRegistrationModel.findOne.mockReset();
     mockPendingRegistrationModel.findOneAndUpdate.mockReset();
+    mockPendingRegistrationModel.findOneAndDelete.mockReset();
     mockPendingRegistrationModel.create.mockReset();
     mockPendingRegistrationModel.deleteOne.mockReset();
     mockAuthThrottleModel.findOne.mockReset();
@@ -119,11 +123,14 @@ describe('auth routes', () => {
     mockAuthThrottleModel.deleteMany.mockReset();
     mockAuthThrottleModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
     mockTwoFactorChallengeModel.findOne.mockReset();
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockReset();
     mockTwoFactorChallengeModel.findOneAndDelete.mockReset();
     mockTwoFactorChallengeModel.create.mockReset();
     mockTwoFactorChallengeModel.deleteOne.mockReset();
     mockTwoFactorChallengeModel.deleteMany.mockReset();
     mockTwoFactorChallengeModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
+    mockBlogModel.updateMany.mockReset();
+    mockBlogModel.updateMany.mockResolvedValue({ modifiedCount: 0 } as never);
     mockBcrypt.hash.mockReset();
     mockBcrypt.compare.mockReset();
     mockSendPasswordResetEmail.mockReset();
@@ -204,35 +211,51 @@ describe('auth routes', () => {
       expect(await res.json()).toEqual(expect.objectContaining({ error: '该邮箱已被注册' }));
     });
 
-    it('updates existing pending registration via upsert', async () => {
+    it('preserves passwordHash and lockout state when resending a valid pending registration', async () => {
       const app = await makeApp();
+      const lockedUntil = new Date(Date.now() + 60_000);
+      const existing = pendingDoc({
+        passwordHash: 'original-password-hash',
+        failedAttempts: 3,
+        lockedUntil,
+        codeHash: 'old-code-hash',
+      });
       mockUserModel.findOne.mockResolvedValue(null);
-      mockPendingRegistrationModel.findOne.mockResolvedValue(pendingDoc() as never);
-      mockPendingRegistrationModel.findOneAndUpdate.mockResolvedValue(pendingDoc() as never);
-      mockBcrypt.hash.mockResolvedValueOnce('new-password-hash' as never);
+      mockPendingRegistrationModel.findOne.mockResolvedValue(existing as never);
+      mockPendingRegistrationModel.findOneAndUpdate.mockResolvedValue(existing as never);
+      mockBcrypt.hash.mockResolvedValueOnce('attacker-password-hash' as never);
 
       const res = await app.request('/api/auth/register/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: 'hello@liyuanstudio.com',
-          password: 'password123',
-          displayName: 'Hello User',
+          password: 'attacker999',
+          displayName: 'Attacker Name',
         }),
       });
 
       expect(res.status).toBe(200);
+      expect(mockBcrypt.hash).not.toHaveBeenCalled();
       expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenCalledWith(
-        { email: 'hello@liyuanstudio.com' },
-        expect.objectContaining({
-          email: 'hello@liyuanstudio.com',
-          displayName: 'Hello User',
-          passwordHash: 'new-password-hash',
-          codeHash: expect.any(String),
-          expiresAt: expect.any(Date),
-        }),
-        { upsert: true, new: true },
+        { email: 'hello@liyuanstudio.com', expiresAt: { $gt: expect.any(Date) } },
+        {
+          $set: {
+            codeHash: expect.any(String),
+            expiresAt: expect.any(Date),
+          },
+        },
       );
+      expect(mockPendingRegistrationModel.findOneAndUpdate).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ passwordHash: 'attacker-password-hash' }),
+        expect.anything(),
+      );
+      expect(mockSendRegistrationCodeEmail).toHaveBeenCalledWith({
+        email: 'hello@liyuanstudio.com',
+        displayName: 'Hello User',
+        code: expect.any(String),
+      });
     });
 
     it('returns 429 when registration send is rate limited', async () => {
@@ -287,6 +310,7 @@ describe('auth routes', () => {
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('123456') });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockPendingRegistrationModel.findOneAndDelete.mockResolvedValue(pending as never);
       mockUserModel.findOne.mockResolvedValue(null);
       mockUserModel.create.mockResolvedValue(userDoc({ emailVerified: true }) as never);
 
@@ -297,6 +321,10 @@ describe('auth routes', () => {
       });
 
       expect(res.status).toBe(201);
+      expect(mockPendingRegistrationModel.findOneAndDelete).toHaveBeenCalledWith(expect.objectContaining({
+        email: 'hello@liyuanstudio.com',
+        codeHash: hashToken('123456'),
+      }));
       expect(mockUserModel.create).toHaveBeenCalledWith(expect.objectContaining({
         email: 'hello@liyuanstudio.com',
         displayName: 'Hello User',
@@ -305,7 +333,6 @@ describe('auth routes', () => {
         passwordHash: 'hashed-password',
         username: 'Hello-User',
       }));
-      expect(mockPendingRegistrationModel.deleteOne).toHaveBeenCalledWith({ email: 'hello@liyuanstudio.com' });
       const json = await res.json();
       expect(json.user.emailVerified).toBe(true);
       expect(typeof json.token).toBe('string');
@@ -358,6 +385,7 @@ describe('auth routes', () => {
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('123456') });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockPendingRegistrationModel.findOneAndDelete.mockResolvedValue(pending as never);
       mockUserModel.findOne.mockResolvedValue(null);
       mockUserModel.create.mockResolvedValue(userDoc({ emailVerified: true, role: 'admin' }) as never);
 
@@ -378,6 +406,10 @@ describe('auth routes', () => {
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('999999'), failedAttempts: 0 });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockPendingRegistrationModel.findOneAndUpdate.mockResolvedValue({
+        ...pending,
+        failedAttempts: 1,
+      } as never);
 
       const res = await app.request('/api/auth/register/verify', {
         method: 'POST',
@@ -386,14 +418,19 @@ describe('auth routes', () => {
       });
 
       expect(res.status).toBe(400);
-      expect(pending.failedAttempts).toBe(1);
-      expect(pending.save).toHaveBeenCalled();
+      expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenCalled();
+      expect(pending.save).not.toHaveBeenCalled();
     });
 
     it('locks registration verification after too many wrong codes', async () => {
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('999999'), failedAttempts: 4 });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockPendingRegistrationModel.findOneAndUpdate.mockResolvedValue({
+        ...pending,
+        failedAttempts: 5,
+        lockedUntil: new Date(Date.now() + 60_000),
+      } as never);
 
       const res = await app.request('/api/auth/register/verify', {
         method: 'POST',
@@ -402,9 +439,7 @@ describe('auth routes', () => {
       });
 
       expect(res.status).toBe(429);
-      expect(pending.failedAttempts).toBe(5);
-      expect(pending.lockedUntil).toEqual(expect.any(Date));
-      expect(pending.save).toHaveBeenCalled();
+      expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenCalled();
     });
 
     it('returns 429 when registration verification is still locked', async () => {
@@ -423,8 +458,44 @@ describe('auth routes', () => {
       });
 
       expect(res.status).toBe(429);
-      expect(pending.save).not.toHaveBeenCalled();
+      expect(mockPendingRegistrationModel.findOneAndDelete).not.toHaveBeenCalled();
       expect(mockUserModel.create).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when a concurrent verify already consumed the pending registration', async () => {
+      const app = await makeApp();
+      const pending = pendingDoc({ codeHash: hashToken('123456') });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockPendingRegistrationModel.findOneAndDelete.mockResolvedValue(null as never);
+      mockUserModel.findOne.mockResolvedValue(null);
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '123456' }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '验证码无效或已过期' }));
+      expect(mockUserModel.create).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 when concurrent registration create hits a duplicate email', async () => {
+      const app = await makeApp();
+      const pending = pendingDoc({ codeHash: hashToken('123456') });
+      mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
+      mockPendingRegistrationModel.findOneAndDelete.mockResolvedValue(pending as never);
+      mockUserModel.findOne.mockResolvedValue(null);
+      mockUserModel.create.mockRejectedValue(Object.assign(new Error('duplicate'), { code: 11000 }));
+
+      const res = await app.request('/api/auth/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', code: '123456' }),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '该邮箱已被注册' }));
     });
   });
 
@@ -496,12 +567,27 @@ describe('auth routes', () => {
       twoFactorEnabled: true,
     }));
     expect(mockTwoFactorChallengeModel.findOneAndDelete).toHaveBeenCalledTimes(1);
+    expect(mockAuthThrottleModel.deleteMany).toHaveBeenCalledWith({
+      key: {
+        $in: expect.arrayContaining([
+          'login:email:hello@liyuanstudio.com',
+          '2fa-verify:email:hello@liyuanstudio.com',
+          '2fa-verify:user:user-1',
+        ]),
+      },
+    });
   });
 
   it('rejects a wrong 2FA code, records the attempt, and leaves the challenge unconsumed', async () => {
     const app = await makeApp();
     const challenge = challengeDoc();
+    const user = userDoc({ twoFactorEnabled: true });
     mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue({
+      ...challenge,
+      failedAttempts: 1,
+    } as never);
+    mockUserModel.findById.mockResolvedValue(user as never);
 
     const res = await app.request('/api/auth/2fa/login/verify', {
       method: 'POST',
@@ -510,9 +596,13 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(400);
-    expect(challenge.failedAttempts).toBe(1);
-    expect(challenge.save).toHaveBeenCalled();
+    expect(mockTwoFactorChallengeModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: challenge._id, failedAttempts: { $lt: 5 } }),
+      { $inc: { failedAttempts: 1 } },
+      { new: true },
+    );
     expect(mockTwoFactorChallengeModel.findOneAndDelete).not.toHaveBeenCalled();
+    expect(mockAuthThrottleModel.findOneAndUpdate).toHaveBeenCalled();
   });
 
   it('rejects verification when the 2FA challenge is missing or the account is disabled', async () => {
@@ -529,8 +619,10 @@ describe('auth routes', () => {
     mockTwoFactorChallengeModel.findOne
       .mockResolvedValueOnce(challengeDoc() as never)
       .mockResolvedValueOnce(challengeDoc() as never);
+    mockUserModel.findById
+      .mockResolvedValueOnce(userDoc({ twoFactorEnabled: true }) as never)
+      .mockResolvedValueOnce(userDoc({ twoFactorEnabled: false }) as never);
     mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValueOnce(challengeDoc() as never);
-    mockUserModel.findById.mockResolvedValueOnce(userDoc({ twoFactorEnabled: false }) as never);
     expect((await request()).status).toBe(401);
   });
 
@@ -642,6 +734,54 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(409);
     expect(mockUserModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('blocks new 2FA challenges after email-level verify lockout even with the correct password', async () => {
+    const app = await makeApp();
+    const user = userDoc({ twoFactorEnabled: true });
+    mockUserModel.findOne.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockAuthThrottleModel.findOne
+      .mockResolvedValueOnce(null) // login:email
+      .mockResolvedValueOnce(null) // login:ip
+      .mockResolvedValueOnce({
+        key: '2fa-verify:email:hello@liyuanstudio.com',
+        attempts: 5,
+        lockedUntil: new Date(Date.now() + 60_000),
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never)
+      .mockResolvedValueOnce(null); // 2fa-verify:user
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password: 'password123' }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual(expect.objectContaining({
+      error: '验证码错误次数过多，请稍后再试',
+    }));
+    expect(mockTwoFactorChallengeModel.create).not.toHaveBeenCalled();
+    expect(mockAuthThrottleModel.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('does not clear login throttles until full 2FA login succeeds', async () => {
+    const app = await makeApp();
+    const user = userDoc({ twoFactorEnabled: true });
+    mockUserModel.findOne.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockTwoFactorChallengeModel.create.mockResolvedValue(challengeDoc() as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
+      body: JSON.stringify({ email: user.email, password: 'password123' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(expect.objectContaining({ twoFactorRequired: true }));
+    expect(mockAuthThrottleModel.deleteMany).not.toHaveBeenCalled();
   });
 
   it('enables 2FA only after password and email-code confirmation', async () => {
@@ -1189,8 +1329,9 @@ describe('auth routes', () => {
     });
   });
 
-  it('POST /api/auth/forgot-password clears reset token fields when email sending fails', async () => {
+  it('POST /api/auth/forgot-password returns generic success when email sending fails', async () => {
     const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const doc = userDoc();
     mockUserModel.findOne.mockResolvedValue(doc as never);
     mockSendPasswordResetEmail.mockRejectedValue(new Error('smtp unavailable'));
@@ -1201,10 +1342,15 @@ describe('auth routes', () => {
       body: JSON.stringify({ email: 'hello@liyuanstudio.com' }),
     });
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      message: '如果该邮箱已注册，我们已发送重置密码链接。',
+    });
     expect(doc.passwordResetTokenHash).toBeUndefined();
     expect(doc.passwordResetExpiresAt).toBeUndefined();
     expect(doc.save).toHaveBeenCalledTimes(2);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.password_reset_email_failed'));
+    errorSpy.mockRestore();
   });
 
   it('POST /api/auth/forgot-password rejects invalid email', async () => {
@@ -1222,11 +1368,13 @@ describe('auth routes', () => {
   it('POST /api/auth/reset-password updates the password and clears reset fields', async () => {
     const app = await makeApp();
     const doc = userDoc({
-      passwordResetTokenHash: 'old-hash',
-      passwordResetExpiresAt: new Date(Date.now() + 10_000),
+      passwordHash: 'new-hashed-password',
+      tokenVersion: 1,
+      passwordResetTokenHash: undefined,
+      passwordResetExpiresAt: undefined,
     });
-    mockUserModel.findOne.mockResolvedValue(doc as never);
     mockBcrypt.hash.mockResolvedValue('new-hashed-password' as never);
+    mockUserModel.findOneAndUpdate.mockResolvedValue(doc as never);
 
     const res = await app.request('/api/auth/reset-password', {
       method: 'POST',
@@ -1235,27 +1383,45 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(mockUserModel.findOne).toHaveBeenCalledWith({
-      passwordResetTokenHash: expect.any(String),
-      passwordResetExpiresAt: { $gt: expect.any(Date) },
-    });
     expect(mockBcrypt.hash).toHaveBeenCalledWith('newpassword123', 10);
-    expect(doc.passwordHash).toBe('new-hashed-password');
-    expect(doc.passwordResetTokenHash).toBeUndefined();
-    expect(doc.passwordResetExpiresAt).toBeUndefined();
-    expect(doc.tokenVersion).toBe(1);
-    expect(doc.save).toHaveBeenCalled();
+    expect(mockUserModel.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        passwordResetTokenHash: expect.any(String),
+        passwordResetExpiresAt: { $gt: expect.any(Date) },
+      },
+      {
+        $set: { passwordHash: 'new-hashed-password' },
+        $inc: { tokenVersion: 1 },
+        $unset: { passwordResetTokenHash: 1, passwordResetExpiresAt: 1 },
+      },
+      { new: true },
+    );
     expect(await res.json()).toEqual({ message: '密码已重置，请使用新密码登录。' });
   });
 
   it('POST /api/auth/reset-password rejects an invalid or expired token', async () => {
     const app = await makeApp();
-    mockUserModel.findOne.mockResolvedValue(null);
+    mockUserModel.findOneAndUpdate.mockResolvedValue(null);
 
     const res = await app.request('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: 'expired-token', password: 'newpassword123' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(expect.objectContaining({ error: '重置链接无效或已过期' }));
+  });
+
+  it('POST /api/auth/reset-password returns 400 when a concurrent request already consumed the token', async () => {
+    const app = await makeApp();
+    mockBcrypt.hash.mockResolvedValue('new-hashed-password' as never);
+    mockUserModel.findOneAndUpdate.mockResolvedValue(null);
+
+    const res = await app.request('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'plain-token', password: 'newpassword123' }),
     });
 
     expect(res.status).toBe(400);
@@ -1272,7 +1438,7 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(400);
-    expect(mockUserModel.findOne).not.toHaveBeenCalled();
+    expect(mockUserModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('GET /api/auth/me backfills username for legacy users', async () => {
@@ -1428,6 +1594,16 @@ describe('auth routes', () => {
     expect(doc.avatar).toBe('https://example.com/original.png');
     expect(doc.bio).toBe('Building useful software.');
     expect(doc.save).toHaveBeenCalled();
+    expect(mockBlogModel.updateMany).toHaveBeenCalledWith(
+      { authorId: doc._id },
+      {
+        $set: {
+          authorUsername: 'Hello-User',
+          authorDisplayName: 'New Name',
+          authorAvatar: 'https://example.com/original.png',
+        },
+      },
+    );
     const json = await res.json();
     expect(json.user.displayName).toBe('New Name');
     expect(json.user.bio).toBe('Building useful software.');
@@ -1455,6 +1631,16 @@ describe('auth routes', () => {
     expect(res.status).toBe(200);
     expect(doc.username).toBe('New-Name');
     expect(doc.save).toHaveBeenCalled();
+    expect(mockBlogModel.updateMany).toHaveBeenCalledWith(
+      { authorId: doc._id },
+      {
+        $set: {
+          authorUsername: 'New-Name',
+          authorDisplayName: 'New Name',
+          authorAvatar: doc.avatar,
+        },
+      },
+    );
     expect((await res.json()).user.username).toBe('New-Name');
   });
 
@@ -1532,10 +1718,9 @@ describe('auth routes', () => {
 
   it('PATCH /api/auth/me/avatar updates the avatar', async () => {
     const app = await makeApp();
+    const updated = userDoc({ avatar: 'https://example.com/new-avatar.png' });
     mockUserModel.findById.mockResolvedValue(userDoc() as never);
-    mockUserModel.findByIdAndUpdate.mockResolvedValue(
-      userDoc({ avatar: 'https://example.com/new-avatar.png' }) as never,
-    );
+    mockUserModel.findByIdAndUpdate.mockResolvedValue(updated as never);
     const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
 
     const res = await app.request('/api/auth/me/avatar', {
@@ -1550,6 +1735,16 @@ describe('auth routes', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.user.avatar).toBe('https://example.com/new-avatar.png');
+    expect(mockBlogModel.updateMany).toHaveBeenCalledWith(
+      { authorId: updated._id },
+      {
+        $set: {
+          authorUsername: 'Hello-User',
+          authorDisplayName: 'Hello User',
+          authorAvatar: 'https://example.com/new-avatar.png',
+        },
+      },
+    );
   });
 
   it('PATCH /api/auth/me/avatar rejects invalid avatar values', async () => {

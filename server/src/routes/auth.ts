@@ -9,6 +9,7 @@ import {
   TwoFactorChallengeModel,
   type TwoFactorChallengePurpose,
 } from '../models/two-factor-challenge.js';
+import { BlogModel } from '../models/blog.js';
 import {
   sendPasswordResetEmail,
   sendRegistrationCodeEmail,
@@ -296,6 +297,40 @@ async function clearThrottleKeys(keys: string[]): Promise<void> {
   await AuthThrottleModel.deleteMany({ key: { $in: keys } });
 }
 
+function twoFactorVerifyThrottleKeys(email: string, userId: string): string[] {
+  return [`2fa-verify:email:${email}`, `2fa-verify:user:${userId}`];
+}
+
+function loginThrottleKeysFor(email: string, ip: string): string[] {
+  return [`login:email:${email}`, `login:ip:${ip}`];
+}
+
+function isUnlockedPendingFilter(now: Date) {
+  return {
+    $or: [
+      { lockedUntil: { $exists: false } },
+      { lockedUntil: null },
+      { lockedUntil: { $lte: now } },
+    ],
+  };
+}
+
+async function syncBlogAuthorSnapshot(user: UserForResponse): Promise<void> {
+  if (!user.username) {
+    return;
+  }
+  await BlogModel.updateMany(
+    { authorId: user._id },
+    {
+      $set: {
+        authorUsername: user.username,
+        authorDisplayName: user.displayName,
+        authorAvatar: user.avatar,
+      },
+    },
+  );
+}
+
 async function isForgotPasswordLimited(keys: string[], now: Date): Promise<boolean> {
   const throttles = await Promise.all(keys.map((key) => AuthThrottleModel.findOne({ key })));
   return throttles.some((throttle) => {
@@ -403,17 +438,32 @@ async function verifyChallengeCode(
     ...(userId ? { userId } : {}),
   });
   if (!challenge || challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
-    return null;
+    return { ok: false as const, reason: 'invalid' as const, challenge: null };
   }
   if (!hashesMatch(challenge.codeHash, hashToken(code))) {
-    challenge.failedAttempts += 1;
-    await challenge.save();
-    return null;
+    const updated = await TwoFactorChallengeModel.findOneAndUpdate(
+      {
+        _id: challenge._id,
+        failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
+      },
+      { $inc: { failedAttempts: 1 } },
+      { new: true },
+    );
+    return {
+      ok: false as const,
+      reason: 'wrong_code' as const,
+      challenge: updated ?? challenge,
+    };
   }
-  return TwoFactorChallengeModel.findOneAndDelete({
+  const consumed = await TwoFactorChallengeModel.findOneAndDelete({
     _id: challenge._id,
     tokenHash: challenge.tokenHash,
+    failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
   });
+  if (!consumed) {
+    return { ok: false as const, reason: 'consumed' as const, challenge: null };
+  }
+  return { ok: true as const, reason: 'ok' as const, challenge: consumed };
 }
 
 function validateChallengeToken(token: unknown): string {
@@ -455,8 +505,49 @@ app.post('/register/send-code', async (c) => {
 
   const code = createRegistrationCode();
   const codeHash = hashToken(code);
-  const passwordHash = await bcrypt.hash(password, 10);
+  const expiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_MS);
+  const existingPending = await PendingRegistrationModel.findOne({ email });
+  const hasValidPending = Boolean(existingPending && existingPending.expiresAt > now);
 
+  if (hasValidPending && existingPending) {
+    const previousCodeHash = existingPending.codeHash;
+    const previousExpiresAt = existingPending.expiresAt;
+    await PendingRegistrationModel.findOneAndUpdate(
+      { email, expiresAt: { $gt: now } },
+      {
+        $set: {
+          codeHash,
+          expiresAt,
+        },
+      },
+    );
+
+    try {
+      await sendRegistrationCodeEmail({
+        email,
+        displayName: existingPending.displayName,
+        code,
+      });
+      await Promise.all(registrationThrottleKeys.map((key) => recordRegistrationSendAttempt(key, now)));
+    } catch (error) {
+      await PendingRegistrationModel.findOneAndUpdate(
+        { email },
+        {
+          $set: {
+            codeHash: previousCodeHash,
+            expiresAt: previousExpiresAt,
+          },
+        },
+      );
+      return jsonError(c, '验证码邮件发送失败', 502, {
+        detail: error instanceof Error ? error.message : '未知邮件错误',
+      });
+    }
+
+    return c.json({ message: '验证码已发送，请查收邮箱。' });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
   await PendingRegistrationModel.findOneAndUpdate(
     { email },
     {
@@ -466,7 +557,7 @@ app.post('/register/send-code', async (c) => {
       codeHash,
       failedAttempts: 0,
       lockedUntil: undefined,
-      expiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
+      expiresAt,
     },
     { upsert: true, new: true },
   );
@@ -496,24 +587,44 @@ app.post('/register/verify', async (c) => {
     return badRequest(c, error);
   }
 
+  const now = new Date();
   const pending = await PendingRegistrationModel.findOne({ email });
-  if (!pending || pending.expiresAt < new Date()) {
+  if (!pending || pending.expiresAt < now) {
     return jsonError(c, '验证码无效或已过期', 400);
   }
 
-  const now = new Date();
   if (isActiveDate(pending.lockedUntil, now)) {
     return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
   }
 
-  if (!hashesMatch(pending.codeHash, hashToken(code))) {
-    pending.failedAttempts = (pending.failedAttempts ?? 0) + 1;
-    if (pending.failedAttempts >= REGISTRATION_VERIFY_MAX_ATTEMPTS) {
-      pending.lockedUntil = new Date(now.getTime() + REGISTRATION_VERIFY_LOCK_MS);
-      await pending.save();
+  const codeHash = hashToken(code);
+  if (!hashesMatch(pending.codeHash, codeHash)) {
+    const updated = await PendingRegistrationModel.findOneAndUpdate(
+      {
+        email,
+        expiresAt: { $gt: now },
+        failedAttempts: { $lt: REGISTRATION_VERIFY_MAX_ATTEMPTS },
+        ...isUnlockedPendingFilter(now),
+      },
+      [
+        {
+          $set: {
+            failedAttempts: { $add: ['$failedAttempts', 1] },
+            lockedUntil: {
+              $cond: [
+                { $gte: [{ $add: ['$failedAttempts', 1] }, REGISTRATION_VERIFY_MAX_ATTEMPTS] },
+                new Date(now.getTime() + REGISTRATION_VERIFY_LOCK_MS),
+                '$lockedUntil',
+              ],
+            },
+          },
+        },
+      ],
+      { new: true },
+    );
+    if (updated && (updated.failedAttempts ?? 0) >= REGISTRATION_VERIFY_MAX_ATTEMPTS) {
       return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
     }
-    await pending.save();
     return jsonError(c, '验证码错误', 400);
   }
 
@@ -523,18 +634,34 @@ app.post('/register/verify', async (c) => {
     return jsonError(c, '该邮箱已被注册', 409);
   }
 
-  const username = await createUniqueUsername(pending.displayName, pending.email);
-  const user = await UserModel.create({
-    email: pending.email,
-    passwordHash: pending.passwordHash,
-    displayName: pending.displayName,
-    username,
-    role: isAdminEmail(pending.email) ? 'admin' : 'tourist',
-    tokenVersion: 0,
-    emailVerified: true,
+  const consumed = await PendingRegistrationModel.findOneAndDelete({
+    email,
+    codeHash,
+    expiresAt: { $gt: now },
+    ...isUnlockedPendingFilter(now),
   });
+  if (!consumed) {
+    return jsonError(c, '验证码无效或已过期', 400);
+  }
 
-  await PendingRegistrationModel.deleteOne({ email });
+  const username = await createUniqueUsername(consumed.displayName, consumed.email);
+  let user;
+  try {
+    user = await UserModel.create({
+      email: consumed.email,
+      passwordHash: consumed.passwordHash,
+      displayName: consumed.displayName,
+      username,
+      role: isAdminEmail(consumed.email) ? 'admin' : 'tourist',
+      tokenVersion: 0,
+      emailVerified: true,
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      return jsonError(c, '该邮箱已被注册', 409);
+    }
+    throw error;
+  }
 
   const token = await signToken({
     id: user._id.toString(),
@@ -558,7 +685,7 @@ app.post('/login', async (c) => {
     return badRequest(c, error);
   }
 
-  const loginThrottleKeys = [`login:email:${email}`, `login:ip:${getClientIp(c)}`];
+  const loginThrottleKeys = loginThrottleKeysFor(email, getClientIp(c));
   const now = new Date();
   try {
     if (await hasLockedThrottle(loginThrottleKeys, now)) {
@@ -619,16 +746,6 @@ app.post('/login', async (c) => {
     return jsonError(c, '邮箱或密码错误', 401);
   }
 
-  try {
-    await clearThrottleKeys(loginThrottleKeys);
-  } catch (error) {
-    logAuthEvent(c, 'warn', 'auth.login_throttle_clear_failed', {
-      userId: user._id.toString(),
-      email: maskEmail(email),
-      ...getErrorSummary(error),
-    });
-  }
-
   let shouldSave = false;
   if (user.role !== 'admin' && isAdminEmail(user.email)) {
     user.role = 'admin';
@@ -658,6 +775,10 @@ app.post('/login', async (c) => {
   }
 
   if (user.twoFactorEnabled) {
+    const verifyKeys = twoFactorVerifyThrottleKeys(user.email, user._id.toString());
+    if (await hasLockedThrottle(verifyKeys, now)) {
+      return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
+    }
     const sendKeys = [`2fa-send:email:${email}`, `2fa-send:ip:${getClientIp(c)}`];
     if (await isForgotPasswordLimited(sendKeys, now)) {
       return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
@@ -678,6 +799,16 @@ app.post('/login', async (c) => {
       });
       return jsonError(c, '双重验证邮件发送失败', 502);
     }
+  }
+
+  try {
+    await clearThrottleKeys(loginThrottleKeys);
+  } catch (error) {
+    logAuthEvent(c, 'warn', 'auth.login_throttle_clear_failed', {
+      userId: user._id.toString(),
+      email: maskEmail(email),
+      ...getErrorSummary(error),
+    });
   }
 
   return c.json(await issueAuthResponse(user));
@@ -708,21 +839,40 @@ app.post('/2fa/login/verify', async (c) => {
     return jsonError(c, '验证码无效或已过期', 400);
   }
 
+  const userForThrottle = await UserModel.findById(challenge.userId);
+  if (!userForThrottle) {
+    return jsonError(c, '用户不存在或双重验证已关闭', 401);
+  }
+  const now = new Date();
+  const verifyKeys = twoFactorVerifyThrottleKeys(userForThrottle.email, userForThrottle._id.toString());
+  if (await hasLockedThrottle(verifyKeys, now)) {
+    return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
+  }
+
   let user: UserForResponse | null = null;
   if (recoveryCode) {
     const recoveryHash = hashToken(recoveryCode);
-    const recoveryUser = await UserModel.findById(challenge.userId);
-    const matchedHash = recoveryUser?.twoFactorRecoveryCodeHashes?.find(
+    const matchedHash = userForThrottle.twoFactorRecoveryCodeHashes?.find(
       (storedHash) => hashesMatch(storedHash, recoveryHash),
     );
     if (!matchedHash) {
-      challenge.failedAttempts += 1;
-      await challenge.save();
+      await TwoFactorChallengeModel.findOneAndUpdate(
+        {
+          _id: challenge._id,
+          failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
+        },
+        { $inc: { failedAttempts: 1 } },
+      );
+      const locked = await Promise.all(verifyKeys.map((key) => recordLoginFailure(key, now)));
+      if (locked.some(Boolean)) {
+        return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
+      }
       return jsonError(c, '恢复码无效', 400);
     }
     const consumed = await TwoFactorChallengeModel.findOneAndDelete({
       _id: challenge._id,
       tokenHash: challenge.tokenHash,
+      failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
     });
     if (!consumed) {
       return jsonError(c, '双重验证请求已使用', 409);
@@ -743,16 +893,37 @@ app.post('/2fa/login/verify', async (c) => {
       return jsonError(c, '恢复码无效', 400);
     }
   } else {
-    const consumed = await verifyChallengeCode(challengeToken, 'login', code ?? '');
-    if (!consumed) {
+    const result = await verifyChallengeCode(challengeToken, 'login', code ?? '');
+    if (!result.ok) {
+      if (result.reason === 'wrong_code') {
+        const locked = await Promise.all(verifyKeys.map((key) => recordLoginFailure(key, now)));
+        if (locked.some(Boolean)) {
+          return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
+        }
+      }
+      if (result.reason === 'consumed') {
+        return jsonError(c, '双重验证请求已使用', 409);
+      }
       return jsonError(c, '验证码无效或已过期', 400);
     }
-    user = await UserModel.findById(consumed.userId);
+    user = await UserModel.findById(result.challenge.userId);
   }
 
   if (!user || !user.twoFactorEnabled) {
     return jsonError(c, '用户不存在或双重验证已关闭', 401);
   }
+
+  const loginKeys = loginThrottleKeysFor(user.email, getClientIp(c));
+  try {
+    await clearThrottleKeys([...loginKeys, ...verifyKeys]);
+  } catch (error) {
+    logAuthEvent(c, 'warn', 'auth.login_throttle_clear_failed', {
+      userId: user._id.toString(),
+      email: maskEmail(user.email),
+      ...getErrorSummary(error),
+    });
+  }
+
   return c.json(await issueAuthResponse(await ensureUsernameForRequest(c, user, '2fa-login')));
 });
 
@@ -781,6 +952,10 @@ app.post('/2fa/login/resend', async (c) => {
     return jsonError(c, '双重验证请求无效或已过期', 400);
   }
   const now = new Date();
+  const verifyKeys = twoFactorVerifyThrottleKeys(user.email, user._id.toString());
+  if (await hasLockedThrottle(verifyKeys, now)) {
+    return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
+  }
   const sendKeys = [`2fa-send:email:${user.email}`, `2fa-send:ip:${getClientIp(c)}`];
   if (
     now.getTime() - challenge.lastSentAt.getTime() < REGISTRATION_RATE_LIMIT_MS ||
@@ -833,6 +1008,10 @@ async function beginAccountTwoFactorChallenge(
     return { response: jsonError(c, '双重验证尚未启用', 409) };
   }
   const now = new Date();
+  const verifyKeys = twoFactorVerifyThrottleKeys(user.email, user._id.toString());
+  if (await hasLockedThrottle(verifyKeys, now)) {
+    return { response: jsonError(c, '验证码错误次数过多，请稍后再试', 429) };
+  }
   const sendKeys = [`2fa-settings:${user._id.toString()}`, `2fa-send:ip:${getClientIp(c)}`];
   if (await isForgotPasswordLimited(sendKeys, now)) {
     return { response: jsonError(c, '验证码发送过于频繁，请稍后再试', 429) };
@@ -858,8 +1037,27 @@ async function confirmAccountChallenge(
   } catch (error) {
     return { response: badRequest(c, error) };
   }
-  const challenge = await verifyChallengeCode(challengeToken, purpose, code, c.get('userId'));
-  if (!challenge) {
+  const now = new Date();
+  const userScopedKey = `2fa-verify:user:${c.get('userId')}`;
+  if (await hasLockedThrottle([userScopedKey], now)) {
+    return { response: jsonError(c, '验证码错误次数过多，请稍后再试', 429) };
+  }
+
+  const result = await verifyChallengeCode(challengeToken, purpose, code, c.get('userId'));
+  if (!result.ok) {
+    if (result.reason === 'wrong_code') {
+      const user = await UserModel.findById(c.get('userId'));
+      const keys = user
+        ? twoFactorVerifyThrottleKeys(user.email, user._id.toString())
+        : [userScopedKey];
+      const locked = await Promise.all(keys.map((key) => recordLoginFailure(key, now)));
+      if (locked.some(Boolean)) {
+        return { response: jsonError(c, '验证码错误次数过多，请稍后再试', 429) };
+      }
+    }
+    if (result.reason === 'consumed') {
+      return { response: jsonError(c, '双重验证请求已使用', 409) };
+    }
     return { response: jsonError(c, '验证码无效或已过期', 400) };
   }
   const user = await UserModel.findById(c.get('userId'));
@@ -872,6 +1070,7 @@ async function confirmAccountChallenge(
   if (purpose !== 'enable' && !user.twoFactorEnabled) {
     return { response: jsonError(c, '双重验证尚未启用', 409) };
   }
+  await clearThrottleKeys(twoFactorVerifyThrottleKeys(user.email, user._id.toString()));
   return { user };
 }
 
@@ -1011,8 +1210,10 @@ app.post('/forgot-password', async (c) => {
       user.passwordResetTokenHash = undefined;
       user.passwordResetExpiresAt = undefined;
       await user.save();
-      return jsonError(c, '重置邮件发送失败', 502, {
-        detail: error instanceof Error ? error.message : '未知邮件错误',
+      logAuthEvent(c, 'error', 'auth.password_reset_email_failed', {
+        userId: user._id.toString(),
+        email: maskEmail(user.email),
+        ...getErrorSummary(error),
       });
     }
   }
@@ -1035,20 +1236,23 @@ app.post('/reset-password', async (c) => {
     return badRequest(c, error);
   }
 
-  const user = await UserModel.findOne({
-    passwordResetTokenHash: hashToken(token),
-    passwordResetExpiresAt: { $gt: new Date() },
-  });
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await UserModel.findOneAndUpdate(
+    {
+      passwordResetTokenHash: hashToken(token),
+      passwordResetExpiresAt: { $gt: new Date() },
+    },
+    {
+      $set: { passwordHash },
+      $inc: { tokenVersion: 1 },
+      $unset: { passwordResetTokenHash: 1, passwordResetExpiresAt: 1 },
+    },
+    { new: true },
+  );
 
   if (!user) {
     return jsonError(c, '重置链接无效或已过期', 400);
   }
-
-  user.passwordHash = await bcrypt.hash(password, 10);
-  user.passwordResetTokenHash = undefined;
-  user.passwordResetExpiresAt = undefined;
-  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
-  await user.save();
 
   return c.json({ message: '密码已重置，请使用新密码登录。' });
 });
@@ -1080,6 +1284,15 @@ app.patch('/me/profile', requireAuth, async (c) => {
 
     try {
       await user.save();
+      try {
+        await syncBlogAuthorSnapshot(user);
+      } catch (error) {
+        logAuthEvent(c, 'error', 'auth.blog_author_sync_failed', {
+          userId,
+          email: maskEmail(user.email),
+          ...getErrorSummary(error),
+        });
+      }
       return c.json({ user: serializeUser(user) });
     } catch (error) {
       logAuthEvent(c, 'error', 'auth.profile_save_failed', {
@@ -1118,7 +1331,18 @@ app.patch('/me/avatar', requireAuth, async (c) => {
     return jsonError(c, '用户不存在', 404);
   }
 
-  return c.json({ user: serializeUser(await ensureUsernameForRequest(c, user, 'avatar')) });
+  const ensured = await ensureUsernameForRequest(c, user, 'avatar');
+  try {
+    await syncBlogAuthorSnapshot(ensured);
+  } catch (error) {
+    logAuthEvent(c, 'error', 'auth.blog_author_sync_failed', {
+      userId: ensured._id.toString(),
+      email: maskEmail(ensured.email),
+      ...getErrorSummary(error),
+    });
+  }
+
+  return c.json({ user: serializeUser(ensured) });
 });
 
 export default app;

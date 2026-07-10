@@ -248,6 +248,26 @@ describe('admin routes', () => {
       expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
     });
 
+    it('prevents an admin from demoting themselves', async () => {
+      const app = await makeApp();
+      const adminId = '507f1f77bcf86cd799439011';
+      mockUserModel.findById.mockResolvedValue(adminAuthDoc({ _id: { toString: () => adminId } }) as never);
+
+      const token = await signToken({ id: adminId, email: 'admin@liyuanstudio.com', role: 'admin', tokenVersion: 0 });
+      const res = await app.request(`/api/admin/users/${adminId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ role: 'member' }),
+      });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '不能降低自己的管理员角色' }));
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
     it('returns 404 for missing user', async () => {
       const app = await makeApp();
       mockUserModel.findById.mockResolvedValueOnce(adminAuthDoc() as never).mockResolvedValueOnce(null);

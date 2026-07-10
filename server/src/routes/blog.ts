@@ -399,9 +399,13 @@ app.post('/', requireAuth, async (c) => {
       const created = await BlogModel.create(doc);
       return c.json(created, 201);
     } catch (error) {
-      if (!isDuplicateKeyError(error) || data.slug) {
-        return jsonError(c, '该 slug 已被使用', 409);
+      if (isDuplicateKeyError(error)) {
+        if (data.slug) {
+          return jsonError(c, '该 slug 已被使用', 409);
+        }
+        continue;
       }
+      throw error;
     }
   }
 
@@ -412,6 +416,11 @@ app.patch('/:id', requireAuth, async (c) => {
   const denied = requireBlogWriter(c);
   if (denied) return denied;
 
+  const id = c.req.param('id');
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return jsonError(c, '文章 ID 格式不正确', 400);
+  }
+
   let data: Partial<BlogPost>;
   try {
     data = validateBlogInput(await c.req.json(), true);
@@ -419,7 +428,7 @@ app.patch('/:id', requireAuth, async (c) => {
     return jsonError(c, error instanceof Error ? error.message : '请求无效', 400);
   }
 
-  const doc = await BlogModel.findById(c.req.param('id')) as BlogDoc | null;
+  const doc = await BlogModel.findById(id) as BlogDoc | null;
   if (!doc) {
     return jsonError(c, '未找到', 404);
   }
@@ -453,7 +462,12 @@ app.delete('/:id', requireAuth, async (c) => {
   const denied = requireBlogWriter(c);
   if (denied) return denied;
 
-  const doc = await BlogModel.findById(c.req.param('id')).lean();
+  const id = c.req.param('id');
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return jsonError(c, '文章 ID 格式不正确', 400);
+  }
+
+  const doc = await BlogModel.findById(id).lean();
   if (!doc) {
     return jsonError(c, '未找到', 404);
   }
@@ -463,7 +477,7 @@ app.delete('/:id', requireAuth, async (c) => {
     return jsonError(c, '没有权限', 403);
   }
 
-  await BlogModel.findByIdAndDelete(c.req.param('id')).lean();
+  await BlogModel.findByIdAndDelete(id).lean();
   return c.json({ ok: true });
 });
 
