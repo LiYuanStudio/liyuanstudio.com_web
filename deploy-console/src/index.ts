@@ -25,45 +25,89 @@ function sameOrigin(c: AppContext): boolean {
   return !origin || origin === normalizedOrigin(c.env.CONSOLE_ORIGIN);
 }
 
+type AuthSuccess = { ok: true; token: string; user: AdminUser };
+type AuthFailure = {
+  ok: false;
+  reason: 'invalid_credentials' | 'not_admin' | 'unavailable';
+};
+type AuthResult = AuthSuccess | AuthFailure;
+
+async function readJson(response: Response): Promise<unknown | null> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) return null;
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 async function authenticateAdmin(
   env: Bindings,
   email: string,
   password: string,
-): Promise<{ token: string; user: AdminUser } | null> {
+): Promise<AuthResult> {
   const apiBase = env.LA_API_BASE_URL.replace(/\/+$/u, '');
-  const loginResponse = await fetch(`${apiBase}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!loginResponse.ok) return null;
 
-  const login = await loginResponse.json() as { token?: unknown };
-  if (typeof login.token !== 'string' || !login.token) return null;
+  let loginResponse: Response;
+  try {
+    loginResponse = await fetch(`${apiBase}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
 
-  const meResponse = await fetch(`${apiBase}/auth/me`, {
-    headers: { Authorization: `Bearer ${login.token}` },
-  });
-  if (!meResponse.ok) return null;
+  if (loginResponse.status === 401 || loginResponse.status === 400) {
+    return { ok: false, reason: 'invalid_credentials' };
+  }
+  if (!loginResponse.ok) {
+    return { ok: false, reason: 'unavailable' };
+  }
 
-  const me = await meResponse.json() as {
+  const loginBody = await readJson(loginResponse);
+  const login = loginBody as { token?: unknown } | null;
+  if (!login || typeof login.token !== 'string' || !login.token) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  let meResponse: Response;
+  try {
+    meResponse = await fetch(`${apiBase}/auth/me`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    });
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (!meResponse.ok) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const meBody = await readJson(meResponse);
+  const me = meBody as {
     user?: {
       id?: unknown;
       email?: unknown;
       displayName?: unknown;
       role?: unknown;
     };
-  };
+  } | null;
   if (
-    me.user?.role !== 'admin' ||
+    !me?.user ||
     typeof me.user.id !== 'string' ||
     typeof me.user.email !== 'string' ||
     typeof me.user.displayName !== 'string'
   ) {
-    return null;
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (me.user.role !== 'admin') {
+    return { ok: false, reason: 'not_admin' };
   }
 
   return {
+    ok: true,
     token: login.token,
     user: {
       id: me.user.id,
@@ -72,6 +116,16 @@ async function authenticateAdmin(
       role: 'admin',
     },
   };
+}
+
+function loginFailureMessage(reason: AuthFailure['reason']): { message: string; status: 401 | 502 } {
+  if (reason === 'invalid_credentials') {
+    return { message: '邮箱或密码错误。', status: 401 };
+  }
+  if (reason === 'not_admin') {
+    return { message: '需要 LA 管理员账号。', status: 401 };
+  }
+  return { message: '服务暂时不可用，请稍后重试。', status: 502 };
 }
 
 async function revalidateAdmin(env: Bindings, session: Session): Promise<AdminUser | null> {
@@ -220,8 +274,9 @@ app.post('/auth/login', async (c) => {
   }
 
   const authenticated = await authenticateAdmin(c.env, email, password);
-  if (!authenticated) {
-    return c.html(loginPage('账号、密码或管理员权限无效。'), 401);
+  if (!authenticated.ok) {
+    const failure = loginFailureMessage(authenticated.reason);
+    return c.html(loginPage(failure.message), failure.status);
   }
 
   await writeSession(c, createSession(authenticated.token, authenticated.user));
