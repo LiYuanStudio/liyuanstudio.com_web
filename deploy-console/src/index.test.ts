@@ -72,6 +72,14 @@ function githubResponses(options?: {
 
 function installFetch(options?: {
   role?: string;
+  loginStatus?: number;
+  loginBody?: unknown;
+  loginContentType?: string;
+  meStatus?: number;
+  meBody?: unknown;
+  meContentType?: string;
+  loginThrows?: boolean;
+  meThrows?: boolean;
   github?: ReturnType<typeof githubResponses>;
   upstream?: (url: URL, init?: RequestInit) => Promise<Response>;
 }) {
@@ -81,9 +89,41 @@ function installFetch(options?: {
     requests.push({ url, init });
 
     if (url.href === 'https://api.example.com/api/auth/login') {
+      if (options?.loginThrows) throw new TypeError('network down');
+      if (options?.loginStatus !== undefined) {
+        const body = options.loginBody === undefined
+          ? { error: '邮箱或密码错误' }
+          : options.loginBody;
+        if (typeof body === 'string') {
+          return new Response(body, {
+            status: options.loginStatus,
+            headers: { 'Content-Type': options.loginContentType ?? 'text/html' },
+          });
+        }
+        return new Response(JSON.stringify(body), {
+          status: options.loginStatus,
+          headers: { 'Content-Type': options.loginContentType ?? 'application/json' },
+        });
+      }
       return json({ token: 'la-token', user: { ...admin, role: options?.role ?? 'admin' } });
     }
     if (url.href === 'https://api.example.com/api/auth/me') {
+      if (options?.meThrows) throw new TypeError('network down');
+      if (options?.meStatus !== undefined) {
+        const body = options.meBody === undefined
+          ? { error: 'unauthorized' }
+          : options.meBody;
+        if (typeof body === 'string') {
+          return new Response(body, {
+            status: options.meStatus,
+            headers: { 'Content-Type': options.meContentType ?? 'text/html' },
+          });
+        }
+        return new Response(JSON.stringify(body), {
+          status: options.meStatus,
+          headers: { 'Content-Type': options.meContentType ?? 'application/json' },
+        });
+      }
       return json({ user: { ...admin, role: options?.role ?? 'admin' } });
     }
     const githubResponse = await (options?.github ?? githubResponses())(url, init);
@@ -161,7 +201,86 @@ describe('deploy console', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get('set-cookie')).toBeNull();
-    expect(await response.text()).toContain('管理员权限无效');
+    expect(await response.text()).toContain('需要 LA 管理员账号');
+  });
+
+  it('rejects invalid credentials with a distinct message', async () => {
+    installFetch({ loginStatus: 401 });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: 'email=admin%40example.com&password=wrong-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(await response.text()).toContain('邮箱或密码错误');
+  });
+
+  it('treats upstream login outages as unavailable instead of bad credentials', async () => {
+    installFetch({ loginStatus: 503, loginBody: 'upstream down', loginContentType: 'text/plain' });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: 'email=admin%40example.com&password=correct-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(await response.text()).toContain('服务暂时不可用');
+  });
+
+  it('treats /auth/me failures as unavailable after a successful login', async () => {
+    installFetch({ meStatus: 500, meBody: { error: 'boom' } });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: 'email=admin%40example.com&password=correct-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(await response.text()).toContain('服务暂时不可用');
+  });
+
+  it('treats network errors talking to the LA API as unavailable', async () => {
+    installFetch({ loginThrows: true });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: 'email=admin%40example.com&password=correct-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('服务暂时不可用');
   });
 
   it('sends unauthenticated gray visitors to the deploy console instead of rendering a cross-origin login form', async () => {
