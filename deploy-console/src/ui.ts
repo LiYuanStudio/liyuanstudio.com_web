@@ -27,6 +27,7 @@ function document(title: string, body: string, meta = ''): string {
 export type LoginAlertOptions = {
   requestId?: string;
   consoleOrigin?: string;
+  formToken?: string;
 };
 
 function loginAlert(error: string, options?: LoginAlertOptions): string {
@@ -49,6 +50,7 @@ export function loginPage(error?: string, options?: LoginAlertOptions): string {
         <p class="muted">使用 LA 管理员账号登录。普通账号无法访问灰度版本。</p>
         ${error ? loginAlert(error, options) : ''}
         <form action="/auth/login" method="post" class="form">
+          <input name="formToken" type="hidden" value="${escapeHtml(options?.formToken ?? '')}" />
           <label>邮箱<input name="email" type="email" autocomplete="username" required /></label>
           <label>密码<input name="password" type="password" autocomplete="current-password" minlength="8" required /></label>
           <button type="submit">管理员登录</button>

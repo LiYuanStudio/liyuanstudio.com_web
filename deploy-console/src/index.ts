@@ -1,6 +1,13 @@
 import { Hono, type Context } from 'hono';
 import { dispatchPromotion, getLatestGrayDeployment } from './github.js';
-import { createSession, readSession, removeSession, writeSession } from './session.js';
+import {
+  createLoginFormToken,
+  createSession,
+  readSession,
+  removeSession,
+  verifyLoginFormToken,
+  writeSession,
+} from './session.js';
 import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
 import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles } from './ui.js';
 
@@ -44,7 +51,11 @@ function sameOrigin(c: AppContext): boolean {
   return c.req.header('Sec-Fetch-Site') === 'same-origin';
 }
 
-function loginErrorPage(
+function isClearlyCrossSite(c: AppContext): boolean {
+  return c.req.header('Sec-Fetch-Site') === 'cross-site';
+}
+
+async function loginErrorPage(
   c: AppContext,
   message: string,
   status: 400 | 401 | 403 | 502,
@@ -53,6 +64,7 @@ function loginErrorPage(
   return c.html(
     loginPage(message, {
       requestId: getRequestId(c),
+      formToken: await createLoginFormToken(c.env.SESSION_SECRET),
       consoleOrigin: options?.includeConsoleLink
         ? normalizedOrigin(c.env.CONSOLE_ORIGIN)
         : undefined,
@@ -304,15 +316,26 @@ app.get('/app.js', (c) => c.body(applicationScript, 200, { 'Content-Type': 'text
 
 app.get('/', async (c) => {
   const session = await readSession(c);
-  return c.html(session ? dashboardPage(session.user, session.csrf) : loginPage());
+  return c.html(
+    session
+      ? dashboardPage(session.user, session.csrf)
+      : loginPage(undefined, {
+          formToken: await createLoginFormToken(c.env.SESSION_SECRET),
+        }),
+  );
 });
 
 app.post('/auth/login', async (c) => {
-  if (!sameOrigin(c)) {
+  const body = await c.req.parseBody();
+  const formToken = body.formToken;
+  if (
+    typeof formToken !== 'string' ||
+    !(await verifyLoginFormToken(formToken, c.env.SESSION_SECRET)) ||
+    isClearlyCrossSite(c)
+  ) {
     return loginErrorPage(c, INVALID_ORIGIN_MESSAGE, 403, { includeConsoleLink: true });
   }
 
-  const body = await c.req.parseBody();
   const email = body.email;
   const password = body.password;
   if (typeof email !== 'string' || typeof password !== 'string') {
