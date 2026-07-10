@@ -21,7 +21,8 @@ describe('promote-admins script', () => {
     vi.stubEnv('API_KEY', 'secret-key');
     vi.stubEnv('JWT_SECRET', 'test-secret-must-be-at-least-32-characters');
     vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
-    vi.stubEnv('ADMIN_EMAILS', 'admin@example.com');
+    vi.stubEnv('admin_emails', 'admin@example.com');
+    delete process.env.ADMIN_EMAILS;
     mockConnectDB.mockClear();
     mockUserModel.updateMany.mockReset();
     mockUserModel.find.mockReset();
@@ -63,14 +64,15 @@ describe('promote-admins script', () => {
     expect(disconnectSpy).toHaveBeenCalled();
   });
 
-  it('exits early when ADMIN_EMAILS is empty', async () => {
-    vi.stubEnv('ADMIN_EMAILS', '');
+  it('exits early when admin_emails is empty', async () => {
+    vi.stubEnv('admin_emails', '');
+    delete process.env.ADMIN_EMAILS;
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     const { promoteAdmins } = await import('./promote-admins.js');
     await promoteAdmins();
 
-    expect(logSpy).toHaveBeenCalledWith('ADMIN_EMAILS is not set, nothing to do.');
+    expect(logSpy).toHaveBeenCalledWith('admin_emails is not set, nothing to do.');
     expect(mockConnectDB).not.toHaveBeenCalled();
     expect(disconnectSpy).not.toHaveBeenCalled();
   });

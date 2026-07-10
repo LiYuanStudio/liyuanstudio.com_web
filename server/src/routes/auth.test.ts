@@ -352,8 +352,9 @@ describe('auth routes', () => {
       expect(res.status).toBe(400);
     });
 
-    it('assigns admin role to emails in ADMIN_EMAILS', async () => {
-      vi.stubEnv('ADMIN_EMAILS', 'hello@liyuanstudio.com');
+    it('assigns admin role to emails in admin_emails', async () => {
+      vi.stubEnv('admin_emails', 'hello@liyuanstudio.com');
+      delete process.env.ADMIN_EMAILS;
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('123456') });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
@@ -646,8 +647,9 @@ describe('auth routes', () => {
     expect(await res.json()).toEqual(expect.objectContaining({ error: '邮箱或密码错误' }));
   });
 
-  it('POST /api/auth/login promotes ADMIN_EMAILS users to admin', async () => {
-    vi.stubEnv('ADMIN_EMAILS', 'hello@liyuanstudio.com');
+  it('POST /api/auth/login promotes admin_emails users to admin', async () => {
+    vi.stubEnv('admin_emails', 'hello@liyuanstudio.com');
+    delete process.env.ADMIN_EMAILS;
     const app = await makeApp();
     const doc = userDoc();
     mockUserModel.findOne.mockResolvedValue(doc as never);
