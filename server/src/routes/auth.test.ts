@@ -547,6 +547,42 @@ describe('auth routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('resends a login code without resetting failed attempts', async () => {
+    const app = await makeApp();
+    const challenge = challengeDoc({ failedAttempts: 3 });
+    const user = userDoc({ twoFactorEnabled: true });
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockUserModel.findById.mockResolvedValue(user as never);
+
+    const res = await app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32) }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(challenge.failedAttempts).toBe(3);
+    expect(challenge.save).toHaveBeenCalled();
+    expect(mockSendTwoFactorCodeEmail).toHaveBeenCalledOnce();
+  });
+
+  it('does not let a locked login challenge bypass lockout by resending', async () => {
+    const app = await makeApp();
+    const challenge = challengeDoc({ failedAttempts: 5 });
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+
+    const res = await app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32) }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(mockUserModel.findById).not.toHaveBeenCalled();
+    expect(challenge.save).not.toHaveBeenCalled();
+    expect(mockSendTwoFactorCodeEmail).not.toHaveBeenCalled();
+  });
+
   it('POST /api/auth/2fa/login/verify consumes a recovery code only once', async () => {
     const app = await makeApp();
     const challenge = challengeDoc();
@@ -581,6 +617,31 @@ describe('auth routes', () => {
       },
       { new: true },
     );
+    expect(mockTwoFactorChallengeModel.findOneAndDelete.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUserModel.findOneAndUpdate.mock.invocationCallOrder[0]);
+  });
+
+  it('does not consume a recovery code when the login challenge was already consumed', async () => {
+    const app = await makeApp();
+    const recoveryHash = hashToken('ABCDEF123456');
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challengeDoc() as never);
+    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValue(null as never);
+    mockUserModel.findById.mockResolvedValue(userDoc({
+      twoFactorEnabled: true,
+      twoFactorRecoveryCodeHashes: [recoveryHash],
+    }) as never);
+
+    const res = await app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challengeToken: 'a'.repeat(32),
+        recoveryCode: 'ABCD-EF12-3456',
+      }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(mockUserModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('enables 2FA only after password and email-code confirmation', async () => {
@@ -631,6 +692,84 @@ describe('auth routes', () => {
     expect(confirmJson.recoveryCodes).toHaveLength(10);
     expect(confirmJson.recoveryCodes[0]).toMatch(/^[A-F0-9]{4}(?:-[A-F0-9]{4}){2}$/);
     expect(confirmJson.user).not.toHaveProperty('twoFactorRecoveryCodeHashes');
+  });
+
+  it('disables 2FA and invalidates all outstanding challenges after confirmation', async () => {
+    const app = await makeApp();
+    const user = userDoc({
+      twoFactorEnabled: true,
+      twoFactorRecoveryCodeHashes: ['old-recovery-hash'],
+    });
+    const challenge = challengeDoc({ purpose: 'disable' });
+    mockUserModel.findById.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockTwoFactorChallengeModel.create.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValue(challenge as never);
+    const authToken = await signToken({
+      id: 'user-1',
+      email: user.email,
+      role: 'tourist',
+      tokenVersion: 0,
+    });
+
+    const startRes = await app.request('/api/auth/2fa/disable', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'password123' }),
+    });
+    const startJson = await startRes.json();
+    const confirmRes = await app.request('/api/auth/2fa/disable/confirm', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: startJson.challengeToken, code: '123456' }),
+    });
+
+    expect(confirmRes.status).toBe(200);
+    expect(user.twoFactorEnabled).toBe(false);
+    expect(user.twoFactorRecoveryCodeHashes).toEqual([]);
+    expect(user.tokenVersion).toBe(1);
+    expect(mockTwoFactorChallengeModel.deleteMany).toHaveBeenCalledWith({ userId: user._id });
+  });
+
+  it('regenerates recovery codes only after confirmation and invalidates existing sessions', async () => {
+    const app = await makeApp();
+    const user = userDoc({
+      twoFactorEnabled: true,
+      twoFactorRecoveryCodeHashes: ['old-recovery-hash'],
+    });
+    const challenge = challengeDoc({ purpose: 'regenerate' });
+    mockUserModel.findById.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockTwoFactorChallengeModel.create.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValue(challenge as never);
+    const authToken = await signToken({
+      id: 'user-1',
+      email: user.email,
+      role: 'tourist',
+      tokenVersion: 0,
+    });
+
+    const startRes = await app.request('/api/auth/2fa/recovery-codes', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'password123' }),
+    });
+    expect(user.twoFactorRecoveryCodeHashes).toEqual(['old-recovery-hash']);
+    const startJson = await startRes.json();
+    const confirmRes = await app.request('/api/auth/2fa/recovery-codes/confirm', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: startJson.challengeToken, code: '123456' }),
+    });
+    const confirmJson = await confirmRes.json();
+
+    expect(confirmRes.status).toBe(200);
+    expect(confirmJson.recoveryCodes).toHaveLength(10);
+    expect(user.twoFactorRecoveryCodeHashes).toHaveLength(10);
+    expect(user.twoFactorRecoveryCodeHashes).not.toContain('old-recovery-hash');
+    expect(user.tokenVersion).toBe(1);
   });
 
   it('POST /api/auth/login rejects invalid credentials without revealing which field failed', async () => {
@@ -701,6 +840,28 @@ describe('auth routes', () => {
     const json = await res.json();
     await expect(verifyToken(json.token)).resolves.toMatchObject({ tokenVersion: 0 });
   });
+
+  it('POST /api/auth/login fails closed when a legacy user migration cannot be saved', async () => {
+    const app = await makeApp();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const doc = userDoc({
+      tokenVersion: undefined,
+      save: vi.fn().mockRejectedValue(new Error('write failed')),
+    });
+    mockUserModel.findOne.mockResolvedValue(doc as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: doc.email, password: 'password123' }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.login_user_migration_failed'));
+    errorSpy.mockRestore();
+  });
+
   it('POST /api/auth/login returns 429 after repeated failures', async () => {
     const app = await makeApp();
     const emailThrottle = {
@@ -876,7 +1037,7 @@ describe('auth routes', () => {
     });
   });
 
-  it('GET /api/auth/users/:username backfills a legacy displayName match', async () => {
+  it('GET /api/auth/users/:username reads a legacy displayName match without writing it', async () => {
     const app = await makeApp();
     const doc = userDoc({ displayName: 'LA', username: undefined, role: 'admin' });
     mockUserModel.findOne.mockResolvedValue(null);
@@ -887,11 +1048,10 @@ describe('auth routes', () => {
     expect(res.status).toBe(200);
     expect(mockUserModel.findOne).toHaveBeenCalledWith({ username: 'LA' });
     expect(mockUserModel.find).toHaveBeenCalledWith({ displayName: 'LA' });
-    expect(doc.username).toBe('LA');
-    expect(doc.save).toHaveBeenCalled();
+    expect(doc.username).toBeUndefined();
+    expect(doc.save).not.toHaveBeenCalled();
     expect((await res.json()).user).toEqual(expect.objectContaining({
       displayName: 'LA',
-      username: 'LA',
       role: 'admin',
     }));
   });
@@ -923,9 +1083,8 @@ describe('auth routes', () => {
     expect(res.status).toBe(404);
   });
 
-  it('GET /api/auth/users/:username hides a legacy profile when username backfill fails', async () => {
+  it('GET /api/auth/users/:username never invokes a legacy profile save method', async () => {
     const app = await makeApp();
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const doc = userDoc({
       displayName: 'LA',
       username: undefined,
@@ -936,9 +1095,8 @@ describe('auth routes', () => {
 
     const res = await app.request('/api/auth/users/LA');
 
-    expect(res.status).toBe(404);
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.public_profile_username_backfill_failed'));
-    errorSpy.mockRestore();
+    expect(res.status).toBe(200);
+    expect(doc.save).not.toHaveBeenCalled();
   });
 
   it('GET /api/auth/users/:username returns 404 for missing users', async () => {

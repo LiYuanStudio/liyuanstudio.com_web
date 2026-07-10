@@ -653,6 +653,7 @@ app.post('/login', async (c) => {
         email: maskEmail(user.email),
         ...getErrorSummary(error),
       });
+      throw error;
     }
   }
 
@@ -714,19 +715,7 @@ app.post('/2fa/login/verify', async (c) => {
     const matchedHash = recoveryUser?.twoFactorRecoveryCodeHashes?.find(
       (storedHash) => hashesMatch(storedHash, recoveryHash),
     );
-    user = matchedHash ? await UserModel.findOneAndUpdate(
-      {
-        _id: challenge.userId,
-        twoFactorEnabled: true,
-        twoFactorRecoveryCodeHashes: matchedHash,
-      },
-      {
-        $pull: { twoFactorRecoveryCodeHashes: matchedHash },
-        $inc: { tokenVersion: 1 },
-      },
-      { new: true },
-    ) : null;
-    if (!user) {
+    if (!matchedHash) {
       challenge.failedAttempts += 1;
       await challenge.save();
       return jsonError(c, '恢复码无效', 400);
@@ -737,6 +726,21 @@ app.post('/2fa/login/verify', async (c) => {
     });
     if (!consumed) {
       return jsonError(c, '双重验证请求已使用', 409);
+    }
+    user = await UserModel.findOneAndUpdate(
+      {
+        _id: challenge.userId,
+        twoFactorEnabled: true,
+        twoFactorRecoveryCodeHashes: matchedHash,
+      },
+      {
+        $pull: { twoFactorRecoveryCodeHashes: matchedHash },
+        $inc: { tokenVersion: 1 },
+      },
+      { new: true },
+    );
+    if (!user) {
+      return jsonError(c, '恢复码无效', 400);
     }
   } else {
     const consumed = await verifyChallengeCode(challengeToken, 'login', code ?? '');
@@ -769,6 +773,9 @@ app.post('/2fa/login/resend', async (c) => {
   if (!challenge) {
     return jsonError(c, '双重验证请求无效或已过期', 400);
   }
+  if (challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
+    return jsonError(c, '验证码错误次数过多，请重新登录', 429);
+  }
   const user = await UserModel.findById(challenge.userId);
   if (!user || !user.twoFactorEnabled) {
     return jsonError(c, '双重验证请求无效或已过期', 400);
@@ -784,7 +791,6 @@ app.post('/2fa/login/resend', async (c) => {
 
   const code = createRegistrationCode();
   challenge.codeHash = hashToken(code);
-  challenge.failedAttempts = 0;
   challenge.lastSentAt = now;
   challenge.expiresAt = new Date(now.getTime() + TWO_FACTOR_CHALLENGE_TTL_MS);
   await challenge.save();
@@ -965,21 +971,6 @@ app.get('/users/:username', async (c) => {
 
   const legacyUser = displayNameMatches[0] as UserForResponse;
   if (isValidUsername(legacyUser.username)) {
-    return jsonError(c, '用户不存在', 404);
-  }
-
-  legacyUser.username = username;
-  try {
-    if (legacyUser.save) {
-      await legacyUser.save();
-    }
-  } catch (error) {
-    logAuthEvent(c, 'error', 'auth.public_profile_username_backfill_failed', {
-      userId: legacyUser._id.toString(),
-      email: maskEmail(legacyUser.email),
-      duplicateKey: isDuplicateKeyError(error),
-      ...getErrorSummary(error),
-    });
     return jsonError(c, '用户不存在', 404);
   }
 
