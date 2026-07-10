@@ -25,6 +25,8 @@ describe('connectDB', () => {
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
     vi.stubEnv('API_KEY', 'secret');
     vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
+    vi.stubEnv('JWT_SECRET', 'local-dev-jwt-secret-at-least-32-chars');
+    vi.stubEnv('APP_URL', 'http://localhost:5173');
   }
 
   it('returns cached connection on subsequent calls', async () => {
