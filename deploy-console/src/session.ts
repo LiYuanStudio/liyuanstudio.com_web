@@ -7,6 +7,7 @@ type SessionContext = Context<AppEnv>;
 const COOKIE_NAME = '__Host-liyuan_deploy';
 const DOMAIN_COOKIE_NAME = 'liyuan_deploy';
 const SESSION_TTL_SECONDS = 15 * 60;
+const LOGIN_FORM_TTL_SECONDS = 10 * 60;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -37,6 +38,19 @@ async function sessionKey(secret: string): Promise<CryptoKey> {
   }
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(secret));
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+async function signingKey(secret: string): Promise<CryptoKey> {
+  if (secret.length < 32) {
+    throw new Error('SESSION_SECRET must contain at least 32 characters');
+  }
+  return crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify'],
+  );
 }
 
 async function encrypt(session: Session, secret: string): Promise<string> {
@@ -98,6 +112,42 @@ export function createSession(token: string, user: Session['user']): Session {
     csrf: bytesToBase64Url(csrfBytes),
     expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000,
   };
+}
+
+export async function createLoginFormToken(secret: string): Promise<string> {
+  const expiresAt = Date.now() + LOGIN_FORM_TTL_SECONDS * 1000;
+  const nonce = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)));
+  const payload = `login.${expiresAt}.${nonce}`;
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await signingKey(secret),
+    encoder.encode(payload),
+  );
+  return `${payload}.${bytesToBase64Url(new Uint8Array(signature))}`;
+}
+
+export async function verifyLoginFormToken(
+  token: string,
+  secret: string,
+): Promise<boolean> {
+  const parts = token.split('.');
+  if (parts.length !== 4 || parts[0] !== 'login') return false;
+  const [, encodedExpiresAt, nonce, encodedSignature] = parts;
+  if (!encodedExpiresAt || !nonce || !encodedSignature) return false;
+
+  const expiresAt = Number(encodedExpiresAt);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) return false;
+
+  try {
+    return await crypto.subtle.verify(
+      'HMAC',
+      await signingKey(secret),
+      base64UrlToBytes(encodedSignature),
+      encoder.encode(`login.${encodedExpiresAt}.${nonce}`),
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function readSession(

@@ -35,6 +35,25 @@ function cookieFrom(response: Response): string {
   return value.split(';', 1)[0] ?? '';
 }
 
+async function loginFormToken(): Promise<string> {
+  const response = await app.request('https://console.example.com/', undefined, env);
+  const body = await response.text();
+  const match = body.match(/name="formToken" type="hidden" value="([^"]+)"/u);
+  if (!match?.[1]) throw new Error('Missing login form token');
+  return match[1];
+}
+
+async function loginBody(
+  email = 'admin@example.com',
+  password = 'correct-password',
+): Promise<string> {
+  return new URLSearchParams({
+    email,
+    password,
+    formToken: await loginFormToken(),
+  }).toString();
+}
+
 function githubResponses(options?: {
   grayId?: number;
   graySha?: string;
@@ -146,7 +165,7 @@ async function login(): Promise<string> {
         'Content-Type': 'application/x-www-form-urlencoded',
         Origin: env.CONSOLE_ORIGIN,
       },
-      body: 'email=admin%40example.com&password=correct-password',
+      body: await loginBody(),
     },
     env,
   );
@@ -194,7 +213,7 @@ describe('deploy console', () => {
           'Content-Type': 'application/x-www-form-urlencoded',
           Origin: env.CONSOLE_ORIGIN,
         },
-        body: 'email=member%40example.com&password=correct-password',
+        body: await loginBody('member@example.com'),
       },
       env,
     );
@@ -214,7 +233,7 @@ describe('deploy console', () => {
           'Content-Type': 'application/x-www-form-urlencoded',
           Origin: env.CONSOLE_ORIGIN,
         },
-        body: 'email=admin%40example.com&password=wrong-password',
+        body: await loginBody('admin@example.com', 'wrong-password'),
       },
       env,
     );
@@ -234,7 +253,7 @@ describe('deploy console', () => {
           'Content-Type': 'application/x-www-form-urlencoded',
           Origin: env.CONSOLE_ORIGIN,
         },
-        body: 'email=admin%40example.com&password=correct-password',
+        body: await loginBody(),
       },
       env,
     );
@@ -254,7 +273,7 @@ describe('deploy console', () => {
           'Content-Type': 'application/x-www-form-urlencoded',
           Origin: env.CONSOLE_ORIGIN,
         },
-        body: 'email=admin%40example.com&password=correct-password',
+        body: await loginBody(),
       },
       env,
     );
@@ -274,7 +293,7 @@ describe('deploy console', () => {
           'Content-Type': 'application/x-www-form-urlencoded',
           Origin: env.CONSOLE_ORIGIN,
         },
-        body: 'email=admin%40example.com&password=correct-password',
+        body: await loginBody(),
       },
       env,
     );
@@ -283,7 +302,8 @@ describe('deploy console', () => {
     expect(await response.text()).toContain('服务暂时不可用');
   });
 
-  it('rejects wrong Origin with a diagnostic alert and request id', async () => {
+  it('accepts a signed form when Origin is rewritten', async () => {
+    installFetch({ loginStatus: 401 });
     const response = await app.request(
       'https://console.example.com/auth/login',
       {
@@ -293,43 +313,18 @@ describe('deploy console', () => {
           Origin: 'https://gray.example.com',
           'X-Request-Id': 'origin-req-1',
         },
-        body: 'email=admin%40example.com&password=correct-password',
+        body: await loginBody('admin@example.com', 'wrong-password'),
       },
       env,
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
     expect(response.headers.get('X-Request-Id')).toBe('origin-req-1');
-    expect(response.headers.get('set-cookie')).toBeNull();
-    const body = await response.text();
-    expect(body).toContain('当前页面的访问来源无效，请从规范的部署控制台重新登录。');
-    expect(body).toContain('调试 ID：origin-req-1');
-    expect(body).toContain('href="https://console.example.com"');
-    expect(body).toContain('前往规范控制台');
+    expect(await response.text()).toContain('邮箱或密码错误');
   });
 
-  it('rejects opaque Origin null even when Sec-Fetch-Site claims same-origin', async () => {
-    const response = await app.request(
-      'https://console.example.com/auth/login',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Origin: 'null',
-          'Sec-Fetch-Site': 'same-origin',
-          'X-Request-Id': 'null-origin-1',
-        },
-        body: 'email=admin%40example.com&password=correct-password',
-      },
-      env,
-    );
-
-    expect(response.status).toBe(403);
-    expect(response.headers.get('X-Request-Id')).toBe('null-origin-1');
-    expect(await response.text()).toContain('当前页面的访问来源无效');
-  });
-
-  it('rejects missing Origin without same-origin fetch metadata', async () => {
+  it('accepts a signed form when Origin is omitted', async () => {
+    installFetch({ loginStatus: 401 });
     const response = await app.request(
       'https://console.example.com/auth/login',
       {
@@ -338,37 +333,98 @@ describe('deploy console', () => {
           'Content-Type': 'application/x-www-form-urlencoded',
           'X-Request-Id': 'missing-origin-1',
         },
-        body: 'email=admin%40example.com&password=correct-password',
+        body: await loginBody('admin@example.com', 'wrong-password'),
       },
       env,
     );
 
-    expect(response.status).toBe(403);
-    expect(await response.text()).toContain('当前页面的访问来源无效');
+    expect(response.status).toBe(401);
+    expect(await response.text()).toContain('邮箱或密码错误');
   });
 
-  it('allows missing Origin when Sec-Fetch-Site is same-origin', async () => {
-    installFetch({ loginStatus: 401 });
+  it('rejects a login without a signed form token and returns a fresh form', async () => {
     const response = await app.request(
       'https://console.example.com/auth/login',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Sec-Fetch-Site': 'same-origin',
-          'X-Request-Id': 'same-origin-nav-1',
+          Origin: env.CONSOLE_ORIGIN,
+          'X-Request-Id': 'token-req-1',
         },
-        body: 'email=admin%40example.com&password=wrong-password',
+        body: 'email=admin%40example.com&password=correct-password',
       },
       env,
     );
 
-    expect(response.status).toBe(401);
-    expect(response.headers.get('X-Request-Id')).toBe('same-origin-nav-1');
+    expect(response.status).toBe(403);
+    expect(response.headers.get('set-cookie')).toBeNull();
     const body = await response.text();
-    expect(body).toContain('邮箱或密码错误');
-    expect(body).toContain('调试 ID：same-origin-nav-1');
-    expect(body).not.toContain('前往规范控制台');
+    expect(body).toContain('当前页面的访问来源无效，请从规范的部署控制台重新登录。');
+    expect(body).toContain('调试 ID：token-req-1');
+    expect(body).toMatch(/name="formToken" type="hidden" value="login\.[^"]+"/u);
+  });
+
+  it('rejects a tampered signed form token', async () => {
+    const token = await loginFormToken();
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: new URLSearchParams({
+          email: 'admin@example.com',
+          password: 'correct-password',
+          formToken: `${token.slice(0, -1)}x`,
+        }).toString(),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it('rejects an explicitly cross-site submission even with a signed form', async () => {
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://evil.example',
+          'Sec-Fetch-Site': 'cross-site',
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it('rejects an expired signed form token', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T05:00:00Z'));
+    const body = await loginBody();
+    vi.advanceTimersByTime(11 * 60 * 1000);
+
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body,
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
   });
 
   it('sends unauthenticated gray visitors to the deploy console instead of rendering a cross-origin login form', async () => {

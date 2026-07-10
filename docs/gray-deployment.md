@@ -18,7 +18,7 @@ Vercel Preview 和 Production 的数据库、邮件、CORS 等环境变量应当
 Repository secrets：
 
 - `VERCEL_TOKEN`
-- `CLOUDFLARE_API_TOKEN` — must allow **Cloudflare Pages** deploy (for `promote.yml`), **Workers Scripts Edit**, and **Zone → Workers Routes Edit** (for `deploy-console` custom domains via `.github/workflows/deploy-console.yml`)
+- `CLOUDFLARE_API_TOKEN` — must allow **Cloudflare Pages** deploy (for `promote.yml`) and **Workers Scripts Edit** (for `deploy-console`)
 - `CLOUDFLARE_ACCOUNT_ID`
 
 Repository variables（已有默认值，但建议显式配置）：
@@ -55,7 +55,7 @@ Repository variables（已有默认值，但建议显式配置）：
 - `PREVIEW_ORIGIN`：灰度网关域名，例如 `https://gray.liyuanstudio.com`
 - `COOKIE_DOMAIN`：两个域名的共同父域，例如 `.liyuanstudio.com`
 
-为同一个 Worker 绑定控制台和灰度两个 custom domain。然后配置 secrets，并部署 Worker：
+首次配置时，在 Cloudflare Dashboard 为同一个 Worker 绑定控制台和灰度两个 custom domain。域名绑定属于一次性基础设施配置，不写入 `wrangler.jsonc`，日常脚本发布不会重复修改 Zone routes。然后配置 secrets，并部署 Worker：
 
 ```bash
 npx wrangler secret put SESSION_SECRET --config deploy-console/wrangler.jsonc
@@ -64,7 +64,7 @@ npx wrangler secret put VERCEL_PROTECTION_BYPASS --config deploy-console/wrangle
 npm run deploy --workspace=deploy-console
 ```
 
-合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。若该工作流报 Authentication error / code 10000，检查 token 是否同时具备 **Workers Scripts → Edit** 与 **Zone → Workers Routes → Edit**（自定义域名路由）。脚本上传成功但 `/zones/.../workers/routes` 失败时，通常只缺 Routes 权限；域名若已绑定，新代码可能已生效，但仍应补权限以免下次部署失败。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
+合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。该日常发布只更新 Worker 脚本和变量，需要 **Workers Scripts → Edit**；不要把 custom domains 重新加入 `wrangler.jsonc`，否则 Wrangler 会在每次发布时调用 Zone routes API。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
 
 `SESSION_SECRET` 至少 32 个随机字符。`GITHUB_TOKEN` 使用 fine-grained token，仅授权当前仓库，并只开放读取 deployments/contents 和触发 Actions 所需的最小权限。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
 
@@ -75,7 +75,7 @@ npm run deploy --workspace=deploy-console
 - 生产 LA API（`LA_API_BASE_URL`）应公开可达；控制台登录不使用 `VERCEL_PROTECTION_BYPASS`。该 bypass 只用于灰度 Preview 网关代理。官网能登录但控制台不能，通常是账号不是 `admin`（检查 Vercel Production 的 `admin_emails`），而不是 Production Deployment Protection。
 - 登录失败会区分提示：邮箱/密码错误、需要 LA 管理员账号、或上游服务不可用；不再混成同一条文案。
 - 必须打开规范控制台地址登录（例如 `https://deploy.liyuanstudio.com`）。灰度域名 `gray.liyuanstudio.com` 不承载登录表单；未登录访问只会引导回控制台。
-- 登录 POST 要求 `Origin` 为 `CONSOLE_ORIGIN`；若浏览器省略 `Origin`，仅在 `Sec-Fetch-Site: same-origin` 时放行。错误来源会返回调试 ID。
+- 登录页面签发 10 分钟有效的 HMAC 表单令牌，登录 POST 必须携带有效令牌；因此隐私浏览器省略或改写 `Origin` 时不会误伤合法登录。浏览器明确标记为 `Sec-Fetch-Site: cross-site` 的请求仍会被拒绝，校验失败会返回调试 ID 和可重新提交的新表单。
 - 灰度网关每次只解析 GitHub 中最新的 `gray` deployment。旧 URL 或旧 deployment ID 不能选择。
 - 网关删除浏览器 Cookie 和 Authorization 后再访问 Vercel，并在服务端附加 protection bypass；该 secret 不会返回浏览器。
 - 点击全量发布时，控制台实时调用 `/auth/me` 复核角色，并检查 CSRF、deployment ID、SHA、成功状态和重复发布状态。

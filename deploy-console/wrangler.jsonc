@@ -1,5 +1,4 @@
 {
-  // Redeploy trigger: ensure Worker picks up gray login/CSP fixes from main.
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "liyuanstudio-deploy-console",
   "main": "src/index.ts",
@@ -15,15 +14,5 @@
     "CONSOLE_ORIGIN": "https://deploy.liyuanstudio.com",
     "PREVIEW_ORIGIN": "https://gray.liyuanstudio.com",
     "COOKIE_DOMAIN": ".liyuanstudio.com"
-  },
-  "routes": [
-    {
-      "pattern": "deploy.liyuanstudio.com",
-      "custom_domain": true
-    },
-    {
-      "pattern": "gray.liyuanstudio.com",
-      "custom_domain": true
-    }
-  ]
+  }
 }
