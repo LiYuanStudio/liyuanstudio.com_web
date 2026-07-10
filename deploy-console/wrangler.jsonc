@@ -1,4 +1,5 @@
 {
+  // Redeploy trigger: ensure Worker picks up gray login/CSP fixes from main.
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "liyuanstudio-deploy-console",
   "main": "src/index.ts",
