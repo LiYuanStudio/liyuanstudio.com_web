@@ -127,6 +127,7 @@ describe('ProfilePage', () => {
       createObjectURL: vi.fn().mockReturnValue('blob:mock-image-url'),
       revokeObjectURL: vi.fn(),
     });
+    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
   });
 
   afterEach(() => {
@@ -267,6 +268,25 @@ describe('ProfilePage', () => {
     await waitFor(() => {
       expect(screen.getByText('Just a plain paragraph.')).toBeInTheDocument();
     });
+  });
+
+  it('canonicalizes an article URL to the returned author username', async () => {
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Article body'));
+    renderPage('/old-name/1/?source=legacy#article');
+
+    await screen.findByRole('heading', { name: 'Markdown post' });
+    expect(window.location.pathname).toBe('/LA/1/');
+    expect(window.location.search).toBe('?source=legacy');
+    expect(window.location.hash).toBe('#article');
+  });
+
+  it('does not render account settings for an invalid article route', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', mockFetch());
+    renderPage('/LA/not-a-number/');
+
+    await screen.findByText('页面不存在。');
+    expect(screen.queryByRole('heading', { name: '账号设置' })).not.toBeInTheDocument();
   });
   it('renders a bare username public profile without login', async () => {
     vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
@@ -521,6 +541,45 @@ describe('ProfilePage', () => {
     expect(screen.getByText('游客账号不能发布博客，请联系管理员升级为成员。')).toBeInTheDocument();
   });
 
+  it('blocks the editor when the account has no valid username', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', mockFetch({ ...MEMBER_USER, username: undefined }));
+    renderPage('/me/posts/new/');
+
+    await screen.findByRole('heading', { name: '个人主页尚未初始化' });
+    expect(screen.queryByRole('heading', { name: '写文章' })).not.toBeInTheDocument();
+  });
+
+  it('confirms article deletion and reports a delete failure', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: RequestInit) => {
+      const href = url.toString();
+      if (href.includes('/auth/me')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog/me')) {
+        return { ok: true, status: 200, json: async () => [MARKDOWN_POST] } as Response;
+      }
+      if (href.endsWith('/blog/post-1') && options?.method === 'DELETE') {
+        return {
+          ok: false,
+          status: 500,
+          headers: new Headers(),
+          json: async () => ({ error: '服务器拒绝删除' }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Markdown post' });
+    await user.click(screen.getByRole('button', { name: '删除' }));
+
+    expect(confirm).toHaveBeenCalledWith('确定要删除「Markdown post」吗？此操作不可撤销。');
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('删除失败：服务器拒绝删除'));
+  });
+
   it('shows blog authoring links for member accounts', async () => {
     localStorage.setItem('liyuan_auth_token', 'member-token');
     vi.stubGlobal('fetch', mockFetch({ ...CURRENT_USER, role: 'member' }));
@@ -632,6 +691,24 @@ describe('ProfilePage', () => {
       expect(screen.queryByRole('dialog', { name: '截取头像' })).not.toBeInTheDocument();
     });
     expect(fetch).not.toHaveBeenCalledWith('/api/auth/me/avatar', expect.anything());
+  });
+
+  it('focuses the crop dialog and closes it with Escape', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    vi.stubGlobal('fetch', mockFetch());
+    renderPage('/profile/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'LA' });
+
+    const input = screen.getByTestId('avatar-input');
+    input.focus();
+    uploadFile(input, new File(['dummy'], 'avatar.png', { type: 'image/png' }));
+    const dialog = await screen.findByRole('dialog', { name: '截取头像' });
+    await waitFor(() => expect(dialog).toContainElement(document.activeElement as HTMLElement));
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '截取头像' })).not.toBeInTheDocument());
+    await waitFor(() => expect(input).toHaveFocus());
   });
 
 });

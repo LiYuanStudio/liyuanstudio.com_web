@@ -3,7 +3,7 @@ function requireEnv(key: string): string {
   if (!value || typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`Missing required environment variable: ${key}`);
   }
-  return value;
+  return value.trim();
 }
 
 export const env = {

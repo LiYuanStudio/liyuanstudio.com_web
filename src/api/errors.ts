@@ -1,5 +1,6 @@
 const GENERIC_ERROR_MESSAGE = '请求失败，请稍后重试';
 const NETWORK_ERROR_MESSAGE = '网络连接异常，请检查网络后重试';
+export const AUTH_UNAUTHORIZED_EVENT = 'liyuan:auth-unauthorized';
 
 type ErrorResponse = {
   error?: unknown;
@@ -34,6 +35,9 @@ export async function parseApiErrorResponse(res: Response): Promise<ApiError> {
     ? body.requestId
     : getHeaderRequestId(res);
 
+  if (res.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+  }
   return new ApiError(appendRequestId(error, requestId), res.status, requestId);
 }
 

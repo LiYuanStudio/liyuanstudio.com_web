@@ -29,6 +29,7 @@ import type {
   TwoFactorChallengeResponse,
   User,
 } from '../types.js';
+import { AUTH_UNAUTHORIZED_EVENT } from '../api/errors.js';
 
 type AuthState =
   | { status: 'loading' }
@@ -90,6 +91,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadUser();
   }, [loadUser]);
+
+  useEffect(() => {
+    const clearExpiredSession = () => {
+      setStoredToken(null);
+      setState({ status: 'unauthenticated' });
+    };
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, clearExpiredSession);
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, clearExpiredSession);
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await apiLogin(email, password);

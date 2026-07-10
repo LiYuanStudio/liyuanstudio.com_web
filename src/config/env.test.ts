@@ -12,10 +12,10 @@ describe('frontend env', () => {
     expect(env.API_BASE_URL).toBe('https://api.example.com');
   });
 
-  it('accepts whitespace-only values without trimming the returned value', async () => {
+  it('trims surrounding whitespace from configured values', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '  /api  ');
     const { env } = await import('./env.js');
-    expect(env.API_BASE_URL).toBe('  /api  ');
+    expect(env.API_BASE_URL).toBe('/api');
   });
 
   it('throws when the variable is missing', async () => {

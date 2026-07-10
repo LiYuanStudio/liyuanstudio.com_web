@@ -1,6 +1,7 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { readFileSync } from 'node:fs';
 
 const API_HEALTH_URL = 'http://localhost:3000/api/health';
 
@@ -90,7 +91,22 @@ function blogRewrite(): Plugin {
     },
   };
 }
-export default defineConfig({
+function assertProductionApiAllowed(apiBaseUrl: string): void {
+  const apiOrigin = new URL(apiBaseUrl.trim()).origin;
+  const headers = readFileSync(resolve(__dirname, 'public/_headers'), 'utf8');
+  const policy = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1];
+  const connectSrc = policy?.match(/connect-src\s+([^;]+)/)?.[1]?.split(/\s+/) ?? [];
+  if (!connectSrc.includes(apiOrigin)) {
+    throw new Error(`Production API origin ${apiOrigin} is missing from CSP connect-src`);
+  }
+}
+
+export default defineConfig(({ mode }) => {
+  if (mode === 'production') {
+    const productionEnv = loadEnv(mode, __dirname, '');
+    assertProductionApiAllowed(productionEnv.VITE_API_BASE_URL ?? '');
+  }
+  return {
   plugins: [react(), backendHealthCheck(), profileRewrite(), blogRewrite()],
   base: '/',
   build: {
@@ -116,4 +132,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });

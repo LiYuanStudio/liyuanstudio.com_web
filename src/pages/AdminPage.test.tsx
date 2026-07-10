@@ -84,6 +84,10 @@ describe('AdminPage', () => {
       expect(screen.getByText('官网视觉全新升级')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: '发布动态' })).toBeInTheDocument();
+    const newsTab = screen.getByRole('tab', { name: '最新动态' });
+    expect(newsTab).toHaveAttribute('aria-controls', 'admin-panel-news');
+    expect(newsTab).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'admin-tab-news');
   });
 
   it('publishes a news item from the editor', async () => {

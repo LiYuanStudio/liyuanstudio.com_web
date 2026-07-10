@@ -80,6 +80,7 @@ type Route =
   | { kind: 'my-posts' }
   | { kind: 'new-post' }
   | { kind: 'edit-post'; id: string }
+  | { kind: 'not-found' }
   | { kind: 'public-profile'; username: string }
   | { kind: 'post-detail'; username: string; blogNumber: number };
 
@@ -97,7 +98,7 @@ function parseRoute(): Route {
     if (Number.isSafeInteger(blogNumber) && blogNumber > 0 && String(blogNumber) === parts[1]) {
       return { kind: 'post-detail', username: parts[0], blogNumber };
     }
-    return { kind: 'settings' };
+    return { kind: 'not-found' };
   }
   return { kind: 'public-profile', username: parts[0] };
 }
@@ -178,6 +179,21 @@ function MemberRequiredPrompt({ user, onLogout }: { user?: User; onLogout?: () =
   );
 }
 
+function UsernameRequiredPrompt({ user, onLogout }: { user: User; onLogout: () => void | Promise<void> }) {
+  return (
+    <div className="profile-page">
+      <Nav user={user} onLogout={onLogout} />
+      <main className="profile-main">
+        <section className="profile-card profile-card-narrow">
+          <h1>个人主页尚未初始化</h1>
+          <p className="profile-muted">请先完成账号资料初始化，再管理文章。</p>
+          <a className="profile-button" href="/profile/">返回账号设置</a>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 function MyPostsPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -199,9 +215,15 @@ function MyPostsPage() {
 
   const handleDelete = async (post: BlogPost) => {
     if (!post._id) return;
-    await deleteBlogPost(post._id);
-    setMessage('文章已删除。');
-    await loadPosts();
+    if (!window.confirm(`确定要删除「${post.title}」吗？此操作不可撤销。`)) return;
+    setMessage(null);
+    try {
+      await deleteBlogPost(post._id);
+      setMessage('文章已删除。');
+      await loadPosts();
+    } catch (err) {
+      setMessage(err instanceof Error ? `删除失败：${err.message}` : '删除失败，请稍后重试。');
+    }
   };
 
   return (
@@ -211,7 +233,7 @@ function MyPostsPage() {
           <h1>我的文章</h1>
           <a className="profile-button" href="/me/posts/new/">新建文章</a>
         </div>
-        {message && <p className="profile-success" role="status">{message}</p>}
+        {message && <p className={message.startsWith('删除失败') ? 'profile-error' : 'profile-success'} role={message.startsWith('删除失败') ? 'alert' : 'status'}>{message}</p>}
         {status === 'loading' && <p className="profile-empty">加载中...</p>}
         {status === 'error' && <p className="profile-error" role="alert">文章加载失败。</p>}
         {status === 'ready' && posts.length === 0 && <p className="profile-empty">还没有文章。</p>}
@@ -496,6 +518,14 @@ function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber
     fetchBlogPost(blogNumber)
       .then((item) => {
         if (cancelled) return;
+        const canonicalPath = getPublicPostPath(item.authorUsername, item.blogNumber);
+        if (username !== item.authorUsername || window.location.pathname !== canonicalPath) {
+          window.history.replaceState(
+            {},
+            '',
+            `${canonicalPath}${window.location.search}${window.location.hash}`,
+          );
+        }
         setPost(item);
         setStatus('ready');
       })
@@ -533,6 +563,8 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   updateProfile: (profile: ProfileUpdateInput) => Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropDialogRef = useRef<HTMLDivElement>(null);
+  const cropTriggerRef = useRef<HTMLElement | null>(null);
   const [form, setForm] = useState<ProfileUpdateInput>({
     displayName: user.displayName,
     bio: user.bio ?? '',
@@ -557,6 +589,35 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
     };
   }, [cropImage]);
 
+  useEffect(() => {
+    if (!isCropperOpen) return;
+    const dialog = cropDialogRef.current;
+    const focusable = () => [...(dialog?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? [])];
+    focusable()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isUploading) {
+        event.preventDefault();
+        handleCropCancel();
+        cropTriggerRef.current?.focus();
+      }
+      if (event.key === 'Tab') {
+        const items = focusable();
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isCropperOpen, isUploading]);
+
   const handleChange = (field: keyof ProfileUpdateInput, value: string) => {
     setMessage(null);
     setError(null);
@@ -575,6 +636,7 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
       return;
     }
     const url = URL.createObjectURL(file);
+    cropTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setCropImage(url);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
@@ -589,6 +651,7 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
     setIsCropperOpen(false);
     setCropImage(null);
     setCroppedAreaPixels(null);
+    window.setTimeout(() => cropTriggerRef.current?.focus(), 0);
   };
 
   const handleCropConfirm = async () => {
@@ -674,7 +737,7 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
       </main>
 
       {isCropperOpen && cropImage && (
-        <div className="profile-cropper-modal" role="dialog" aria-modal="true" aria-label="截取头像">
+        <div ref={cropDialogRef} className="profile-cropper-modal" role="dialog" aria-modal="true" aria-label="截取头像">
           <div className="profile-cropper-content">
             <div className="profile-cropper-area"><Cropper image={cropImage} crop={crop} zoom={zoom} aspect={1} cropShape="round" showGrid={false} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={handleCropComplete} /></div>
             <div className="profile-cropper-controls">
@@ -706,6 +769,9 @@ export function ProfilePage() {
   if (needsMember && !canWriteBlog(user)) {
     return <MemberRequiredPrompt user={user} onLogout={user ? logout : undefined} />;
   }
+  if (needsMember && user && !isValidPublicUsername(user.username)) {
+    return <UsernameRequiredPrompt user={user} onLogout={logout} />;
+  }
 
   return (
     <div className="profile-page">
@@ -716,6 +782,7 @@ export function ProfilePage() {
       {route.kind === 'edit-post' && <BlogEditorPage id={route.id} />}
       {route.kind === 'public-profile' && <PublicProfilePage username={route.username} currentUser={user} />}
       {route.kind === 'post-detail' && <BlogDetailPage username={route.username} blogNumber={route.blogNumber} />}
+      {route.kind === 'not-found' && <main className="profile-main"><section className="profile-card"><p className="profile-error">页面不存在。</p></section></main>}
     </div>
   );
 }

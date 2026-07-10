@@ -19,7 +19,7 @@ function TestConsumer() {
         <span data-testid="bio">{state.user.bio}</span>
         <img data-testid="avatar" src={state.user.avatar} alt="avatar" />
         <button onClick={() => updateAvatar('https://example.com/new.png')}>Update avatar</button>
-        <button onClick={() => updateProfile({ displayName: 'New Name', bio: 'New bio' })}>Update profile</button>
+        <button onClick={() => void updateProfile({ displayName: 'New Name', bio: 'New bio' }).catch(() => undefined)}>Update profile</button>
         <button onClick={logout}>Logout</button>
       </div>
     );
@@ -168,6 +168,32 @@ describe('AuthProvider', () => {
       expect(screen.getByTestId('display-name')).toHaveTextContent('New Name');
       expect(screen.getByTestId('bio')).toHaveTextContent('New bio');
     });
+  });
+
+  it('clears an active session when an authenticated request returns 401', async () => {
+    localStorage.setItem('liyuan_auth_token', 'expired-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/auth/me/profile')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: new Headers(),
+          json: async () => ({ error: '登录已过期' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: { id: '1', email: 'hello@example.com', displayName: 'Old Name' } }),
+      } as Response;
+    }));
+
+    render(<AuthProvider><TestConsumer /></AuthProvider>);
+    await screen.findByTestId('email');
+    await userEvent.click(screen.getByRole('button', { name: 'Update profile' }));
+
+    await waitFor(() => expect(screen.getByTestId('unauthenticated')).toBeInTheDocument());
+    expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
   });
 
   it('logs out and clears the token', async () => {

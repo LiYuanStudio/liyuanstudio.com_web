@@ -518,18 +518,24 @@ export function AdminPage() {
       <main className="admin-main">
         <div className="admin-tabs" role="tablist" aria-label="后台分区">
           <button
+            id="admin-tab-news"
             type="button"
             role="tab"
             aria-selected={tab === 'news'}
+            aria-controls="admin-panel-news"
+            tabIndex={tab === 'news' ? 0 : -1}
             className={tab === 'news' ? 'admin-tab admin-tab-active' : 'admin-tab'}
             onClick={() => setTab('news')}
           >
             最新动态
           </button>
           <button
+            id="admin-tab-users"
             type="button"
             role="tab"
             aria-selected={tab === 'users'}
+            aria-controls="admin-panel-users"
+            tabIndex={tab === 'users' ? 0 : -1}
             className={tab === 'users' ? 'admin-tab admin-tab-active' : 'admin-tab'}
             onClick={() => setTab('users')}
           >
@@ -537,7 +543,15 @@ export function AdminPage() {
           </button>
         </div>
 
-        {tab === 'news' ? <NewsPanel /> : <UsersPanel />}
+        {tab === 'news' ? (
+          <section id="admin-panel-news" role="tabpanel" aria-labelledby="admin-tab-news">
+            <NewsPanel />
+          </section>
+        ) : (
+          <section id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users">
+            <UsersPanel />
+          </section>
+        )}
       </main>
     </div>
   );
