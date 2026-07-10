@@ -1,4 +1,10 @@
 import type { AdminUser } from './types.js';
+import {
+  deploymentKey,
+  deriveDeploymentView,
+  pollErrorMessage,
+  shouldApplyPoll,
+} from './ui-state.js';
 
 function escapeHtml(value: string): string {
   return value
@@ -55,6 +61,41 @@ export function loginPage(error?: string, options?: LoginAlertOptions): string {
           <label>密码<input name="password" type="password" autocomplete="current-password" minlength="8" required /></label>
           <button type="submit">管理员登录</button>
         </form>
+      </section>
+    </main>`,
+  );
+}
+
+export function twoFactorPage(
+  emailHint: string,
+  formToken: string,
+  error?: string,
+  requestId?: string,
+): string {
+  return document(
+    'LA 双重验证',
+    `<main class="shell shell--narrow">
+      <section class="card">
+        <p class="eyebrow">LIYUAN STUDIO · INTERNAL</p>
+        <h1>双重验证</h1>
+        <p class="muted">验证码已发送至 ${escapeHtml(emailHint)}。也可以使用一个未使用的恢复码。</p>
+        ${error ? loginAlert(error, { requestId }) : ''}
+        <form action="/auth/2fa/verify" method="post" class="form">
+          <input name="formToken" type="hidden" value="${escapeHtml(formToken)}" />
+          <label>邮箱验证码<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" /></label>
+          <label>恢复码<input name="recoveryCode" autocomplete="one-time-code" /></label>
+          <button type="submit">验证并登录</button>
+        </form>
+        <div class="inline-actions">
+          <form action="/auth/2fa/resend" method="post">
+            <input name="formToken" type="hidden" value="${escapeHtml(formToken)}" />
+            <button class="button--quiet" type="submit">重新发送验证码</button>
+          </form>
+          <form action="/auth/2fa/cancel" method="post">
+            <input name="formToken" type="hidden" value="${escapeHtml(formToken)}" />
+            <button class="button--quiet" type="submit">取消</button>
+          </form>
+        </div>
       </section>
     </main>`,
   );
@@ -139,6 +180,7 @@ h2 { margin-bottom: 0; font-size: 1.35rem; overflow-wrap: anywhere; }
 .diagnostic { color: #f2bcbc; font-size: .78rem; overflow-wrap: anywhere; }
 .alert-action { justify-self: start; border-color: #a65c5c; color: #fff; }
 .form { display: grid; gap: 18px; margin-top: 28px; }
+.inline-actions { display: flex; gap: 10px; margin-top: 16px; }
 label { display: grid; gap: 8px; color: #ccc; font-size: .9rem; }
 input { width: 100%; padding: 13px 14px; border: 1px solid #494949; border-radius: 12px; background: #161616; color: #fff; font: inherit; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #f5f5f5; color: #111; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
@@ -147,6 +189,9 @@ button:disabled, .is-disabled { opacity: .35; cursor: not-allowed; pointer-event
 .button--quiet { min-height: 38px; background: #292929; color: #ddd; }
 .badge { padding: 7px 10px; border-radius: 999px; background: #d7ffd9; color: #17331a; font-size: .75rem; font-weight: 800; white-space: nowrap; }
 .badge--muted { background: #363636; color: #ddd; }
+.badge--success { background: #d7ffd9; color: #17331a; }
+.badge--warning { background: #fff0b8; color: #403200; }
+.badge--danger { background: #ffd5d5; color: #4b2020; }
 .details { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 28px 0; }
 .details div { padding: 14px; border-radius: 14px; background: #141414; }
 dt { margin-bottom: 8px; }
@@ -156,6 +201,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 `;
 
 export const applicationScript = `
+${deploymentKey.toString()}
+${deriveDeploymentView.toString()}
+${shouldApplyPoll.toString()}
+${pollErrorMessage.toString()}
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
 const version = document.querySelector('#version');
 const status = document.querySelector('#status');
@@ -165,11 +214,31 @@ const message = document.querySelector('#message');
 const previewLink = document.querySelector('#preview-link');
 const promoteButton = document.querySelector('#promote-button');
 let current = null;
+let submitting = false;
+let submittedDeployment = null;
+let loadSequence = 0;
+
+function setBadge(kind) {
+  status.className = 'badge badge--' + kind;
+}
+
+async function responseError(response, fallback) {
+  let body = null;
+  try {
+    if ((response.headers.get('content-type') || '').includes('application/json')) body = await response.json();
+  } catch {}
+  const requestId = body && typeof body.requestId === 'string'
+    ? body.requestId
+    : response.headers.get('x-request-id');
+  const text = body && typeof body.error === 'string' ? body.error : fallback;
+  return requestId ? text + '（调试 ID：' + requestId + '）' : text;
+}
 
 function setUnavailable(text) {
   current = null;
   version.textContent = '暂无可验收版本';
   status.textContent = '不可用';
+  setBadge('muted');
   deploymentId.textContent = '—';
   createdAt.textContent = '—';
   message.textContent = text;
@@ -180,23 +249,29 @@ function setUnavailable(text) {
 }
 
 async function loadDeployment() {
+  const sequence = ++loadSequence;
   try {
     const response = await fetch('/api/deployment', { headers: { Accept: 'application/json' } });
     if (response.status === 401) return location.reload();
-    if (!response.ok) throw new Error('读取部署状态失败');
+    if (!response.ok) throw new Error(await responseError(response, '读取部署状态失败'));
     const data = await response.json();
+    if (!shouldApplyPoll(sequence, loadSequence)) return;
     if (!data.deployment) return setUnavailable('main 分支尚未产生灰度部署。');
     current = data.deployment;
+    if (
+      submittedDeployment &&
+      (submittedDeployment !== String(current.id) + ':' + current.sha ||
+        current.promoted ||
+        (current.promotionState && current.promotionState !== 'pending' && current.promotionState !== 'in_progress'))
+    ) submittedDeployment = null;
     version.textContent = current.sha;
-    const promoting = current.promotionState === 'pending' || current.promotionState === 'in_progress';
-    status.textContent = current.promoted ? '已全量发布' : (promoting ? '全量发布中' : current.state);
+    const view = deriveDeploymentView(current, submitting, submittedDeployment);
+    status.textContent = view.statusText;
+    setBadge(view.badge);
     deploymentId.textContent = String(current.id);
     createdAt.textContent = new Date(current.createdAt).toLocaleString('zh-CN');
-    message.textContent = current.state === 'success'
-      ? (current.promoted ? '该版本已经完成全量发布。' : (promoting ? '生产工作流正在运行，请勿重复提交。' : '请检查灰度版本，确认无误后再全量发布。'))
-      : '最新灰度构建尚未成功，不能验收或发布。';
-    const ready = current.state === 'success' && Boolean(current.previewUrl);
-    if (ready) {
+    message.textContent = view.message;
+    if (view.ready) {
       previewLink.href = current.previewUrl;
       previewLink.classList.remove('is-disabled');
       previewLink.setAttribute('aria-disabled', 'false');
@@ -205,14 +280,17 @@ async function loadDeployment() {
       previewLink.classList.add('is-disabled');
       previewLink.setAttribute('aria-disabled', 'true');
     }
-    promoteButton.disabled = !ready || current.promoted || promoting;
+    promoteButton.disabled = view.promoteDisabled;
   } catch (error) {
-    setUnavailable(error instanceof Error ? error.message : '读取部署状态失败');
+    if (!shouldApplyPoll(sequence, loadSequence)) return;
+    message.textContent = pollErrorMessage(Boolean(current), error instanceof Error ? error.message : '读取部署状态失败');
+    if (!current) setUnavailable(message.textContent);
   }
 }
 
 promoteButton.addEventListener('click', async () => {
   if (!current || !confirm('确认把当前灰度版本全量发布到生产环境？')) return;
+  submitting = true;
   promoteButton.disabled = true;
   message.textContent = '正在提交全量发布…';
   try {
@@ -221,12 +299,24 @@ promoteButton.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
       body: JSON.stringify({ deploymentId: current.id, sha: current.sha }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || '提交失败');
-    message.textContent = '全量发布工作流已启动，请稍后刷新查看结果。';
+    if (response.status === 401) return location.reload();
+    if (!response.ok) {
+      const error = new Error(await responseError(response, '提交失败'));
+      error.status = response.status;
+      throw error;
+    }
+    submittedDeployment = deploymentKey(current);
+    message.textContent = '全量发布工作流已启动，正在刷新状态…';
+    await loadDeployment();
   } catch (error) {
+    submitting = false;
     message.textContent = error instanceof Error ? error.message : '提交失败';
-    promoteButton.disabled = false;
+    if (error && error.status === 409) await loadDeployment();
+  } finally {
+    submitting = false;
+    if (current) {
+      promoteButton.disabled = deriveDeploymentView(current, submitting, submittedDeployment).promoteDisabled;
+    }
   }
 });
 

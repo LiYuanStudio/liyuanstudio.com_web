@@ -70,7 +70,7 @@ npm run deploy --workspace=deploy-console
 
 ## 权限和请求流程
 
-- 控制台把邮箱和密码直接转发给生产 LA `/auth/login`，随后调用 `/auth/me`。
+- 控制台把邮箱和密码直接转发给生产 LA `/auth/login`。启用双重验证的账号会进入完整的邮箱验证码或恢复码流程，并可重新发送验证码或取消；待验证 token 只保存在短期加密 `HttpOnly` Cookie 中。验证成功后仍会调用 `/auth/me` 确认管理员角色。
 - 只有 API 返回 `role=admin` 才会建立 15 分钟的加密、`HttpOnly`、`Secure`、`SameSite=Strict` 会话。
 - 生产 LA API（`LA_API_BASE_URL`）应公开可达；控制台登录不使用 `VERCEL_PROTECTION_BYPASS`。该 bypass 只用于灰度 Preview 网关代理。官网能登录但控制台不能，通常是账号不是 `admin`（检查 Vercel Production 的 `admin_emails`），而不是 Production Deployment Protection。
 - 登录失败会区分提示：邮箱/密码错误、需要 LA 管理员账号、或上游服务不可用；不再混成同一条文案。
@@ -79,6 +79,7 @@ npm run deploy --workspace=deploy-console
 - 灰度网关每次只解析 GitHub 中最新的 `gray` deployment。旧 URL 或旧 deployment ID 不能选择。
 - 网关删除浏览器 Cookie 和 Authorization 后再访问 Vercel，并在服务端附加 protection bypass；该 secret 不会返回浏览器。
 - 点击全量发布时，控制台实时调用 `/auth/me` 复核角色，并检查 CSRF、deployment ID、SHA、成功状态和重复发布状态。
+- 打开灰度网关和读取部署状态也会实时复核 `/auth/me`；账号、角色或 token 失效时会清除控制台会话。状态轮询发生临时错误时保留最后一次成功状态，并显示响应调试 ID。
 - GitHub production deployment 记录审批 LA 账号和发布结果。控制台和生产工作流都只判断该灰度候选最新一次匹配 LA 审批记录（payload 中数字或字符串形式的 ID 都可识别），不会让较旧的成功记录掩盖较新的失败重试。实际 Vercel 或 Cloudflare 发布失败会尽力写入失败状态；GitHub status API 写入本身失败不会被误报成实际部署失败。
 
 ## 日常操作

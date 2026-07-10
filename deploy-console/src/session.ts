@@ -1,18 +1,25 @@
 import type { Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import type { AppEnv, Bindings, Session } from './types.js';
+import type { AppEnv, Bindings, PendingChallenge, Session } from './types.js';
 
 type SessionContext = Context<AppEnv>;
 
 const COOKIE_NAME = '__Host-liyuan_deploy';
 const DOMAIN_COOKIE_NAME = 'liyuan_deploy';
+const CHALLENGE_COOKIE_NAME = '__Host-liyuan_deploy_challenge';
+const DOMAIN_CHALLENGE_COOKIE_NAME = 'liyuan_deploy_challenge';
 const SESSION_TTL_SECONDS = 15 * 60;
+const CHALLENGE_TTL_SECONDS = 10 * 60;
 const LOGIN_FORM_TTL_SECONDS = 10 * 60;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 function cookieName(env: Bindings): string {
   return env.COOKIE_DOMAIN?.trim() ? DOMAIN_COOKIE_NAME : COOKIE_NAME;
+}
+
+function challengeCookieName(env: Bindings): string {
+  return env.COOKIE_DOMAIN?.trim() ? DOMAIN_CHALLENGE_COOKIE_NAME : CHALLENGE_COOKIE_NAME;
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -53,28 +60,39 @@ async function signingKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-async function encrypt(session: Session, secret: string): Promise<string> {
+async function encrypt(value: object, secret: string): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     await sessionKey(secret),
-    encoder.encode(JSON.stringify(session)),
+    encoder.encode(JSON.stringify(value)),
   );
   return `${bytesToBase64Url(iv)}.${bytesToBase64Url(new Uint8Array(ciphertext))}`;
 }
 
-async function decrypt(value: string, secret: string): Promise<Session | null> {
+async function decryptObject(value: string, secret: string): Promise<Record<string, unknown> | null> {
   const [encodedIv, encodedCiphertext] = value.split('.');
   if (!encodedIv || !encodedCiphertext) return null;
-
   try {
     const plaintext = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: base64UrlToBytes(encodedIv) },
       await sessionKey(secret),
       base64UrlToBytes(encodedCiphertext),
     );
-    const candidate = JSON.parse(decoder.decode(plaintext)) as Partial<Session>;
+    const candidate: unknown = JSON.parse(decoder.decode(plaintext));
+    return candidate !== null && typeof candidate === 'object'
+      ? candidate as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function decrypt(value: string, secret: string): Promise<Session | null> {
+  try {
+    const candidate = await decryptObject(value, secret) as Partial<Session> | null;
     if (
+      !candidate ||
       typeof candidate.token !== 'string' ||
       typeof candidate.csrf !== 'string' ||
       typeof candidate.expiresAt !== 'number' ||
@@ -170,4 +188,40 @@ export async function writeSession(
 
 export function removeSession(c: SessionContext): void {
   deleteCookie(c, cookieName(c.env), cookieOptions(c));
+}
+
+export async function writePendingChallenge(
+  c: SessionContext,
+  challengeToken: string,
+  emailHint: string,
+): Promise<void> {
+  const challenge: PendingChallenge = {
+    challengeToken,
+    emailHint,
+    expiresAt: Date.now() + CHALLENGE_TTL_SECONDS * 1000,
+  };
+  setCookie(
+    c,
+    challengeCookieName(c.env),
+    await encrypt(challenge, c.env.SESSION_SECRET),
+    { ...cookieOptions(c), maxAge: CHALLENGE_TTL_SECONDS },
+  );
+}
+
+export async function readPendingChallenge(c: SessionContext): Promise<PendingChallenge | null> {
+  const value = getCookie(c, challengeCookieName(c.env));
+  if (!value) return null;
+  const candidate = await decryptObject(value, c.env.SESSION_SECRET);
+  if (
+    !candidate ||
+    typeof candidate.challengeToken !== 'string' ||
+    typeof candidate.emailHint !== 'string' ||
+    typeof candidate.expiresAt !== 'number' ||
+    candidate.expiresAt <= Date.now()
+  ) return null;
+  return candidate as PendingChallenge;
+}
+
+export function removePendingChallenge(c: SessionContext): void {
+  deleteCookie(c, challengeCookieName(c.env), cookieOptions(c));
 }

@@ -34,6 +34,12 @@ export type Session = {
   expiresAt: number;
 };
 
+export type PendingChallenge = {
+  challengeToken: string;
+  emailHint: string;
+  expiresAt: number;
+};
+
 export type GrayDeployment = {
   id: number;
   sha: string;

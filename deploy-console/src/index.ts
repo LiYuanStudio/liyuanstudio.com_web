@@ -3,13 +3,16 @@ import { dispatchPromotion, getLatestGrayDeployment } from './github.js';
 import {
   createLoginFormToken,
   createSession,
+  readPendingChallenge,
   readSession,
+  removePendingChallenge,
   removeSession,
   verifyLoginFormToken,
+  writePendingChallenge,
   writeSession,
 } from './session.js';
 import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
-import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles } from './ui.js';
+import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles, twoFactorPage } from './ui.js';
 
 type AppContext = Context<AppEnv>;
 
@@ -74,11 +77,45 @@ async function loginErrorPage(
 }
 
 type AuthSuccess = { ok: true; token: string; user: AdminUser };
+type AuthChallenge = { ok: false; reason: 'two_factor'; challengeToken: string; emailHint: string };
 type AuthFailure = {
   ok: false;
   reason: 'invalid_credentials' | 'not_admin' | 'unavailable';
 };
-type AuthResult = AuthSuccess | AuthFailure;
+type AuthResult = AuthSuccess | AuthChallenge | AuthFailure;
+
+async function authenticateToken(env: Bindings, token: string): Promise<AuthSuccess | AuthFailure> {
+  const apiBase = env.LA_API_BASE_URL.replace(/\/+$/u, '');
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (!response.ok) return { ok: false, reason: 'unavailable' };
+  const body = await readJson(response) as {
+    user?: { id?: unknown; email?: unknown; displayName?: unknown; role?: unknown };
+  } | null;
+  if (
+    !body?.user ||
+    typeof body.user.id !== 'string' ||
+    typeof body.user.email !== 'string' ||
+    typeof body.user.displayName !== 'string'
+  ) return { ok: false, reason: 'unavailable' };
+  if (body.user.role !== 'admin') return { ok: false, reason: 'not_admin' };
+  return {
+    ok: true,
+    token,
+    user: {
+      id: body.user.id,
+      email: body.user.email,
+      displayName: body.user.displayName,
+      role: 'admin',
+    },
+  };
+}
 
 async function readJson(response: Response): Promise<unknown | null> {
   const contentType = response.headers.get('content-type') ?? '';
@@ -116,54 +153,29 @@ async function authenticateAdmin(
   }
 
   const loginBody = await readJson(loginResponse);
-  const login = loginBody as { token?: unknown } | null;
+  const login = loginBody as {
+    token?: unknown;
+    twoFactorRequired?: unknown;
+    challengeToken?: unknown;
+    emailHint?: unknown;
+  } | null;
+  if (
+    login?.twoFactorRequired === true &&
+    typeof login.challengeToken === 'string' &&
+    typeof login.emailHint === 'string'
+  ) {
+    return {
+      ok: false,
+      reason: 'two_factor',
+      challengeToken: login.challengeToken,
+      emailHint: login.emailHint,
+    };
+  }
   if (!login || typeof login.token !== 'string' || !login.token) {
     return { ok: false, reason: 'unavailable' };
   }
 
-  let meResponse: Response;
-  try {
-    meResponse = await fetch(`${apiBase}/auth/me`, {
-      headers: { Authorization: `Bearer ${login.token}` },
-    });
-  } catch {
-    return { ok: false, reason: 'unavailable' };
-  }
-  if (!meResponse.ok) {
-    return { ok: false, reason: 'unavailable' };
-  }
-
-  const meBody = await readJson(meResponse);
-  const me = meBody as {
-    user?: {
-      id?: unknown;
-      email?: unknown;
-      displayName?: unknown;
-      role?: unknown;
-    };
-  } | null;
-  if (
-    !me?.user ||
-    typeof me.user.id !== 'string' ||
-    typeof me.user.email !== 'string' ||
-    typeof me.user.displayName !== 'string'
-  ) {
-    return { ok: false, reason: 'unavailable' };
-  }
-  if (me.user.role !== 'admin') {
-    return { ok: false, reason: 'not_admin' };
-  }
-
-  return {
-    ok: true,
-    token: login.token,
-    user: {
-      id: me.user.id,
-      email: me.user.email,
-      displayName: me.user.displayName,
-      role: 'admin',
-    },
-  };
+  return authenticateToken(env, login.token);
 }
 
 function loginFailureMessage(reason: AuthFailure['reason']): { message: string; status: 401 | 502 } {
@@ -176,14 +188,22 @@ function loginFailureMessage(reason: AuthFailure['reason']): { message: string; 
   return { message: '服务暂时不可用，请稍后重试。', status: 502 };
 }
 
-async function revalidateAdmin(env: Bindings, session: Session): Promise<AdminUser | null> {
-  const apiBase = env.LA_API_BASE_URL.replace(/\/+$/u, '');
-  const response = await fetch(`${apiBase}/auth/me`, {
-    headers: { Authorization: `Bearer ${session.token}` },
-  });
-  if (!response.ok) return null;
+type Revalidation = { status: 'valid'; user: AdminUser } | { status: 'invalid' } | { status: 'unavailable' };
 
-  const body = await response.json() as {
+async function revalidateAdmin(env: Bindings, session: Session): Promise<Revalidation> {
+  const apiBase = env.LA_API_BASE_URL.replace(/\/+$/u, '');
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/auth/me`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    });
+  } catch {
+    return { status: 'unavailable' };
+  }
+  if (response.status === 401 || response.status === 403) return { status: 'invalid' };
+  if (!response.ok) return { status: 'unavailable' };
+
+  const body = await readJson(response) as {
     user?: {
       id?: unknown;
       email?: unknown;
@@ -197,14 +217,30 @@ async function revalidateAdmin(env: Bindings, session: Session): Promise<AdminUs
     typeof body.user.email !== 'string' ||
     typeof body.user.displayName !== 'string'
   ) {
-    return null;
+    return { status: 'invalid' };
   }
-  return {
-    id: body.user.id,
-    email: body.user.email,
-    displayName: body.user.displayName,
-    role: 'admin',
-  };
+  return { status: 'valid', user: {
+      id: body.user.id,
+      email: body.user.email,
+      displayName: body.user.displayName,
+      role: 'admin',
+    } };
+}
+
+async function requireRevalidatedSession(
+  c: AppContext,
+): Promise<{ session: Session; admin: AdminUser } | Response> {
+  const session = await readSession(c);
+  if (!session) return c.json({ error: '未登录', requestId: getRequestId(c) }, 401);
+  const validation = await revalidateAdmin(c.env, session);
+  if (validation.status === 'unavailable') {
+    return c.json({ error: 'LA 身份服务暂时不可用', requestId: getRequestId(c) }, 502);
+  }
+  if (validation.status === 'invalid') {
+    removeSession(c);
+    return c.json({ error: 'LA 管理员会话已失效', requestId: getRequestId(c) }, 401);
+  }
+  return { session, admin: validation.user };
 }
 
 function validVercelPreview(deployment: GrayDeployment): URL | null {
@@ -226,6 +262,16 @@ async function proxyPreview(c: AppContext): Promise<Response> {
       401,
       { 'Cache-Control': 'no-store' },
     );
+  }
+  const validation = await revalidateAdmin(c.env, session);
+  if (validation.status === 'invalid') {
+    removeSession(c);
+    return c.html(previewAccessPage(normalizedOrigin(c.env.CONSOLE_ORIGIN)), 401, {
+      'Cache-Control': 'no-store',
+    });
+  }
+  if (validation.status === 'unavailable') {
+    return c.text('LA 身份服务暂时不可用。', 502, { 'Cache-Control': 'no-store' });
   }
 
   const deployment = await getLatestGrayDeployment(c.env);
@@ -316,6 +362,7 @@ app.get('/app.js', (c) => c.body(applicationScript, 200, { 'Content-Type': 'text
 
 app.get('/', async (c) => {
   const session = await readSession(c);
+  if (!session && await readPendingChallenge(c)) return c.redirect('/auth/2fa');
   return c.html(
     session
       ? dashboardPage(session.user, session.csrf)
@@ -344,11 +391,115 @@ app.post('/auth/login', async (c) => {
 
   const authenticated = await authenticateAdmin(c.env, email, password);
   if (!authenticated.ok) {
+    if (authenticated.reason === 'two_factor') {
+      await writePendingChallenge(c, authenticated.challengeToken, authenticated.emailHint);
+      return c.redirect('/auth/2fa');
+    }
     const failure = loginFailureMessage(authenticated.reason);
     return loginErrorPage(c, failure.message, failure.status);
   }
 
   await writeSession(c, createSession(authenticated.token, authenticated.user));
+  removePendingChallenge(c);
+  return c.redirect('/');
+});
+
+async function validChallengeForm(c: AppContext, body: Record<string, string | File>): Promise<boolean> {
+  return typeof body.formToken === 'string' &&
+    await verifyLoginFormToken(body.formToken, c.env.SESSION_SECRET) &&
+    !isClearlyCrossSite(c);
+}
+
+async function renderChallenge(
+  c: AppContext,
+  error?: string,
+  status: 200 | 400 | 401 | 403 | 429 | 502 = 200,
+) {
+  const challenge = await readPendingChallenge(c);
+  if (!challenge) {
+    removePendingChallenge(c);
+    return loginErrorPage(c, '双重验证请求已过期，请重新登录。', 401);
+  }
+  return c.html(twoFactorPage(
+    challenge.emailHint,
+    await createLoginFormToken(c.env.SESSION_SECRET),
+    error,
+    error ? getRequestId(c) : undefined,
+  ), status);
+}
+
+app.get('/auth/2fa', (c) => renderChallenge(c));
+
+app.post('/auth/2fa/verify', async (c) => {
+  const body = await c.req.parseBody();
+  if (!await validChallengeForm(c, body)) return renderChallenge(c, INVALID_ORIGIN_MESSAGE, 403);
+  const challenge = await readPendingChallenge(c);
+  if (!challenge) return renderChallenge(c, '双重验证请求已过期，请重新登录。', 401);
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  const recoveryCode = typeof body.recoveryCode === 'string' ? body.recoveryCode.trim() : '';
+  if ((!code && !recoveryCode) || (code && recoveryCode)) {
+    return renderChallenge(c, '请输入邮箱验证码或恢复码（只能填写一项）。', 400);
+  }
+  const apiBase = c.env.LA_API_BASE_URL.replace(/\/+$/u, '');
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/auth/2fa/login/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challengeToken: challenge.challengeToken,
+        ...(recoveryCode ? { recoveryCode } : { code }),
+      }),
+    });
+  } catch {
+    return renderChallenge(c, '服务暂时不可用，请稍后重试。', 502);
+  }
+  const result = await readJson(response) as { token?: unknown; error?: unknown; requestId?: unknown } | null;
+  if (!response.ok || typeof result?.token !== 'string') {
+    const message = typeof result?.error === 'string' ? result.error : '双重验证失败，请重试。';
+    return renderChallenge(c, message, response.status === 429 ? 429 : response.status >= 500 ? 502 : 400);
+  }
+  const authenticated = await authenticateToken(c.env, result.token);
+  if (!authenticated.ok) {
+    const failure = loginFailureMessage(authenticated.reason);
+    return renderChallenge(c, failure.message, failure.status);
+  }
+  await writeSession(c, createSession(authenticated.token, authenticated.user));
+  removePendingChallenge(c);
+  return c.redirect('/');
+});
+
+app.post('/auth/2fa/resend', async (c) => {
+  const body = await c.req.parseBody();
+  if (!await validChallengeForm(c, body)) return renderChallenge(c, INVALID_ORIGIN_MESSAGE, 403);
+  const challenge = await readPendingChallenge(c);
+  if (!challenge) return renderChallenge(c, '双重验证请求已过期，请重新登录。', 401);
+  const apiBase = c.env.LA_API_BASE_URL.replace(/\/+$/u, '');
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/auth/2fa/login/resend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: challenge.challengeToken }),
+    });
+  } catch {
+    return renderChallenge(c, '服务暂时不可用，请稍后重试。', 502);
+  }
+  const result = await readJson(response) as { message?: unknown; error?: unknown } | null;
+  if (!response.ok) {
+    return renderChallenge(
+      c,
+      typeof result?.error === 'string' ? result.error : '重新发送失败，请稍后重试。',
+      response.status === 429 ? 429 : response.status >= 500 ? 502 : 400,
+    );
+  }
+  return renderChallenge(c, typeof result?.message === 'string' ? result.message : '验证码已重新发送。');
+});
+
+app.post('/auth/2fa/cancel', async (c) => {
+  const body = await c.req.parseBody();
+  if (!await validChallengeForm(c, body)) return renderChallenge(c, INVALID_ORIGIN_MESSAGE, 403);
+  removePendingChallenge(c);
   return c.redirect('/');
 });
 
@@ -359,12 +510,13 @@ app.post('/auth/logout', async (c) => {
     return c.text('Forbidden', 403);
   }
   removeSession(c);
+  removePendingChallenge(c);
   return c.redirect('/');
 });
 
 app.get('/api/deployment', async (c) => {
-  const session = await readSession(c);
-  if (!session) return c.json({ error: '未登录' }, 401);
+  const authenticated = await requireRevalidatedSession(c);
+  if (authenticated instanceof Response) return authenticated;
 
   const deployment = await getLatestGrayDeployment(c.env);
   return c.json({
@@ -399,11 +551,15 @@ app.post('/api/promote', async (c) => {
     return c.json({ error: '部署参数无效' }, 400);
   }
 
-  const admin = await revalidateAdmin(c.env, session);
-  if (!admin) {
-    removeSession(c);
-    return c.json({ error: 'LA 管理员权限已失效' }, 403);
+  const validation = await revalidateAdmin(c.env, session);
+  if (validation.status === 'unavailable') {
+    return c.json({ error: 'LA 身份服务暂时不可用', requestId: getRequestId(c) }, 502);
   }
+  if (validation.status === 'invalid') {
+    removeSession(c);
+    return c.json({ error: 'LA 管理员权限已失效', requestId: getRequestId(c) }, 401);
+  }
+  const admin = validation.user;
 
   const latest = await getLatestGrayDeployment(c.env);
   if (

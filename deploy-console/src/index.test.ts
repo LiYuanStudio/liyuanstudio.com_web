@@ -140,6 +140,9 @@ function installFetch(options?: {
   meContentType?: string;
   loginThrows?: boolean;
   meThrows?: boolean;
+  twoFactor?: boolean;
+  verifyStatus?: number;
+  resendStatus?: number;
   github?: ReturnType<typeof githubResponses>;
   upstream?: (url: URL, init?: RequestInit) => Promise<Response>;
 }) {
@@ -165,7 +168,23 @@ function installFetch(options?: {
           headers: { 'Content-Type': options.loginContentType ?? 'application/json' },
         });
       }
-      return json({ token: 'la-token', user: { ...admin, role: options?.role ?? 'admin' } });
+      return options?.twoFactor
+        ? json({
+            twoFactorRequired: true,
+            challengeToken: 'challenge-token-with-sufficient-length',
+            emailHint: 'a***@example.com',
+          })
+        : json({ token: 'la-token', user: { ...admin, role: options?.role ?? 'admin' } });
+    }
+    if (url.href === 'https://api.example.com/api/auth/2fa/login/verify') {
+      return options?.verifyStatus
+        ? json({ error: '验证码无效或已过期', requestId: 'la-verify-1' }, options.verifyStatus)
+        : json({ token: 'verified-la-token', user: admin });
+    }
+    if (url.href === 'https://api.example.com/api/auth/2fa/login/resend') {
+      return options?.resendStatus
+        ? json({ error: '验证码发送过于频繁，请稍后再试' }, options.resendStatus)
+        : json({ message: '验证码已重新发送。' });
     }
     if (url.href === 'https://api.example.com/api/auth/me') {
       if (options?.meThrows) throw new TypeError('network down');
@@ -214,12 +233,181 @@ async function login(): Promise<string> {
   return cookieFrom(response);
 }
 
+async function beginTwoFactor(): Promise<{ cookie: string; formToken: string }> {
+  const response = await app.request(
+    'https://console.example.com/auth/login',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+      body: await loginBody(),
+    },
+    env,
+  );
+  const cookie = cookieFrom(response);
+  const page = await app.request(
+    'https://console.example.com/auth/2fa',
+    { headers: { Cookie: cookie } },
+    env,
+  );
+  const formToken = (await page.text()).match(
+    /name="formToken" type="hidden" value="([^"]+)"/u,
+  )?.[1] ?? '';
+  return { cookie, formToken };
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('deploy console', () => {
+  it('completes the encrypted-cookie email 2FA challenge and rechecks admin', async () => {
+    const { requests } = installFetch({ twoFactor: true });
+    const loginResponse = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+        body: await loginBody(),
+      },
+      env,
+    );
+    expect(loginResponse.status).toBe(302);
+    expect(loginResponse.headers.get('location')).toBe('/auth/2fa');
+    const challengeCookie = cookieFrom(loginResponse);
+    expect(challengeCookie).not.toContain('challenge-token');
+
+    const page = await app.request(
+      'https://console.example.com/auth/2fa',
+      { headers: { Cookie: challengeCookie } },
+      env,
+    );
+    const html = await page.text();
+    expect(html).toContain('a***@example.com');
+    const formToken = html.match(/name="formToken" type="hidden" value="([^"]+)"/u)?.[1] ?? '';
+    const response = await app.request(
+      'https://console.example.com/auth/2fa/verify',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: challengeCookie,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: new URLSearchParams({ formToken, code: '123456' }).toString(),
+      },
+      env,
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('/');
+    expect(requests.find(({ url }) => url.pathname.endsWith('/2fa/login/verify'))?.init?.body)
+      .toBe(JSON.stringify({
+        challengeToken: 'challenge-token-with-sufficient-length',
+        code: '123456',
+      }));
+    expect(requests.filter(({ url }) => url.pathname.endsWith('/auth/me'))).toHaveLength(1);
+  });
+
+  it('supports recovery codes, resend errors, and challenge cancellation', async () => {
+    const { requests } = installFetch({ twoFactor: true, resendStatus: 429 });
+    const started = await app.request('https://console.example.com/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+      body: await loginBody(),
+    }, env);
+    const cookie = cookieFrom(started);
+    const page = await app.request('https://console.example.com/auth/2fa', { headers: { Cookie: cookie } }, env);
+    const token = (await page.text()).match(/name="formToken" type="hidden" value="([^"]+)"/u)?.[1] ?? '';
+    const resend = await app.request('https://console.example.com/auth/2fa/resend', {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+      body: new URLSearchParams({ formToken: token }).toString(),
+    }, env);
+    expect(resend.status).toBe(429);
+    expect(await resend.text()).toContain('验证码发送过于频繁');
+
+    const recovery = await app.request('https://console.example.com/auth/2fa/verify', {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+      body: new URLSearchParams({ formToken: token, recoveryCode: 'RECOVERY-CODE' }).toString(),
+    }, env);
+    expect(recovery.status).toBe(302);
+    expect(requests.find(({ url }) => url.pathname.endsWith('/2fa/login/verify'))?.init?.body)
+      .toContain('"recoveryCode":"RECOVERY-CODE"');
+
+    const cancel = await app.request('https://console.example.com/auth/2fa/cancel', {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+      body: new URLSearchParams({ formToken: token }).toString(),
+    }, env);
+    expect(cancel.status).toBe(302);
+    expect(cancel.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  it('keeps the challenge after a wrong code and rejects an expired pending challenge', async () => {
+    installFetch({ twoFactor: true, verifyStatus: 400 });
+    const { cookie, formToken } = await beginTwoFactor();
+    const wrong = await app.request('https://console.example.com/auth/2fa/verify', {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+      body: new URLSearchParams({ formToken, code: '000000' }).toString(),
+    }, env);
+    expect(wrong.status).toBe(400);
+    expect(await wrong.text()).toContain('验证码无效或已过期');
+
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+    const expired = await app.request(
+      'https://console.example.com/auth/2fa',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(expired.status).toBe(401);
+    expect(expired.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  it('rejects a non-admin after successful 2FA verification', async () => {
+    installFetch({ twoFactor: true, role: 'member' });
+    const { cookie, formToken } = await beginTwoFactor();
+    const response = await app.request('https://console.example.com/auth/2fa/verify', {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+      body: new URLSearchParams({ formToken, code: '123456' }).toString(),
+    }, env);
+    expect(response.status).toBe(401);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(await response.text()).toContain('需要 LA 管理员账号');
+  });
+
+  it.each(['/auth/2fa/verify', '/auth/2fa/resend', '/auth/2fa/cancel'])(
+    'rejects invalid tokens and cross-site submissions to %s',
+    async (path) => {
+      const { requests } = installFetch({ twoFactor: true });
+      const { cookie, formToken } = await beginTwoFactor();
+      const requestCount = requests.length;
+      const invalid = await app.request(`https://console.example.com${path}`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', Origin: env.CONSOLE_ORIGIN },
+        body: new URLSearchParams({ formToken: `${formToken}tampered`, code: '123456' }).toString(),
+      }, env);
+      expect(invalid.status).toBe(403);
+      expect(requests).toHaveLength(requestCount);
+
+      const crossSite = await app.request(`https://console.example.com${path}`, {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://evil.example',
+          'Sec-Fetch-Site': 'cross-site',
+        },
+        body: new URLSearchParams({ formToken, code: '123456' }).toString(),
+      }, env);
+      expect(crossSite.status).toBe(403);
+      expect(requests).toHaveLength(requestCount);
+    },
+  );
+
   it('authenticates an LA admin and returns only the latest gray deployment', async () => {
     installFetch();
     const cookie = await login();
@@ -564,6 +752,105 @@ describe('deploy console', () => {
       env,
     );
     expect(response.status).toBe(401);
+  });
+
+  it('revalidates deployment reads and preview access, clearing revoked sessions', async () => {
+    installFetch();
+    const cookie = await login();
+    installFetch({ meStatus: 401 });
+
+    const deployment = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(deployment.status).toBe(401);
+    expect(deployment.headers.get('set-cookie')).toContain('Max-Age=0');
+
+    const preview = await app.request(
+      'https://gray.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(preview.status).toBe(401);
+    expect(preview.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  it('preserves the session when LA revalidation is transiently unavailable', async () => {
+    installFetch();
+    const cookie = await login();
+    installFetch({ meThrows: true });
+
+    const deployment = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(deployment.status).toBe(502);
+    expect(deployment.headers.get('set-cookie')).toBeNull();
+    await expect(deployment.json()).resolves.toMatchObject({
+      error: 'LA 身份服务暂时不可用',
+      requestId: expect.any(String),
+    });
+
+    const preview = await app.request(
+      'https://gray.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(preview.status).toBe(502);
+    expect(preview.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('does not clear the session when promotion revalidation is transiently unavailable', async () => {
+    installFetch();
+    const cookie = await login();
+    const dashboard = await app.request(
+      'https://console.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+    installFetch({ meThrows: true });
+    const response = await app.request('https://console.example.com/api/promote', {
+      method: 'POST',
+      headers: {
+        Cookie: cookie,
+        'Content-Type': 'application/json',
+        Origin: env.CONSOLE_ORIGIN,
+        'X-CSRF-Token': csrf,
+      },
+      body: JSON.stringify({ deploymentId: 42, sha: 'abc123' }),
+    }, env);
+    expect(response.status).toBe(502);
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('removes both the session and pending challenge cookies on logout', async () => {
+    installFetch();
+    const sessionCookie = await login();
+    const dashboard = await app.request(
+      'https://console.example.com/',
+      { headers: { Cookie: sessionCookie } },
+      env,
+    );
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+
+    installFetch({ twoFactor: true });
+    const pending = await beginTwoFactor();
+    const response = await app.request('https://console.example.com/auth/logout', {
+      method: 'POST',
+      headers: {
+        Cookie: `${sessionCookie}; ${pending.cookie}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: env.CONSOLE_ORIGIN,
+      },
+      body: new URLSearchParams({ csrf }).toString(),
+    }, env);
+    expect(response.status).toBe(302);
+    const deleted = response.headers.get('set-cookie') ?? '';
+    expect(deleted).toContain('liyuan_deploy=');
+    expect(deleted).toContain('liyuan_deploy_challenge=');
   });
 
   it('revalidates the admin and dispatches promotion for the exact latest deployment', async () => {
