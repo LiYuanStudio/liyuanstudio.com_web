@@ -170,7 +170,7 @@ describe('AuthProvider', () => {
     });
   });
 
-  it('logs out and clears the token', async () => {
+  it('logs out and clears the obsolete local token', async () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
       if (url.toString().includes('/auth/logout')) {
@@ -209,9 +209,8 @@ describe('AuthProvider', () => {
       expect.stringMatching(/\/auth\/logout$/),
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer token',
-        }),
+        credentials: 'include',
+        headers: {},
       }),
     );
   });
@@ -257,6 +256,11 @@ describe('AuthProvider', () => {
   it('does not authenticate until the email two-factor challenge succeeds', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'Unauthorized' }),
+      } as Response)
+      .mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => ({
@@ -269,7 +273,6 @@ describe('AuthProvider', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          token: 'verified-token',
           user: {
             id: '1',
             email: 'hello@example.com',
@@ -292,7 +295,7 @@ describe('AuthProvider', () => {
 
     await waitFor(() => {
       expect(screen.getByText('hello@example.com')).toBeInTheDocument();
-      expect(localStorage.getItem('liyuan_auth_token')).toBe('verified-token');
+      expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
     });
   });
 });

@@ -31,7 +31,7 @@ describe('news api', () => {
     expect(data).toHaveLength(1);
   });
 
-  it('createNews sends auth token and body', async () => {
+  it('createNews sends browser credentials and body', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -58,7 +58,8 @@ describe('news api', () => {
       '/api/news',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: 'Hello',
           description: 'World',

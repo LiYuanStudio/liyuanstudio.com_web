@@ -26,14 +26,14 @@ describe('auth api helpers', () => {
       json: async () => ({ message: '验证码已发送，请查收邮箱。' }),
     } as Response));
 
-    const { sendRegistrationCode, getStoredToken } = await importAuthApi();
+    const { sendRegistrationCode } = await importAuthApi();
     const result = await sendRegistrationCode('hello@example.com', 'password123', 'Hello');
 
     expect(result.message).toBe('验证码已发送，请查收邮箱。');
-    expect(getStoredToken()).toBeNull();
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register/send-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         email: 'hello@example.com',
         password: 'password123',
@@ -42,13 +42,12 @@ describe('auth api helpers', () => {
     });
   });
 
-  it('verifyRegistrationCode sends a POST request and returns token', async () => {
+  it('verifyRegistrationCode sends a POST request and returns the signed-in user', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       status: 201,
       statusText: 'Created',
       json: async () => ({
-        token: 'xyz789',
         user: {
           id: '2',
           email: 'hello@example.com',
@@ -59,15 +58,14 @@ describe('auth api helpers', () => {
       }),
     } as Response));
 
-    const { verifyRegistrationCode, getStoredToken } = await importAuthApi();
+    const { verifyRegistrationCode } = await importAuthApi();
     const result = await verifyRegistrationCode('hello@example.com', '123456');
 
     expect(result.user.emailVerified).toBe(true);
-    expect(result.token).toBe('xyz789');
-    expect(getStoredToken()).toBeNull();
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email: 'hello@example.com', code: '123456' }),
     });
   });
@@ -78,7 +76,6 @@ describe('auth api helpers', () => {
       status: 200,
       statusText: 'OK',
       json: async () => ({
-        token: 'xyz789',
         user: {
           id: '2',
           email: 'login@example.com',
@@ -89,14 +86,14 @@ describe('auth api helpers', () => {
       }),
     } as Response));
 
-    const { login, getStoredToken } = await importAuthApi();
+    const { login } = await importAuthApi();
     const response = await login('login@example.com', 'password123');
 
-    expect(response).toEqual(expect.objectContaining({ token: 'xyz789' }));
-    expect(getStoredToken()).toBeNull();
+    expect(response).toEqual(expect.objectContaining({ user: expect.objectContaining({ email: 'login@example.com' }) }));
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email: 'login@example.com', password: 'password123' }),
     });
   });
@@ -107,7 +104,6 @@ describe('auth api helpers', () => {
       status: 200,
       statusText: 'OK',
       json: async () => ({
-        token: 'verified-token',
         user: { id: '2', displayName: 'Login', role: 'tourist' },
       }),
     } as Response));
@@ -115,15 +111,16 @@ describe('auth api helpers', () => {
     const { verifyLoginTwoFactor } = await importAuthApi();
     const response = await verifyLoginTwoFactor('challenge-token', { code: '123456' });
 
-    expect(response.token).toBe('verified-token');
+    expect(response.user.id).toBe('2');
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/2fa/login/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ challengeToken: 'challenge-token', code: '123456' }),
     });
   });
 
-  it('starts and confirms an authenticated two-factor settings action', async () => {
+  it('starts and confirms a cookie-authenticated two-factor settings action', async () => {
     localStorage.setItem('liyuan_auth_token', 'my-token');
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -135,7 +132,6 @@ describe('auth api helpers', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          token: 'new-token',
           user: { id: '2', displayName: 'Login', role: 'tourist', twoFactorEnabled: true },
           recoveryCodes: ['AAAA-BBBB-CCCC'],
         }),
@@ -148,7 +144,8 @@ describe('auth api helpers', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://api.example.com/auth/2fa/enable', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer my-token' },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ password: 'password123' }),
     });
     expect(response).toEqual(expect.objectContaining({
@@ -156,7 +153,7 @@ describe('auth api helpers', () => {
     }));
   });
 
-  it('fetchMe sends Authorization header when token is stored', async () => {
+  it('fetchMe includes browser credentials without a readable token', async () => {
     localStorage.setItem('liyuan_auth_token', 'my-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -178,14 +175,12 @@ describe('auth api helpers', () => {
 
     expect(user.email).toBe('me@example.com');
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/me', {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer my-token',
-      },
+      headers: {},
+      credentials: 'include',
     });
   });
 
-  it('logout sends a POST request with the stored token', async () => {
+  it('logout sends a POST request with browser credentials', async () => {
     localStorage.setItem('liyuan_auth_token', 'my-token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -198,10 +193,8 @@ describe('auth api helpers', () => {
     await expect(logout()).resolves.toEqual({ message: '已退出登录' });
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/logout', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer my-token',
-      },
+      headers: {},
+      credentials: 'include',
     });
   });
 
@@ -221,6 +214,7 @@ describe('auth api helpers', () => {
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email: 'hello@example.com' }),
     });
   });
@@ -240,6 +234,7 @@ describe('auth api helpers', () => {
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ token: 'abc 123', password: 'newpassword123' }),
     });
   });
@@ -275,8 +270,8 @@ describe('auth api helpers', () => {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer my-token',
       },
+      credentials: 'include',
       body: JSON.stringify({
         displayName: 'New Name',
         bio: 'Hello there.',
@@ -310,8 +305,8 @@ describe('auth api helpers', () => {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer my-token',
       },
+      credentials: 'include',
       body: JSON.stringify({ avatar: 'new.png' }),
     });
   });

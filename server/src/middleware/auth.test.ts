@@ -100,6 +100,22 @@ describe('auth middleware', () => {
     });
   });
 
+  it('allows requests with a valid HttpOnly session cookie', async () => {
+    const app = new Hono();
+    app.use('/me', requireAuth);
+    app.get('/me', (c) => c.json({ userId: c.get('userId') }));
+
+    const res = await app.request('/me', {
+      headers: {
+        Cookie: `liyuan_session=${token}`,
+        Authorization: 'Bearer not.a.token',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ userId: 'user-123' });
+  });
+
   it('rejects requests without authorization header', async () => {
     const app = new Hono();
     app.use('/me', requireAuth);

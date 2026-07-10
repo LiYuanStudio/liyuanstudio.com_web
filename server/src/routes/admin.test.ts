@@ -19,7 +19,6 @@ async function makeApp() {
   vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
   vi.stubEnv('APP_URL', 'https://liyuanstudio.com');
   vi.stubEnv('admin_emails', 'la@liyuanstudio.com');
-  delete process.env.ADMIN_EMAILS;
   const { createApp } = await import('../app.js');
   return createApp('/api');
 }

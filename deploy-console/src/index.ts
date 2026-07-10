@@ -13,6 +13,8 @@ import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles 
 
 type AppContext = Context<AppEnv>;
 
+const SITE_SESSION_COOKIE = '__Host-liyuan_session';
+
 const app = new Hono<AppEnv>();
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/;
@@ -53,6 +55,21 @@ function sameOrigin(c: AppContext): boolean {
 
 function isClearlyCrossSite(c: AppContext): boolean {
   return c.req.header('Sec-Fetch-Site') === 'cross-site';
+}
+
+function allowedSessionCookie(cookieHeader: string | null | undefined): string | undefined {
+  if (!cookieHeader) return undefined;
+  return cookieHeader
+    .split(';')
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(`${SITE_SESSION_COOKIE}=`));
+}
+
+function allowedSessionSetCookie(setCookie: string | null): string | undefined {
+  if (!setCookie) return undefined;
+  return setCookie.trim().startsWith(`${SITE_SESSION_COOKIE}=`)
+    ? setCookie
+    : undefined;
 }
 
 async function loginErrorPage(
@@ -101,7 +118,10 @@ async function authenticateAdmin(
   try {
     loginResponse = await fetch(`${apiBase}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Deploy-Console-Key': env.LA_DEPLOY_CONSOLE_API_KEY,
+      },
       body: JSON.stringify({ email, password }),
     });
   } catch {
@@ -269,11 +289,13 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   const incoming = new URL(c.req.url);
   const upstream = new URL(`${incoming.pathname}${incoming.search}`, upstreamOrigin);
   const headers = new Headers(c.req.raw.headers);
+  const sessionCookie = allowedSessionCookie(headers.get('cookie'));
   for (const header of [
     'cf-connecting-ip',
     'cf-ipcountry',
     'cf-ray',
     'cookie',
+    'authorization',
     'host',
     'x-forwarded-for',
     'x-forwarded-host',
@@ -282,6 +304,7 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   ]) {
     headers.delete(header);
   }
+  if (sessionCookie) headers.set('cookie', sessionCookie);
   headers.set('x-vercel-protection-bypass', c.env.VERCEL_PROTECTION_BYPASS);
 
   const upstreamResponse = await fetch(upstream, {
@@ -291,11 +314,13 @@ async function proxyPreview(c: AppContext): Promise<Response> {
     redirect: 'manual',
   });
   const responseHeaders = new Headers(upstreamResponse.headers);
+  const upstreamSessionCookie = allowedSessionSetCookie(responseHeaders.get('set-cookie'));
   responseHeaders.delete('set-cookie');
   responseHeaders.delete('x-vercel-protection-bypass');
   responseHeaders.delete('x-vercel-set-bypass-cookie');
   responseHeaders.set('Cache-Control', 'private, no-store');
   responseHeaders.set('X-Robots-Tag', 'noindex, nofollow');
+  if (upstreamSessionCookie) responseHeaders.append('Set-Cookie', upstreamSessionCookie);
 
   const location = responseHeaders.get('Location');
   if (location) {

@@ -4,6 +4,7 @@ import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../config/env.js';
 import { UserModel } from '../models/user.js';
 import { normalizeUserRole, type UserRole } from '../lib/roles.js';
+import { readSessionToken } from '../lib/session.js';
 import { getRequestId, jsonError } from './request-id.js';
 import type { RequestVariables } from './request-id.js';
 
@@ -78,9 +79,11 @@ function logAuthFailure(c: Context, reason: string, error?: unknown) {
 export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
   async (c, next) => {
     const header = c.req.header('authorization') ?? '';
-    const [scheme, token] = header.split(' ');
+    const [scheme, bearerToken] = header.split(' ');
+    const token = readSessionToken(c)
+      ?? (scheme?.toLowerCase() === 'bearer' ? bearerToken : undefined);
 
-    if (scheme?.toLowerCase() !== 'bearer' || !token) {
+    if (!token) {
       return jsonError(c, '未授权，请先登录', 401);
     }
 

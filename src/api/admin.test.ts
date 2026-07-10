@@ -16,7 +16,7 @@ describe('admin api', () => {
     return await import('./admin.js');
   }
 
-  it('fetchUsers includes the auth token', async () => {
+  it('fetchUsers includes browser credentials without a readable token', async () => {
     localStorage.setItem('liyuan_auth_token', 'test-token');
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -29,7 +29,8 @@ describe('admin api', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/admin/users',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+        credentials: 'include',
+        headers: {},
       }),
     );
     expect(result.users).toHaveLength(1);

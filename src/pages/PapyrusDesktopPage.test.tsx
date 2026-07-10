@@ -37,13 +37,13 @@ describe('PapyrusDesktopPage', () => {
     ]);
   });
 
-  it('renders fixed GitHub release asset download links without fetching at runtime', () => {
+  it('renders fixed GitHub release asset download links without fetching release data at runtime', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = renderPage();
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', expect.any(Object));
     expect(screen.getByRole('link', { name: '登录 / 注册' })).toHaveAttribute('href', '/login/');
     expect(screen.queryByText('正在获取下载链接…')).not.toBeInTheDocument();
     expect(screen.queryByText(/GitHub API 返回 403/)).not.toBeInTheDocument();

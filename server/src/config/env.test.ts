@@ -11,11 +11,12 @@ function stubBaseEnv(overrides: Record<string, string | undefined> = {}) {
     EMAIL_PROVIDER: undefined,
     RESEND_API_KEY: undefined,
     EMAIL_FROM: undefined,
-    admin_emails: undefined,
-    ADMIN_EMAILS: undefined,
     PORT: undefined,
     ...overrides,
   };
+
+  delete process.env.admin_emails;
+  delete process.env.ADMIN_EMAILS;
 
   for (const [key, value] of Object.entries(values)) {
     if (value === undefined) {
@@ -108,11 +109,8 @@ describe('server env', () => {
     expect(isAdminEmail('legacy@example.com')).toBe(true);
   });
 
-  it('prefers admin_emails over legacy ADMIN_EMAILS', async () => {
-    stubBaseEnv({
-      admin_emails: 'new@example.com',
-      ADMIN_EMAILS: 'legacy@example.com',
-    });
+  it('reads lowercase admin_emails on Windows case-insensitive process environments', async () => {
+    stubBaseEnv({ admin_emails: 'new@example.com' });
 
     const { env } = await import('./env.js');
     expect(env.admin_emails).toEqual(['new@example.com']);

@@ -1,79 +1,42 @@
-import { env } from '../config/env.js';
 import type { BlogPost, BlogPostInput, User } from '../types.js';
-import { getStoredToken } from './auth.js';
-import { createNetworkError, logApiError, parseApiErrorResponse } from './errors.js';
-
-async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = {
-    ...(options?.headers as Record<string, string>),
-  };
-
-  if (options?.body) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  const token = getStoredToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(`${env.API_BASE_URL}${path}`, {
-      ...options,
-      headers,
-    });
-  } catch {
-    const error = createNetworkError();
-    logApiError(path, error);
-    throw error;
-  }
-
-  if (!res.ok) {
-    const error = await parseApiErrorResponse(res);
-    logApiError(path, error);
-    throw error;
-  }
-
-  return res.json() as Promise<T>;
-}
+import { apiFetchJson } from './client.js';
 
 export function fetchBlogPosts(): Promise<BlogPost[]> {
-  return fetchJson<BlogPost[]>('/blog');
+  return apiFetchJson<BlogPost[]>('/blog');
 }
 
 export function fetchUserBlogPosts(username: string): Promise<BlogPost[]> {
-  return fetchJson<BlogPost[]>(`/blog/user/${encodeURIComponent(username)}`);
+  return apiFetchJson<BlogPost[]>(`/blog/user/${encodeURIComponent(username)}`);
 }
 
 export function fetchBlogPost(blogNumber: number): Promise<BlogPost> {
-  return fetchJson<BlogPost>(`/blog/number/${encodeURIComponent(String(blogNumber))}`);
+  return apiFetchJson<BlogPost>(`/blog/number/${encodeURIComponent(String(blogNumber))}`);
 }
 
 export function fetchMyBlogPosts(): Promise<BlogPost[]> {
-  return fetchJson<BlogPost[]>('/blog/me');
+  return apiFetchJson<BlogPost[]>('/blog/me');
 }
 
 export function createBlogPost(input: BlogPostInput): Promise<BlogPost> {
-  return fetchJson<BlogPost>('/blog', {
+  return apiFetchJson<BlogPost>('/blog', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
 export function updateBlogPost(id: string, input: BlogPostInput): Promise<BlogPost> {
-  return fetchJson<BlogPost>(`/blog/${encodeURIComponent(id)}`, {
+  return apiFetchJson<BlogPost>(`/blog/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
 }
 
 export function deleteBlogPost(id: string): Promise<{ ok: boolean }> {
-  return fetchJson<{ ok: boolean }>(`/blog/${encodeURIComponent(id)}`, {
+  return apiFetchJson<{ ok: boolean }>(`/blog/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
 }
 
 export function fetchPublicProfile(username: string): Promise<{ user: User }> {
-  return fetchJson<{ user: User }>(`/auth/users/${encodeURIComponent(username)}`);
+  return apiFetchJson<{ user: User }>(`/auth/users/${encodeURIComponent(username)}`);
 }

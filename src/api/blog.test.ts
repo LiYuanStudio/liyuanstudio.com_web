@@ -80,7 +80,7 @@ describe('blog api helpers', () => {
     );
   });
 
-  it('fetchMyBlogPosts includes the auth token', async () => {
+  it('fetchMyBlogPosts includes browser credentials without a readable token', async () => {
     localStorage.setItem('liyuan_auth_token', 'tok-1');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -93,7 +93,8 @@ describe('blog api helpers', () => {
     expect(fetch).toHaveBeenCalledWith(
       'https://api.example.com/blog/me',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer tok-1' }),
+        credentials: 'include',
+        headers: {},
       }),
     );
   });
@@ -121,10 +122,10 @@ describe('blog api helpers', () => {
       'https://api.example.com/blog',
       expect.objectContaining({
         method: 'POST',
+        credentials: 'include',
         body: JSON.stringify(input),
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
-          Authorization: 'Bearer tok-1',
         }),
       }),
     );

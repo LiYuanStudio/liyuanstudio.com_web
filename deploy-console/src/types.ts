@@ -1,5 +1,6 @@
 export type Bindings = {
   LA_API_BASE_URL: string;
+  LA_DEPLOY_CONSOLE_API_KEY: string;
   GITHUB_OWNER: string;
   GITHUB_REPO: string;
   GITHUB_TOKEN: string;

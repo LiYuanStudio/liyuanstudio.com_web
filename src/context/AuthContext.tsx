@@ -9,14 +9,13 @@ import React, {
 import {
   beginTwoFactorAction as apiBeginTwoFactorAction,
   confirmTwoFactorAction as apiConfirmTwoFactorAction,
+  clearLegacyAuthToken,
   fetchMe,
-  getStoredToken,
   login as apiLogin,
   logout as apiLogout,
   resendLoginTwoFactor as apiResendLoginTwoFactor,
   sendRegistrationCode as apiSendRegistrationCode,
   verifyRegistrationCode as apiVerifyRegistrationCode,
-  setStoredToken,
   updateAvatar as apiUpdateAvatar,
   updateProfile as apiUpdateProfile,
   verifyLoginTwoFactor as apiVerifyLoginTwoFactor,
@@ -29,6 +28,7 @@ import type {
   TwoFactorChallengeResponse,
   User,
 } from '../types.js';
+import { ApiError } from '../api/errors.js';
 
 type AuthState =
   | { status: 'loading' }
@@ -73,21 +73,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
 
   const loadUser = useCallback(async () => {
-    if (!getStoredToken()) {
-      setState({ status: 'unauthenticated' });
-      return;
-    }
-
     try {
       const { user } = await fetchMe();
       setState({ status: 'authenticated', user });
-    } catch {
-      setStoredToken(null);
-      setState({ status: 'unauthenticated' });
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setState({ status: 'unauthenticated' });
+        return;
+      }
+      // A transient failure must not overwrite an already confirmed session.
+      setState((current) => current.status === 'authenticated'
+        ? current
+        : { status: 'unauthenticated' });
     }
   }, []);
 
   useEffect(() => {
+    clearLegacyAuthToken();
     loadUser();
   }, [loadUser]);
 
@@ -96,8 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if ('twoFactorRequired' in response) {
       return response;
     }
-    const { token, user } = response;
-    setStoredToken(token);
+    const { user } = response;
     setState({ status: 'authenticated', user });
     return null;
   }, []);
@@ -106,8 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     challengeToken: string,
     credential: { code: string } | { recoveryCode: string },
   ) => {
-    const { token, user } = await apiVerifyLoginTwoFactor(challengeToken, credential);
-    setStoredToken(token);
+    const { user } = await apiVerifyLoginTwoFactor(challengeToken, credential);
     setState({ status: 'authenticated', user });
   }, []);
 
@@ -126,7 +126,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     code: string,
   ) => {
     const response = await apiConfirmTwoFactorAction(action, challengeToken, code);
-    setStoredToken(response.token);
     setState({ status: 'authenticated', user: response.user });
     return 'recoveryCodes' in response ? response : null;
   }, []);
@@ -140,20 +139,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const verifyRegistrationCode = useCallback(async (email: string, code: string) => {
-    const { token, user } = await apiVerifyRegistrationCode(email, code);
-    setStoredToken(token);
+    const { user } = await apiVerifyRegistrationCode(email, code);
     setState({ status: 'authenticated', user });
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      if (getStoredToken()) {
-        await apiLogout();
-      }
+      await apiLogout();
     } catch {
       // Always clear the local session even if server revocation fails.
     } finally {
-      setStoredToken(null);
       setState({ status: 'unauthenticated' });
     }
   }, []);

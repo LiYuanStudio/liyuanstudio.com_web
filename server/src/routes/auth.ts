@@ -20,6 +20,7 @@ import type { AuthVariables } from '../middleware/auth.js';
 import { isAdminEmail } from '../config/env.js';
 import { normalizeUserRole, type LegacyUserRole } from '../lib/roles.js';
 import { validateAvatarValue } from '../lib/avatar.js';
+import { clearSession, isDeployConsoleRequest, issueSession } from '../lib/session.js';
 import {
   createUniqueUsername,
   ensureUsername,
@@ -380,14 +381,17 @@ async function startTwoFactorChallenge(
   return credentials.challengeToken;
 }
 
-async function issueAuthResponse(user: UserForResponse) {
+async function issueAuthResponse(c: Context, user: UserForResponse) {
   const token = await signToken({
     id: user._id.toString(),
     email: user.email,
     role: normalizeUserRole(user.role),
     tokenVersion: user.tokenVersion ?? 0,
   });
-  return { token, user: serializeUser(user) };
+  issueSession(c, token);
+  return isDeployConsoleRequest(c)
+    ? { token, user: serializeUser(user) }
+    : { user: serializeUser(user) };
 }
 
 async function verifyChallengeCode(
@@ -536,14 +540,7 @@ app.post('/register/verify', async (c) => {
 
   await PendingRegistrationModel.deleteOne({ email });
 
-  const token = await signToken({
-    id: user._id.toString(),
-    email: user.email,
-    role: normalizeUserRole(user.role),
-    tokenVersion: user.tokenVersion ?? 0,
-  });
-
-  return c.json({ token, user: serializeUser(user) }, 201);
+  return c.json(await issueAuthResponse(c, user), 201);
 });
 
 app.post('/login', async (c) => {
@@ -679,7 +676,7 @@ app.post('/login', async (c) => {
     }
   }
 
-  return c.json(await issueAuthResponse(user));
+  return c.json(await issueAuthResponse(c, user));
 });
 
 app.post('/2fa/login/verify', async (c) => {
@@ -749,7 +746,7 @@ app.post('/2fa/login/verify', async (c) => {
   if (!user || !user.twoFactorEnabled) {
     return jsonError(c, '用户不存在或双重验证已关闭', 401);
   }
-  return c.json(await issueAuthResponse(await ensureUsernameForRequest(c, user, '2fa-login')));
+  return c.json(await issueAuthResponse(c, await ensureUsernameForRequest(c, user, '2fa-login')));
 });
 
 app.post('/2fa/login/resend', async (c) => {
@@ -886,7 +883,7 @@ app.post('/2fa/enable/confirm', requireAuth, async (c) => {
   result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
-  return c.json({ ...(await issueAuthResponse(result.user)), recoveryCodes: recovery.codes });
+  return c.json({ ...(await issueAuthResponse(c, result.user)), recoveryCodes: recovery.codes });
 });
 
 app.post('/2fa/disable', requireAuth, async (c) => {
@@ -906,7 +903,7 @@ app.post('/2fa/disable/confirm', requireAuth, async (c) => {
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
   await TwoFactorChallengeModel.deleteMany({ userId: result.user._id });
-  return c.json(await issueAuthResponse(result.user));
+  return c.json(await issueAuthResponse(c, result.user));
 });
 
 app.post('/2fa/recovery-codes', requireAuth, async (c) => {
@@ -925,7 +922,7 @@ app.post('/2fa/recovery-codes/confirm', requireAuth, async (c) => {
   result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
-  return c.json({ ...(await issueAuthResponse(result.user)), recoveryCodes: recovery.codes });
+  return c.json({ ...(await issueAuthResponse(c, result.user)), recoveryCodes: recovery.codes });
 });
 
 app.get('/me', requireAuth, async (c) => {
@@ -944,6 +941,7 @@ app.post('/logout', requireAuth, async (c) => {
 
   user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
+  clearSession(c);
   return c.json({ message: '已退出登录' });
 });
 

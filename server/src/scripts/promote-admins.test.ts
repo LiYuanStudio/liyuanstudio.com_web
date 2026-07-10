@@ -22,7 +22,6 @@ describe('promote-admins script', () => {
     vi.stubEnv('JWT_SECRET', 'test-secret-must-be-at-least-32-characters');
     vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
     vi.stubEnv('admin_emails', 'admin@example.com');
-    delete process.env.ADMIN_EMAILS;
     mockConnectDB.mockClear();
     mockUserModel.updateMany.mockReset();
     mockUserModel.find.mockReset();
@@ -66,7 +65,6 @@ describe('promote-admins script', () => {
 
   it('exits early when admin_emails is empty', async () => {
     vi.stubEnv('admin_emails', '');
-    delete process.env.ADMIN_EMAILS;
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     const { promoteAdmins } = await import('./promote-admins.js');

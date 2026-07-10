@@ -92,7 +92,6 @@ export interface ProfileUpdateInput {
 }
 
 export interface AuthResponse {
-  token: string;
   user: User;
 }
 

@@ -171,7 +171,12 @@ describe('ProfilePage', () => {
   });
 
   it('renders a public profile without login', async () => {
-    vi.stubGlobal('fetch', mockFetch(MEMBER_USER));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/auth/me')) {
+        return { ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }) } as Response;
+      }
+      return mockFetch(MEMBER_USER)(url);
+    }));
 
     renderPage('/LA/');
 

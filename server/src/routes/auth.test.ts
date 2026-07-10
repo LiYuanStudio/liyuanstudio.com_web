@@ -283,7 +283,7 @@ describe('auth routes', () => {
   });
 
   describe('POST /api/auth/register/verify', () => {
-    it('creates verified user and returns token on valid code', async () => {
+    it('creates a verified user, writes a session cookie, and hides the token', async () => {
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('123456') });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
@@ -308,7 +308,9 @@ describe('auth routes', () => {
       expect(mockPendingRegistrationModel.deleteOne).toHaveBeenCalledWith({ email: 'hello@liyuanstudio.com' });
       const json = await res.json();
       expect(json.user.emailVerified).toBe(true);
-      expect(typeof json.token).toBe('string');
+      expect(json.token).toBeUndefined();
+      expect(res.headers.get('set-cookie')).toContain('liyuan_session=');
+      expect(res.headers.get('set-cookie')).toContain('liyuan_csrf=');
     });
 
     it('rejects invalid code', async () => {
@@ -354,7 +356,6 @@ describe('auth routes', () => {
 
     it('assigns admin role to emails in admin_emails', async () => {
       vi.stubEnv('admin_emails', 'hello@liyuanstudio.com');
-      delete process.env.ADMIN_EMAILS;
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('123456') });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
@@ -428,7 +429,7 @@ describe('auth routes', () => {
     });
   });
 
-  it('POST /api/auth/login returns a token for verified credentials', async () => {
+  it('POST /api/auth/login writes a session cookie for verified credentials', async () => {
     const app = await makeApp();
     mockUserModel.findOne.mockResolvedValue(userDoc() as never);
     mockBcrypt.compare.mockResolvedValue(true as never);
@@ -443,7 +444,29 @@ describe('auth routes', () => {
     const json = await res.json();
     expect(json.user.email).toBe('hello@liyuanstudio.com');
     expect(json.user.emailVerified).toBe(true);
+    expect(json.token).toBeUndefined();
+    expect(res.headers.get('set-cookie')).toContain('liyuan_session=');
+  });
+
+  it('returns a JWT only to the configured deploy-console service', async () => {
+    vi.stubEnv('DEPLOY_CONSOLE_API_KEY', 'deploy-console-test-secret');
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(userDoc() as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Deploy-Console-Key': 'deploy-console-test-secret',
+      },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
     expect(typeof json.token).toBe('string');
+    expect(res.headers.get('set-cookie')).toContain('liyuan_session=');
   });
 
   it('POST /api/auth/login sends a challenge instead of a JWT when 2FA is enabled', async () => {
@@ -490,7 +513,8 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.token).toEqual(expect.any(String));
+    expect(json.token).toBeUndefined();
+    expect(res.headers.get('set-cookie')).toContain('liyuan_session=');
     expect(json.user).toEqual(expect.objectContaining({
       email: user.email,
       twoFactorEnabled: true,
@@ -649,7 +673,6 @@ describe('auth routes', () => {
 
   it('POST /api/auth/login promotes admin_emails users to admin', async () => {
     vi.stubEnv('admin_emails', 'hello@liyuanstudio.com');
-    delete process.env.ADMIN_EMAILS;
     const app = await makeApp();
     const doc = userDoc();
     mockUserModel.findOne.mockResolvedValue(doc as never);
@@ -680,7 +703,7 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    await expect(verifyToken(json.token)).resolves.toMatchObject({ tokenVersion: 3 });
+    await expect(verifyToken(sessionTokenFrom(res))).resolves.toMatchObject({ tokenVersion: 3 });
   });
 
   it('POST /api/auth/login backfills missing tokenVersion for legacy users', async () => {
@@ -699,7 +722,7 @@ describe('auth routes', () => {
     expect(doc.tokenVersion).toBe(0);
     expect(doc.save).toHaveBeenCalled();
     const json = await res.json();
-    await expect(verifyToken(json.token)).resolves.toMatchObject({ tokenVersion: 0 });
+    await expect(verifyToken(sessionTokenFrom(res))).resolves.toMatchObject({ tokenVersion: 0 });
   });
   it('POST /api/auth/login returns 429 after repeated failures', async () => {
     const app = await makeApp();
@@ -1425,3 +1448,9 @@ describe('auth routes', () => {
     expect(res.status).toBe(404);
   });
 });
+function sessionTokenFrom(response: Response): string {
+  const cookie = response.headers.get('set-cookie') ?? '';
+  const match = cookie.match(/(?:^|,\s*)liyuan_session=([^;]+)/u);
+  if (!match?.[1]) throw new Error('Missing session cookie');
+  return match[1];
+}

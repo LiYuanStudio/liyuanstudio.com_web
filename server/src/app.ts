@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { connectDB } from './lib/db.js';
 import { errorHandler } from './middleware/error.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
+import { requireCsrfForSession } from './middleware/csrf.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import newsRoutes from './routes/news.js';
@@ -20,8 +21,8 @@ export function createApp(basePath?: string) {
     cors({
       origin: env.CORS_ORIGIN,
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'X-API-Key', 'Authorization', 'X-Request-Id'],
-      credentials: false,
+      allowHeaders: ['Content-Type', 'X-API-Key', 'Authorization', 'X-CSRF-Token', 'X-Request-Id'],
+      credentials: true,
     }),
   );
 
@@ -29,6 +30,7 @@ export function createApp(basePath?: string) {
     await connectDB();
     await next();
   });
+  app.use(requireCsrfForSession);
 
   app.route('/auth', authRoutes);
   app.route('/admin', adminRoutes);
