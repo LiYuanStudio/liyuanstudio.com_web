@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import newsRoutes from './routes/news.js';
 import blogRoutes from './routes/blog.js';
+import rolloutRoutes from './routes/rollout.js';
 
 export function createApp(basePath?: string) {
   const app = basePath ? new Hono().basePath(basePath) : new Hono();
@@ -33,6 +34,7 @@ export function createApp(basePath?: string) {
   app.route('/admin', adminRoutes);
   app.route('/news', newsRoutes);
   app.route('/blog', blogRoutes);
+  app.route('/rollout', rolloutRoutes);
 
   app.get('/health', (c) => c.json({ ok: true }));
 

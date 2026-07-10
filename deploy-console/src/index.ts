@@ -207,6 +207,38 @@ async function revalidateAdmin(env: Bindings, session: Session): Promise<AdminUs
   };
 }
 
+async function proxyRolloutRequest(
+  c: AppContext,
+  session: Session,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const admin = await revalidateAdmin(c.env, session);
+  if (!admin) {
+    removeSession(c);
+    return c.json({ error: 'LA 管理员权限已失效' }, 403);
+  }
+
+  const apiBase = c.env.LA_API_BASE_URL.replace(/\/+$/u, '');
+  try {
+    const response = await fetch(`${apiBase}/rollout${path}`, {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${session.token}`,
+        ...init?.headers,
+      },
+    });
+    const body = await response.text();
+    return new Response(body, {
+      status: response.status,
+      headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json; charset=UTF-8' },
+    });
+  } catch {
+    return c.json({ error: '灰度发布服务暂时不可用' }, 502);
+  }
+}
+
 function validVercelPreview(deployment: GrayDeployment): URL | null {
   if (deployment.state !== 'success' || !deployment.upstreamUrl) return null;
   try {
@@ -380,6 +412,62 @@ app.get('/api/deployment', async (c) => {
             : null,
         }
       : null,
+  });
+});
+
+app.get('/api/rollout', async (c) => {
+  const session = await readSession(c);
+  if (!session) return c.json({ error: '未登录' }, 401);
+  return proxyRolloutRequest(c, session, '/');
+});
+
+app.post('/api/rollout/start', async (c) => {
+  const session = await readSession(c);
+  if (!session) return c.json({ error: '未登录' }, 401);
+  if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
+    return c.json({ error: '请求校验失败' }, 403);
+  }
+  const body = await c.req.json().catch(() => null) as { candidateSha?: unknown; percentage?: unknown } | null;
+  if (!body || typeof body.candidateSha !== 'string') {
+    return c.json({ error: '候选版本参数无效' }, 400);
+  }
+
+  const latest = await getLatestGrayDeployment(c.env);
+  if (!latest || !latest.promoted || latest.sha !== body.candidateSha) {
+    return c.json({ error: '只能对最新且已部署到生产的候选版本启动灰度' }, 409);
+  }
+  return proxyRolloutRequest(c, session, '/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+});
+
+app.patch('/api/rollout', async (c) => {
+  const session = await readSession(c);
+  if (!session) return c.json({ error: '未登录' }, 401);
+  if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
+    return c.json({ error: '请求校验失败' }, 403);
+  }
+  const body = await c.req.text();
+  return proxyRolloutRequest(c, session, '/', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+});
+
+app.patch('/api/rollout/audience', async (c) => {
+  const session = await readSession(c);
+  if (!session) return c.json({ error: '未登录' }, 401);
+  if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
+    return c.json({ error: '请求校验失败' }, 403);
+  }
+  const body = await c.req.text();
+  return proxyRolloutRequest(c, session, '/audience', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body,
   });
 });
 

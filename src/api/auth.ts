@@ -5,6 +5,7 @@ import type {
   MessageResponse,
   ProfileUpdateInput,
   RecoveryCodesResponse,
+  ReleaseDecision,
   SecurityChallengeResponse,
   TwoFactorAction,
   User,
@@ -145,6 +146,10 @@ export function confirmTwoFactorAction(
 
 export function fetchMe(): Promise<{ user: User }> {
   return fetchJson<{ user: User }>('/auth/me');
+}
+
+export function fetchReleaseStatus(): Promise<{ rollout: ReleaseDecision }> {
+  return fetchJson<{ rollout: ReleaseDecision }>('/rollout/me');
 }
 
 export function logout(): Promise<MessageResponse> {

@@ -110,3 +110,22 @@ npm run build:deploy-console
 npm test
 npm run check:secrets
 ```
+
+## 主站账号灰度
+
+`gray.liyuanstudio.com` 是管理员私有验收的预发布网关；它不是面向真实用户的流量灰度入口。候选通过验收并部署到生产后，`deploy.liyuanstudio.com` 的“主站账号灰度”区才控制生产用户能否使用新版：
+
+1. 点击“部署候选到生产”，等待 GitHub 的生产部署成功。
+2. 在控制台设置首批账号（邮箱或用户 ID）及比例，然后点击“开始灰度”。
+3. 根据观察结果调节 `0%`、`5%`、`10%`、`25%`、`50%` 或其他整数比例；同一账号始终按 `userId + candidateSha` 的固定哈希分桶，不会因刷新在新旧版本之间跳转。
+4. 点击“全量开放”会让所有非排除账号使用新版，但仍可点击“立即回退”。稳定观察结束后，点击“设为稳定版本”。
+
+名单优先级固定为：排除账号 → 指定灰度账号 → 按比例分桶。完成稳定化后新版成为默认版本；暂停或立即回退会让未特别完成的发布立即回到稳定版，无需重新部署。
+
+灰度配置和每次变更审计记录保存在生产 MongoDB 的 `Rollout` 与 `RolloutAudit` 集合中，而不是保存在 Worker 内存。生产 API 提供：
+
+- `GET /api/rollout/me`：已登录用户当前是否命中灰度；前端 `ReleaseProvider` 已加载此状态。
+- `GET|POST|PATCH /api/rollout...`：管理员控制接口；deploy console 会在每个操作前重新调用 `/auth/me` 并携带管理员令牌和 CSRF 校验。
+- `requireGrayRelease`：新灰度 API 的后端保护中间件；前端隐藏入口不是访问控制。
+
+当前代码库没有一套待切换的新版页面，因此这次只提供发布状态和受保护的功能门。新功能必须让稳定实现与灰度实现同时存在，并在前端使用 `useRelease()`、在对应 API 路由使用 `requireGrayRelease`；数据库改动还必须保持向后兼容。

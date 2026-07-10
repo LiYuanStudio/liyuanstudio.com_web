@@ -124,6 +124,7 @@ function installFetch(options?: {
   meThrows?: boolean;
   github?: ReturnType<typeof githubResponses>;
   upstream?: (url: URL, init?: RequestInit) => Promise<Response>;
+  rollout?: (url: URL, init?: RequestInit) => Response | null;
 }) {
   const requests: Array<{ url: URL; init?: RequestInit }> = [];
   const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -168,6 +169,8 @@ function installFetch(options?: {
       }
       return json({ user: { ...admin, role: options?.role ?? 'admin' } });
     }
+    const rolloutResponse = options?.rollout?.(url, init);
+    if (rolloutResponse) return rolloutResponse;
     const githubResponse = await (options?.github ?? githubResponses())(url, init);
     if (githubResponse) return githubResponse;
     if (url.hostname.endsWith('.vercel.app') && options?.upstream) {
@@ -224,6 +227,42 @@ describe('deploy console', () => {
         previewUrl: 'https://gray.example.com/',
       },
     });
+  });
+
+  it('proxies rollout controls only after revalidating the administrator', async () => {
+    const { requests } = installFetch({
+      github: githubResponses({ productionState: 'success' }),
+      rollout: (url, init) => {
+        if (url.href === 'https://api.example.com/api/rollout/start' && init?.method === 'POST') {
+          return json({ rollout: { candidateSha: 'abc123', status: 'active', percentage: 5 } }, 201);
+        }
+        return null;
+      },
+    });
+    const cookie = await login();
+    const dashboard = await app.request('https://console.example.com/', { headers: { Cookie: cookie } }, env);
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+
+    const response = await app.request(
+      'https://console.example.com/api/rollout/start',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          Origin: env.CONSOLE_ORIGIN,
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrf,
+        },
+        body: JSON.stringify({ candidateSha: 'abc123', percentage: 5 }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(requests.some(({ url }) => url.href === 'https://api.example.com/api/auth/me')).toBe(true);
+    const rolloutRequest = requests.find(({ url }) => url.href === 'https://api.example.com/api/rollout/start');
+    expect(JSON.parse(String(rolloutRequest?.init?.body))).toEqual({ candidateSha: 'abc123', percentage: 5 });
+    expect(new Headers(rolloutRequest?.init?.headers).get('authorization')).toBe('Bearer la-token');
   });
 
   it('ignores successful Vercel production deployments for the gray SHA', async () => {

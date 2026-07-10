@@ -90,7 +90,7 @@ npm run dev
 
 ## 部署
 
-生产发布采用两阶段流程：`main` 先部署受保护的前后端灰度候选，LA 管理员在独立控制台验收后才触发全量发布。配置和操作说明见 [`docs/gray-deployment.md`](docs/gray-deployment.md)。灰度控制台独立部署，不会进入官网构建产物。
+生产发布分为私有预发布、部署到生产、账号灰度、全量观察和稳定化五个阶段。LA 管理员在独立控制台验收候选后，将候选部署到生产，再按账号名单和固定比例逐步开放。配置和操作说明见 [`docs/gray-deployment.md`](docs/gray-deployment.md)。灰度控制台独立部署，不会进入官网构建产物。
 
 ### 前端（Cloudflare Pages）
 

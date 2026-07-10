@@ -112,8 +112,45 @@ export function dashboardPage(user: AdminUser, csrf: string): string {
         <p id="message" class="muted" role="status"></p>
         <div class="actions">
           <a id="preview-link" class="button button--secondary is-disabled" aria-disabled="true">打开灰度版本</a>
-          <button id="promote-button" type="button" disabled>全量发布</button>
+          <button id="promote-button" type="button" disabled>部署候选到生产</button>
         </div>
+      </section>
+      <section class="card">
+        <div class="row">
+          <div>
+            <p class="label">主站账号灰度</p>
+            <h2 id="rollout-status">正在读取…</h2>
+          </div>
+          <span id="rollout-percentage" class="badge badge--muted">—</span>
+        </div>
+        <dl class="details">
+          <div><dt>候选提交</dt><dd id="rollout-sha">—</dd></div>
+          <div><dt>指定 / 排除账号</dt><dd id="rollout-audience">—</dd></div>
+        </dl>
+        <p id="rollout-message" class="muted" role="status"></p>
+        <div class="actions">
+          <label class="control-label">账号灰度比例
+            <input id="rollout-percentage-input" type="number" min="0" max="100" step="1" value="0" />
+          </label>
+          <button id="start-rollout-button" type="button" disabled>开始灰度</button>
+          <button id="save-percentage-button" type="button" class="button--secondary" disabled>更新比例</button>
+        </div>
+        <div class="actions">
+          <button id="pause-rollout-button" type="button" class="button--secondary" disabled>暂停灰度</button>
+          <button id="full-rollout-button" type="button" class="button--secondary" disabled>全量开放</button>
+          <button id="rollback-rollout-button" type="button" class="button--secondary" disabled>立即回退</button>
+          <button id="complete-rollout-button" type="button" class="button--secondary" disabled>设为稳定版本</button>
+        </div>
+        <form id="rollout-audience-form" class="form form--compact">
+          <label>账号邮箱或 ID<input id="rollout-user" autocomplete="off" /></label>
+          <label>规则
+            <select id="rollout-audience-type">
+              <option value="allow">指定灰度</option>
+              <option value="deny">排除灰度</option>
+            </select>
+          </label>
+          <button type="submit" class="button--secondary">添加账号</button>
+        </form>
       </section>
     </main>
     <script src="/app.js" defer></script>`,
@@ -140,7 +177,7 @@ h2 { margin-bottom: 0; font-size: 1.35rem; overflow-wrap: anywhere; }
 .alert-action { justify-self: start; border-color: #a65c5c; color: #fff; }
 .form { display: grid; gap: 18px; margin-top: 28px; }
 label { display: grid; gap: 8px; color: #ccc; font-size: .9rem; }
-input { width: 100%; padding: 13px 14px; border: 1px solid #494949; border-radius: 12px; background: #161616; color: #fff; font: inherit; }
+input, select { width: 100%; padding: 13px 14px; border: 1px solid #494949; border-radius: 12px; background: #161616; color: #fff; font: inherit; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #f5f5f5; color: #111; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
 button:disabled, .is-disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
 .button--secondary { border: 1px solid #555; background: transparent; color: #fff; }
@@ -152,7 +189,10 @@ button:disabled, .is-disabled { opacity: .35; cursor: not-allowed; pointer-event
 dt { margin-bottom: 8px; }
 dd { margin: 0; overflow-wrap: anywhere; }
 .actions { justify-content: flex-start; margin-top: 22px; }
-@media (max-width: 620px) { .shell { padding: 28px 0; } .topbar, .row { align-items: flex-start; } .details { grid-template-columns: 1fr; } .actions { align-items: stretch; flex-direction: column; } }
+.control-label { width: min(180px, 100%); }
+.control-label input { margin-top: 8px; }
+.form--compact { grid-template-columns: minmax(220px, 1fr) minmax(140px, .6fr) auto; align-items: end; }
+@media (max-width: 620px) { .shell { padding: 28px 0; } .topbar, .row { align-items: flex-start; } .details, .form--compact { grid-template-columns: 1fr; } .actions { align-items: stretch; flex-direction: column; } }
 `;
 
 export const applicationScript = `
@@ -164,7 +204,23 @@ const createdAt = document.querySelector('#created-at');
 const message = document.querySelector('#message');
 const previewLink = document.querySelector('#preview-link');
 const promoteButton = document.querySelector('#promote-button');
+const rolloutStatus = document.querySelector('#rollout-status');
+const rolloutPercentage = document.querySelector('#rollout-percentage');
+const rolloutSha = document.querySelector('#rollout-sha');
+const rolloutAudience = document.querySelector('#rollout-audience');
+const rolloutMessage = document.querySelector('#rollout-message');
+const rolloutPercentageInput = document.querySelector('#rollout-percentage-input');
+const startRolloutButton = document.querySelector('#start-rollout-button');
+const savePercentageButton = document.querySelector('#save-percentage-button');
+const pauseRolloutButton = document.querySelector('#pause-rollout-button');
+const fullRolloutButton = document.querySelector('#full-rollout-button');
+const rollbackRolloutButton = document.querySelector('#rollback-rollout-button');
+const completeRolloutButton = document.querySelector('#complete-rollout-button');
+const rolloutAudienceForm = document.querySelector('#rollout-audience-form');
+const rolloutUser = document.querySelector('#rollout-user');
+const rolloutAudienceType = document.querySelector('#rollout-audience-type');
 let current = null;
+let rollout = null;
 
 function setUnavailable(text) {
   current = null;
@@ -189,11 +245,11 @@ async function loadDeployment() {
     current = data.deployment;
     version.textContent = current.sha;
     const promoting = current.promotionState === 'pending' || current.promotionState === 'in_progress';
-    status.textContent = current.promoted ? '已全量发布' : (promoting ? '全量发布中' : current.state);
+    status.textContent = current.promoted ? '已部署到生产' : (promoting ? '生产部署中' : current.state);
     deploymentId.textContent = String(current.id);
     createdAt.textContent = new Date(current.createdAt).toLocaleString('zh-CN');
     message.textContent = current.state === 'success'
-      ? (current.promoted ? '该版本已经完成全量发布。' : (promoting ? '生产工作流正在运行，请勿重复提交。' : '请检查灰度版本，确认无误后再全量发布。'))
+      ? (current.promoted ? '候选代码已部署到生产，可在下方按账号逐步开放。' : (promoting ? '生产工作流正在运行，请勿重复提交。' : '请检查灰度版本，确认无误后再部署候选到生产。'))
       : '最新灰度构建尚未成功，不能验收或发布。';
     const ready = current.state === 'success' && Boolean(current.previewUrl);
     if (ready) {
@@ -206,15 +262,79 @@ async function loadDeployment() {
       previewLink.setAttribute('aria-disabled', 'true');
     }
     promoteButton.disabled = !ready || current.promoted || promoting;
+    renderRollout();
   } catch (error) {
     setUnavailable(error instanceof Error ? error.message : '读取部署状态失败');
   }
 }
 
+function setRolloutButtons(enabled) {
+  savePercentageButton.disabled = !enabled;
+  pauseRolloutButton.disabled = !enabled;
+  fullRolloutButton.disabled = !enabled;
+  rollbackRolloutButton.disabled = !enabled;
+  completeRolloutButton.disabled = !enabled;
+}
+
+function renderRollout() {
+  if (!rollout) {
+    rolloutStatus.textContent = '未开始';
+    rolloutPercentage.textContent = '0%';
+    rolloutSha.textContent = '—';
+    rolloutAudience.textContent = '0 / 0';
+    rolloutMessage.textContent = current && current.promoted
+      ? '候选已部署到生产，可先指定账号或设置比例后开始灰度。'
+      : '请先完成私有验收，并将最新候选部署到生产。';
+    startRolloutButton.disabled = !(current && current.promoted);
+    setRolloutButtons(false);
+    return;
+  }
+  rolloutStatus.textContent = rollout.status;
+  rolloutPercentage.textContent = rollout.percentage + '%';
+  rolloutSha.textContent = rollout.candidateSha;
+  rolloutAudience.textContent = rollout.allowUserIds.length + ' / ' + rollout.denyUserIds.length;
+  rolloutPercentageInput.value = String(rollout.percentage);
+  rolloutMessage.textContent = rollout.status === 'completed'
+    ? '新版已成为默认稳定版本。'
+    : '指定账号优先进入，排除账号始终留在稳定版；其余账号按固定分桶命中。';
+  startRolloutButton.disabled = !(current && current.promoted) || rollout.status === 'active';
+  setRolloutButtons(rollout.status !== 'completed');
+}
+
+async function loadRollout() {
+  try {
+    const response = await fetch('/api/rollout', { headers: { Accept: 'application/json' } });
+    if (response.status === 401) return location.reload();
+    if (!response.ok) throw new Error('读取灰度状态失败');
+    const data = await response.json();
+    rollout = data.rollout;
+    renderRollout();
+  } catch (error) {
+    rollout = null;
+    rolloutStatus.textContent = '不可用';
+    rolloutMessage.textContent = error instanceof Error ? error.message : '读取灰度状态失败';
+    startRolloutButton.disabled = true;
+    setRolloutButtons(false);
+  }
+}
+
+async function changeRollout(path, body, method = 'PATCH') {
+  const response = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || '更新灰度状态失败');
+  rollout = data.rollout;
+  renderRollout();
+  return data;
+}
+
 promoteButton.addEventListener('click', async () => {
-  if (!current || !confirm('确认把当前灰度版本全量发布到生产环境？')) return;
+  if (!current || !confirm('确认把当前候选版本部署到生产环境？')) return;
   promoteButton.disabled = true;
-  message.textContent = '正在提交全量发布…';
+  message.textContent = '正在提交生产部署…';
   try {
     const response = await fetch('/api/promote', {
       method: 'POST',
@@ -223,13 +343,62 @@ promoteButton.addEventListener('click', async () => {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '提交失败');
-    message.textContent = '全量发布工作流已启动，请稍后刷新查看结果。';
+    message.textContent = '生产部署工作流已启动，请稍后刷新查看结果。';
   } catch (error) {
     message.textContent = error instanceof Error ? error.message : '提交失败';
     promoteButton.disabled = false;
   }
 });
 
+startRolloutButton.addEventListener('click', async () => {
+  if (!current || !current.promoted) return;
+  try {
+    await changeRollout('/api/rollout/start', {
+      candidateSha: current.sha,
+      percentage: Number(rolloutPercentageInput.value),
+    }, 'POST');
+  } catch (error) {
+    rolloutMessage.textContent = error instanceof Error ? error.message : '启动灰度失败';
+  }
+});
+
+savePercentageButton.addEventListener('click', async () => {
+  try {
+    await changeRollout('/api/rollout', { status: 'active', percentage: Number(rolloutPercentageInput.value) });
+  } catch (error) {
+    rolloutMessage.textContent = error instanceof Error ? error.message : '更新比例失败';
+  }
+});
+
+pauseRolloutButton.addEventListener('click', async () => {
+  try { await changeRollout('/api/rollout', { status: 'paused' }); } catch (error) { rolloutMessage.textContent = error instanceof Error ? error.message : '暂停失败'; }
+});
+fullRolloutButton.addEventListener('click', async () => {
+  if (!confirm('确认让全部账号进入新版观察吗？')) return;
+  try { await changeRollout('/api/rollout', { status: 'full' }); } catch (error) { rolloutMessage.textContent = error instanceof Error ? error.message : '全量开放失败'; }
+});
+rollbackRolloutButton.addEventListener('click', async () => {
+  if (!confirm('确认立即让所有账号恢复稳定版吗？')) return;
+  try { await changeRollout('/api/rollout', { status: 'rolled_back' }); } catch (error) { rolloutMessage.textContent = error instanceof Error ? error.message : '回退失败'; }
+});
+completeRolloutButton.addEventListener('click', async () => {
+  if (!confirm('确认将新版设为默认稳定版本吗？')) return;
+  try { await changeRollout('/api/rollout', { status: 'completed' }); } catch (error) { rolloutMessage.textContent = error instanceof Error ? error.message : '完成发布失败'; }
+});
+rolloutAudienceForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const user = rolloutUser.value.trim();
+  if (!user) return;
+  try {
+    await changeRollout('/api/rollout/audience', { user, audience: rolloutAudienceType.value, enabled: true });
+    rolloutUser.value = '';
+  } catch (error) {
+    rolloutMessage.textContent = error instanceof Error ? error.message : '更新账号失败';
+  }
+});
+
 loadDeployment();
+loadRollout();
 setInterval(loadDeployment, 15000);
+setInterval(loadRollout, 15000);
 `;

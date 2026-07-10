@@ -78,6 +78,14 @@ export interface User {
   bio?: string;
 }
 
+export type RolloutStatus = 'stable' | 'active' | 'paused' | 'full' | 'completed' | 'rolled_back';
+
+export interface ReleaseDecision {
+  candidateSha: string | null;
+  status: RolloutStatus;
+  enabled: boolean;
+}
+
 export interface ProfileUpdateInput {
   displayName: string;
   bio: string;
