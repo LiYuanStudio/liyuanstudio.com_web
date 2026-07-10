@@ -6,19 +6,19 @@ import { env } from '../config/env.js';
 import { ensureUsername, isValidUsername } from '../lib/usernames.js';
 
 export async function promoteAdmins() {
-  if (env.ADMIN_EMAILS.length === 0) {
-    console.log('ADMIN_EMAILS is not set, nothing to do.');
+  if (env.admin_emails.length === 0) {
+    console.log('admin_emails is not set, nothing to do.');
     return;
   }
 
   await connectDB();
 
   const roleResult = await UserModel.updateMany(
-    { email: { $in: env.ADMIN_EMAILS }, role: { $ne: 'admin' } },
+    { email: { $in: env.admin_emails }, role: { $ne: 'admin' } },
     { $set: { role: 'admin' } },
   );
 
-  const adminUsers = await UserModel.find({ email: { $in: env.ADMIN_EMAILS } });
+  const adminUsers = await UserModel.find({ email: { $in: env.admin_emails } });
   let usernameRepairCount = 0;
 
   for (const user of adminUsers) {

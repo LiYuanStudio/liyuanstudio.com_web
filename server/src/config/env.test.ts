@@ -11,6 +11,7 @@ function stubBaseEnv(overrides: Record<string, string | undefined> = {}) {
     EMAIL_PROVIDER: undefined,
     RESEND_API_KEY: undefined,
     EMAIL_FROM: undefined,
+    admin_emails: undefined,
     ADMIN_EMAILS: undefined,
     PORT: undefined,
     ...overrides,
@@ -90,20 +91,38 @@ describe('server env', () => {
     expect(env.CORS_ORIGIN).toEqual(['https://a.com', 'https://b.com']);
   });
 
-  it('parses ADMIN_EMAILS and matches case-insensitively', async () => {
-    stubBaseEnv({ ADMIN_EMAILS: 'Admin@Example.com, user@example.com' });
+  it('parses admin_emails and matches case-insensitively', async () => {
+    stubBaseEnv({ admin_emails: 'Admin@Example.com, user@example.com' });
 
     const { env, isAdminEmail } = await import('./env.js');
-    expect(env.ADMIN_EMAILS).toEqual(['admin@example.com', 'user@example.com']);
+    expect(env.admin_emails).toEqual(['admin@example.com', 'user@example.com']);
     expect(isAdminEmail('ADMIN@EXAMPLE.COM')).toBe(true);
     expect(isAdminEmail('other@example.com')).toBe(false);
   });
 
-  it('handles missing ADMIN_EMAILS', async () => {
-    stubBaseEnv({ ADMIN_EMAILS: '' });
+  it('falls back to legacy ADMIN_EMAILS when admin_emails is unset', async () => {
+    stubBaseEnv({ ADMIN_EMAILS: 'legacy@example.com' });
 
     const { env, isAdminEmail } = await import('./env.js');
-    expect(env.ADMIN_EMAILS).toEqual([]);
+    expect(env.admin_emails).toEqual(['legacy@example.com']);
+    expect(isAdminEmail('legacy@example.com')).toBe(true);
+  });
+
+  it('prefers admin_emails over legacy ADMIN_EMAILS', async () => {
+    stubBaseEnv({
+      admin_emails: 'new@example.com',
+      ADMIN_EMAILS: 'legacy@example.com',
+    });
+
+    const { env } = await import('./env.js');
+    expect(env.admin_emails).toEqual(['new@example.com']);
+  });
+
+  it('handles missing admin_emails', async () => {
+    stubBaseEnv({ admin_emails: '', ADMIN_EMAILS: '' });
+
+    const { env, isAdminEmail } = await import('./env.js');
+    expect(env.admin_emails).toEqual([]);
     expect(isAdminEmail('admin@example.com')).toBe(false);
   });
 

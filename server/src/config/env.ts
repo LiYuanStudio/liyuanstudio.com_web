@@ -71,6 +71,15 @@ function resolveEmailConfig(isProduction: boolean): {
   return { EMAIL_PROVIDER, RESEND_API_KEY, EMAIL_FROM };
 }
 
+function parseAdminEmails(): string[] {
+  // Prefer lowercase `admin_emails` (Vercel-friendly). Fall back to legacy ADMIN_EMAILS.
+  const raw = process.env.admin_emails ?? process.env.ADMIN_EMAILS ?? '';
+  return raw
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 const isProduction = process.env.NODE_ENV === 'production';
 const emailConfig = resolveEmailConfig(isProduction);
 
@@ -87,12 +96,9 @@ export const env = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
-  ADMIN_EMAILS: (process.env.ADMIN_EMAILS ?? '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean),
+  admin_emails: parseAdminEmails(),
 };
 
 export function isAdminEmail(email: string): boolean {
-  return env.ADMIN_EMAILS.includes(email.trim().toLowerCase());
+  return env.admin_emails.includes(email.trim().toLowerCase());
 }

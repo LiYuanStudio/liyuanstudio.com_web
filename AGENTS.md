@@ -85,7 +85,7 @@ Key configuration files:
 │   │   ├── app.ts          # Hono app factory (used by index.ts and api/index.ts)
 │   │   ├── lib/db.ts       # Mongoose connection with global cache
 │   │   ├── lib/email.ts    # Email sending abstraction (Resend / console fallback)
-│   │   ├── config/env.ts   # Env validation + ADMIN_EMAILS helper
+│   │   ├── config/env.ts   # Env validation + admin_emails helper
 │   │   ├── routes/news.ts  # /news CRUD routes
 │   │   ├── routes/blog.ts  # /blog CRUD routes
 │   │   ├── routes/auth.ts  # /auth registration, login, forgot/reset password, profile
@@ -267,7 +267,7 @@ Tests run with **Vitest**. Frontend tests use `jsdom` and `@testing-library/reac
   - `EMAIL_PROVIDER` — set to `resend` in production; leave empty in local dev to print verification links to the backend console.
   - `RESEND_API_KEY` — required when `EMAIL_PROVIDER=resend`.
   - `EMAIL_FROM` — required when `EMAIL_PROVIDER=resend`.
-  - `ADMIN_EMAILS` — comma-separated list of emails that automatically receive the `admin` role.
+  - `admin_emails` — comma-separated list of emails that automatically receive the `admin` role (lowercase name for Vercel).
 - The frontend production build uses `.env.production` to point `VITE_API_BASE_URL` at the deployed Vercel API.
 
 ## Code style guidelines
