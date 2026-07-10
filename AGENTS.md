@@ -85,7 +85,7 @@ Key configuration files:
 │   │   ├── app.ts          # Hono app factory (used by index.ts and api/index.ts)
 │   │   ├── lib/db.ts       # Mongoose connection with global cache
 │   │   ├── lib/email.ts    # Email sending abstraction (Resend / console fallback)
-│   │   ├── config/env.ts   # Env validation + ADMIN_EMAILS helper
+│   │   ├── config/env.ts   # Env validation + admin_emails helper
 │   │   ├── routes/news.ts  # /news CRUD routes
 │   │   ├── routes/blog.ts  # /blog CRUD routes
 │   │   ├── routes/auth.ts  # /auth registration, login, forgot/reset password, profile
@@ -99,7 +99,8 @@ Key configuration files:
 │   │   ├── test/
 │   │   │   └── setup.ts    # Vitest setup: mocks Hono logger in tests
 │   │   ├── *.test.ts       # Co-located unit tests for env, lib, models, routes, and app
-│   │   └── scripts/seed.ts # Seed sample news/blog posts
+│   │   └── scripts/seed.ts # No-op (sample seed content removed)
+│   │   └── scripts/cleanup-mock-data.ts # Delete old seed/mock rows
 │   │   └── scripts/promote-admins.ts # Promote users to admin by email
 ├── src/
 │   ├── entries/            # One entry file per MPA page
@@ -186,8 +187,11 @@ npm run build:api
 # Start the compiled backend
 npm run start:api
 
-# Seed the database with sample news/blog posts
+# Sample news/blog seeding is disabled (no-op); create real content via admin
 npm run seed:api
+
+# Delete old seeded mock news/blog rows and other test placeholders
+npm run cleanup-mock:api
 
 # Promote one or more users to admin by email
 npm run promote-admins:api -- admin@example.com another@example.com
@@ -267,7 +271,7 @@ Tests run with **Vitest**. Frontend tests use `jsdom` and `@testing-library/reac
   - `EMAIL_PROVIDER` — set to `resend` in production; leave empty in local dev to print verification links to the backend console.
   - `RESEND_API_KEY` — required when `EMAIL_PROVIDER=resend`.
   - `EMAIL_FROM` — required when `EMAIL_PROVIDER=resend`.
-  - `ADMIN_EMAILS` — comma-separated list of emails that automatically receive the `admin` role.
+  - `admin_emails` — comma-separated list of emails that automatically receive the `admin` role (lowercase name for Vercel).
 - The frontend production build uses `.env.production` to point `VITE_API_BASE_URL` at the deployed Vercel API.
 
 ## Code style guidelines
@@ -319,3 +323,28 @@ These files are either gitignored or contain only non-functional placeholders an
 - The frontend is an MPA. When adding a new page, create both an `src/entries/<page>.tsx` and a top-level `<page>/index.html`, then add the entry to `vite.config.ts` `rollupOptions.input`.
 - `localStorage` is used for the auth token on the client. Clearing site data / localStorage logs the user out.
 - When adding dependencies, keep the bundle small; this is a lightweight landing page.
+
+## Cursor Cloud specific instructions
+
+These notes cover non-obvious caveats when running this project in a Cursor Cloud VM (Linux). Dependencies are refreshed automatically by the startup update script (`npm install`); do not repeat install steps here.
+
+### Services and how to run them (Linux)
+
+- **MongoDB is required.** The backend's DB-connect middleware runs on every request, including `/api/health`, so the API will not report healthy without a reachable MongoDB. A local MongoDB server is installed in the VM; start it (once per session) before the API, e.g. in a background/tmux session:
+  `mongod --dbpath /data/db --bind_ip 127.0.0.1 --port 27017`
+- **Env files are gitignored** and must exist for the app to run. Local dev values that work in the VM:
+  - `server/.env`: `MONGODB_URI=mongodb://127.0.0.1:27017/liyuanstudio`, `API_KEY=local-dev-admin-key`, `JWT_SECRET=` (any string ≥32 chars), `CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174`, `APP_URL=http://localhost:5173`, `EMAIL_PROVIDER=` (leave empty), `admin_emails=admin@example.com`.
+  - `.env` (frontend): see the Vite proxy note below for the value to use.
+- **Do not use `npm run dev` on Linux.** `scripts/dev.ts` detects busy ports with `lsof ... | map(Number)`; when `lsof` returns nothing (port free) the empty string becomes `0`, so it always thinks port 3000 is occupied and aborts with `port 3000 is still in use after cleanup`. Run the two documented commands directly in separate sessions instead: `npm run dev:api` and `npm run dev:web`.
+- **The Vite dev proxy for `/api` does not work.** `profileRewrite()` in `vite.config.ts` rewrites every `/api/*` request to `/profile/` (because `api` is not in its `NON_PROFILE_SEGMENTS` allowlist), so relative `/api` calls return the profile HTML page instead of JSON. For browser testing, point the frontend directly at the backend by setting `VITE_API_BASE_URL=http://localhost:3000/api` in `.env` (CORS already whitelists `localhost:5173`), then restart `dev:web`.
+
+### Verification / email codes
+
+- With `EMAIL_PROVIDER` empty, registration, 2FA, and password-reset codes/links are printed to the backend console instead of being emailed. Grep the API output for `[email:mock]` to retrieve them during end-to-end auth testing.
+
+### Seed / mock data
+
+- `npm run seed:api` is a no-op: sample news/blog seed content was removed so gray/production no longer get placeholder「最新动态」cards. Create real news via the admin console.
+- To delete legacy seeded news/blog rows, run `npm run cleanup-mock:api -- --confirm` against the intended database. It is intentionally not performed during API startup or deployment.
+- `npm run cleanup-mock:api -- --confirm` also deletes those seed rows, plus known test avatars and `@example.com` test users. Point `server/.env` `MONGODB_URI` at the target database before running it.
+- With an empty news collection, the home News section shows「敬请期待」.

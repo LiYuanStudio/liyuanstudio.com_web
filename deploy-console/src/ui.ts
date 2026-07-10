@@ -24,7 +24,23 @@ function document(title: string, body: string, meta = ''): string {
 </html>`;
 }
 
-export function loginPage(error?: string): string {
+export type LoginAlertOptions = {
+  requestId?: string;
+  consoleOrigin?: string;
+  formToken?: string;
+};
+
+function loginAlert(error: string, options?: LoginAlertOptions): string {
+  const diagnostic = options?.requestId
+    ? `<span class="diagnostic">调试 ID：${escapeHtml(options.requestId)}</span>`
+    : '';
+  const action = options?.consoleOrigin
+    ? `<a class="button button--secondary alert-action" href="${escapeHtml(options.consoleOrigin)}">前往规范控制台</a>`
+    : '';
+  return `<div class="alert" role="alert"><span>${escapeHtml(error)}</span>${diagnostic}${action}</div>`;
+}
+
+export function loginPage(error?: string, options?: LoginAlertOptions): string {
   return document(
     'LA 灰度发布',
     `<main class="shell shell--narrow">
@@ -32,12 +48,27 @@ export function loginPage(error?: string): string {
         <p class="eyebrow">LIYUAN STUDIO · INTERNAL</p>
         <h1>灰度发布控制台</h1>
         <p class="muted">使用 LA 管理员账号登录。普通账号无法访问灰度版本。</p>
-        ${error ? `<p class="alert" role="alert">${escapeHtml(error)}</p>` : ''}
+        ${error ? loginAlert(error, options) : ''}
         <form action="/auth/login" method="post" class="form">
+          <input name="formToken" type="hidden" value="${escapeHtml(options?.formToken ?? '')}" />
           <label>邮箱<input name="email" type="email" autocomplete="username" required /></label>
           <label>密码<input name="password" type="password" autocomplete="current-password" minlength="8" required /></label>
           <button type="submit">管理员登录</button>
         </form>
+      </section>
+    </main>`,
+  );
+}
+
+export function previewAccessPage(consoleOrigin: string): string {
+  return document(
+    'LA 灰度发布',
+    `<main class="shell shell--narrow">
+      <section class="card">
+        <p class="eyebrow">LIYUAN STUDIO · INTERNAL</p>
+        <h1>需要管理员会话</h1>
+        <p class="muted">请先在部署控制台使用 LA 管理员账号登录，再返回此灰度地址。</p>
+        <a class="button" href="${escapeHtml(consoleOrigin)}">前往部署控制台</a>
       </section>
     </main>`,
   );
@@ -104,7 +135,9 @@ h1 { margin-bottom: 8px; font-size: clamp(2rem, 6vw, 3.5rem); letter-spacing: -.
 h2 { margin-bottom: 0; font-size: 1.35rem; overflow-wrap: anywhere; }
 .eyebrow, .label, dt { color: #a5a5a5; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .muted { color: #aaa; line-height: 1.6; }
-.alert { padding: 12px 14px; border-radius: 12px; background: #4b2020; color: #ffd5d5; }
+.alert { display: grid; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #4b2020; color: #ffd5d5; line-height: 1.5; }
+.diagnostic { color: #f2bcbc; font-size: .78rem; overflow-wrap: anywhere; }
+.alert-action { justify-self: start; border-color: #a65c5c; color: #fff; }
 .form { display: grid; gap: 18px; margin-top: 28px; }
 label { display: grid; gap: 8px; color: #ccc; font-size: .9rem; }
 input { width: 100%; padding: 13px 14px; border: 1px solid #494949; border-radius: 12px; background: #161616; color: #fff; font: inherit; }

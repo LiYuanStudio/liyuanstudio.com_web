@@ -234,6 +234,52 @@ describe('auth routes', () => {
         { upsert: true, new: true },
       );
     });
+
+    it('returns 429 when registration send is rate limited', async () => {
+      const app = await makeApp();
+      mockUserModel.findOne.mockResolvedValue(null);
+      mockAuthThrottleModel.findOne.mockResolvedValue({
+        key: 'register:email:hello@liyuanstudio.com',
+        attempts: 1,
+        lockedUntil: new Date(Date.now() + 60_000),
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'hello@liyuanstudio.com',
+          password: 'password123',
+          displayName: 'Hello User',
+        }),
+      });
+
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual(expect.objectContaining({
+        error: '验证码发送过于频繁，请稍后再试',
+      }));
+      expect(mockSendRegistrationCodeEmail).not.toHaveBeenCalled();
+    });
+
+    it('rejects passwords without letters and numbers', async () => {
+      const app = await makeApp();
+
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'hello@liyuanstudio.com',
+          password: 'password',
+          displayName: 'Hello User',
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(expect.objectContaining({
+        error: '密码需要同时包含字母和数字',
+      }));
+    });
   });
 
   describe('POST /api/auth/register/verify', () => {
@@ -306,8 +352,9 @@ describe('auth routes', () => {
       expect(res.status).toBe(400);
     });
 
-    it('assigns admin role to emails in ADMIN_EMAILS', async () => {
-      vi.stubEnv('ADMIN_EMAILS', 'hello@liyuanstudio.com');
+    it('assigns admin role to emails in admin_emails', async () => {
+      vi.stubEnv('admin_emails', 'hello@liyuanstudio.com');
+      delete process.env.ADMIN_EMAILS;
       const app = await makeApp();
       const pending = pendingDoc({ codeHash: hashToken('123456') });
       mockPendingRegistrationModel.findOne.mockResolvedValue(pending as never);
@@ -600,8 +647,9 @@ describe('auth routes', () => {
     expect(await res.json()).toEqual(expect.objectContaining({ error: '邮箱或密码错误' }));
   });
 
-  it('POST /api/auth/login promotes ADMIN_EMAILS users to admin', async () => {
-    vi.stubEnv('ADMIN_EMAILS', 'hello@liyuanstudio.com');
+  it('POST /api/auth/login promotes admin_emails users to admin', async () => {
+    vi.stubEnv('admin_emails', 'hello@liyuanstudio.com');
+    delete process.env.ADMIN_EMAILS;
     const app = await makeApp();
     const doc = userDoc();
     mockUserModel.findOne.mockResolvedValue(doc as never);
@@ -1084,6 +1132,29 @@ describe('auth routes', () => {
     const json = await res.json();
     expect(json.user.username).toBe('Hello-User');
     expect(doc.save).toHaveBeenCalled();
+  });
+
+  it('POST /api/auth/logout increments tokenVersion and invalidates the old token', async () => {
+    const app = await makeApp();
+    const doc = userDoc({ tokenVersion: 0 });
+    mockUserModel.findById.mockResolvedValue(doc as never);
+    const token = await signToken({ id: 'user-1', email: 'hello@liyuanstudio.com', role: 'tourist', tokenVersion: 0 });
+
+    const logoutRes = await app.request('/api/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(logoutRes.status).toBe(200);
+    expect(await logoutRes.json()).toEqual({ message: '已退出登录' });
+    expect(doc.tokenVersion).toBe(1);
+    expect(doc.save).toHaveBeenCalled();
+
+    mockUserModel.findById.mockResolvedValue(userDoc({ tokenVersion: 1 }) as never);
+    const meRes = await app.request('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(meRes.status).toBe(401);
   });
 
   it('includes requestId in auth error responses', async () => {

@@ -3,17 +3,16 @@ import { join } from 'node:path';
 import { connectDB } from '../src/lib/db.js';
 import { BlogModel } from '../src/models/blog.js';
 import { CounterModel } from '../src/models/counter.js';
+import {
+  SEED_BLOG_SLUGS,
+  SEED_NEWS_SLUGS,
+  purgeLegacySeedContent,
+} from '../src/lib/purge-legacy-seeds.js';
 import { UserModel, DEFAULT_AVATAR } from '../src/models/user.js';
 
 config({ path: join(process.cwd(), 'server', '.env') });
 
 import '../src/config/env.js';
-
-const SEED_BLOG_SLUGS = [
-  'workbench-design-philosophy',
-  'cloud-hosting-guide',
-  'living-tech',
-];
 
 const MOCK_AVATAR_VALUES = [
   'data:image/jpeg;base64,cropped',
@@ -22,7 +21,18 @@ const MOCK_AVATAR_VALUES = [
 ];
 
 async function cleanup() {
+  if (!process.argv.includes('--confirm')) {
+    console.error('Refusing to delete mock data without the --confirm flag.');
+    process.exitCode = 1;
+    return;
+  }
+
   await connectDB();
+
+  await purgeLegacySeedContent();
+  console.log(
+    `Purged seeded mock news (${SEED_NEWS_SLUGS.join(', ')}) and blogs (${SEED_BLOG_SLUGS.join(', ')}).`,
+  );
 
   const avatarReset = await UserModel.updateMany(
     { avatar: { $in: MOCK_AVATAR_VALUES } },
@@ -42,9 +52,6 @@ async function cleanup() {
   } else {
     console.log('No @example.com test users found.');
   }
-
-  const preservedSeedCount = await BlogModel.countDocuments({ slug: { $in: SEED_BLOG_SLUGS } });
-  console.log(`Preserved ${preservedSeedCount} seeded blog post(s).`);
 
   const highest = await BlogModel.findOne({ blogNumber: { $exists: true } })
     .sort({ blogNumber: -1 })

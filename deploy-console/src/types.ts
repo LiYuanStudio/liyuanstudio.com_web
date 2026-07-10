@@ -11,6 +11,15 @@ export type Bindings = {
   COOKIE_DOMAIN?: string;
 };
 
+export type RequestVariables = {
+  requestId: string;
+};
+
+export type AppEnv = {
+  Bindings: Bindings;
+  Variables: RequestVariables;
+};
+
 export type AdminUser = {
   id: string;
   email: string;

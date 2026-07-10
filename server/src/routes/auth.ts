@@ -46,7 +46,7 @@ const RECOVERY_CODE_COUNT = 10;
 const FORGOT_PASSWORD_COOLDOWN_MS = 60 * 1000;
 const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
 const FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
-const registrationRateLimits = new Map<string, number>();
+const REGISTRATION_SEND_MAX_ATTEMPTS = 1;
 
 type LogLevel = 'warn' | 'error';
 
@@ -114,6 +114,9 @@ function validateEmail(email: unknown): string {
 function validatePassword(password: unknown): string {
   if (typeof password !== 'string' || password.length < 8) {
     throw new Error('密码至少需要 8 位');
+  }
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    throw new Error('密码需要同时包含字母和数字');
   }
   return password;
 }
@@ -249,12 +252,6 @@ function createRegistrationCode(): string {
   return String(randomInt(100000, 1000000));
 }
 
-function isRateLimited(email: string): boolean {
-  const lastSent = registrationRateLimits.get(email);
-  if (!lastSent) return false;
-  return Date.now() - lastSent < REGISTRATION_RATE_LIMIT_MS;
-}
-
 function getClientIp(c: Context): string {
   const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
   return forwarded || c.req.header('cf-connecting-ip') || 'unknown';
@@ -328,6 +325,29 @@ async function recordForgotPasswordAttempt(key: string, now: Date): Promise<void
   throttle.attempts = (throttle.attempts ?? 0) + 1;
   throttle.lockedUntil = new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS);
   await throttle.save();
+}
+
+async function isRegistrationSendLimited(keys: string[], now: Date): Promise<boolean> {
+  const throttles = await Promise.all(keys.map((key) => AuthThrottleModel.findOne({ key })));
+  return throttles.some((throttle) => {
+    if (!throttle || throttle.expiresAt <= now) {
+      return false;
+    }
+    return isActiveDate(throttle.lockedUntil, now) || throttle.attempts >= REGISTRATION_SEND_MAX_ATTEMPTS;
+  });
+}
+
+async function recordRegistrationSendAttempt(key: string, now: Date): Promise<void> {
+  await AuthThrottleModel.findOneAndUpdate(
+    { key },
+    {
+      key,
+      attempts: 1,
+      lockedUntil: new Date(now.getTime() + REGISTRATION_RATE_LIMIT_MS),
+      expiresAt: new Date(now.getTime() + REGISTRATION_RATE_LIMIT_MS),
+    },
+    { upsert: true, new: true },
+  );
 }
 
 async function startTwoFactorChallenge(
@@ -427,7 +447,9 @@ app.post('/register/send-code', async (c) => {
     return jsonError(c, '该邮箱已被注册', 409);
   }
 
-  if (isRateLimited(email)) {
+  const now = new Date();
+  const registrationThrottleKeys = [`register:email:${email}`, `register:ip:${getClientIp(c)}`];
+  if (await isRegistrationSendLimited(registrationThrottleKeys, now)) {
     return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
   }
 
@@ -451,7 +473,7 @@ app.post('/register/send-code', async (c) => {
 
   try {
     await sendRegistrationCodeEmail({ email, displayName, code });
-    registrationRateLimits.set(email, Date.now());
+    await Promise.all(registrationThrottleKeys.map((key) => recordRegistrationSendAttempt(key, now)));
   } catch (error) {
     await PendingRegistrationModel.deleteOne({ email });
     return jsonError(c, '验证码邮件发送失败', 502, {
@@ -484,7 +506,7 @@ app.post('/register/verify', async (c) => {
     return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
   }
 
-  if (pending.codeHash !== hashToken(code)) {
+  if (!hashesMatch(pending.codeHash, hashToken(code))) {
     pending.failedAttempts = (pending.failedAttempts ?? 0) + 1;
     if (pending.failedAttempts >= REGISTRATION_VERIFY_MAX_ATTEMPTS) {
       pending.lockedUntil = new Date(now.getTime() + REGISTRATION_VERIFY_LOCK_MS);
@@ -912,6 +934,17 @@ app.get('/me', requireAuth, async (c) => {
     return jsonError(c, '用户不存在', 404);
   }
   return c.json({ user: serializeUser(await ensureUsernameForRequest(c, user, 'me')) });
+});
+
+app.post('/logout', requireAuth, async (c) => {
+  const user = await UserModel.findById(c.get('userId'));
+  if (!user) {
+    return jsonError(c, '用户不存在', 404);
+  }
+
+  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+  await user.save();
+  return c.json({ message: '已退出登录' });
 });
 
 app.get('/users/:username', async (c) => {

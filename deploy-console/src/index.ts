@@ -1,15 +1,36 @@
 import { Hono, type Context } from 'hono';
 import { dispatchPromotion, getLatestGrayDeployment } from './github.js';
-import { createSession, readSession, removeSession, writeSession } from './session.js';
-import type { AdminUser, Bindings, GrayDeployment, Session } from './types.js';
-import { applicationScript, dashboardPage, loginPage, styles } from './ui.js';
+import {
+  createLoginFormToken,
+  createSession,
+  readSession,
+  removeSession,
+  verifyLoginFormToken,
+  writeSession,
+} from './session.js';
+import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
+import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles } from './ui.js';
 
-type AppContext = Context<{ Bindings: Bindings }>;
+type AppContext = Context<AppEnv>;
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<AppEnv>();
+
+const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,100}$/;
+const INVALID_ORIGIN_MESSAGE = '当前页面的访问来源无效，请从规范的部署控制台重新登录。';
 
 function normalizedOrigin(value: string): string {
   return new URL(value).origin;
+}
+
+function normalizeRequestId(value: string | undefined): string {
+  if (value && REQUEST_ID_PATTERN.test(value)) {
+    return value;
+  }
+  return crypto.randomUUID();
+}
+
+function getRequestId(c: AppContext): string {
+  return c.get('requestId') || 'unknown';
 }
 
 function isConsoleRequest(c: AppContext): boolean {
@@ -22,48 +43,119 @@ function isPreviewRequest(c: AppContext): boolean {
 
 function sameOrigin(c: AppContext): boolean {
   const origin = c.req.header('Origin');
-  return !origin || origin === normalizedOrigin(c.env.CONSOLE_ORIGIN);
+  const consoleOrigin = normalizedOrigin(c.env.CONSOLE_ORIGIN);
+  if (origin === consoleOrigin) return true;
+  // Reject opaque / forged origins explicitly; do not treat "null" as missing.
+  if (origin) return false;
+  // Privacy browsers may omit Origin on same-tab navigational form POSTs.
+  return c.req.header('Sec-Fetch-Site') === 'same-origin';
+}
+
+function isClearlyCrossSite(c: AppContext): boolean {
+  return c.req.header('Sec-Fetch-Site') === 'cross-site';
+}
+
+async function loginErrorPage(
+  c: AppContext,
+  message: string,
+  status: 400 | 401 | 403 | 502,
+  options?: { includeConsoleLink?: boolean },
+) {
+  return c.html(
+    loginPage(message, {
+      requestId: getRequestId(c),
+      formToken: await createLoginFormToken(c.env.SESSION_SECRET),
+      consoleOrigin: options?.includeConsoleLink
+        ? normalizedOrigin(c.env.CONSOLE_ORIGIN)
+        : undefined,
+    }),
+    status,
+  );
+}
+
+type AuthSuccess = { ok: true; token: string; user: AdminUser };
+type AuthFailure = {
+  ok: false;
+  reason: 'invalid_credentials' | 'not_admin' | 'unavailable';
+};
+type AuthResult = AuthSuccess | AuthFailure;
+
+async function readJson(response: Response): Promise<unknown | null> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) return null;
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 async function authenticateAdmin(
   env: Bindings,
   email: string,
   password: string,
-): Promise<{ token: string; user: AdminUser } | null> {
+): Promise<AuthResult> {
   const apiBase = env.LA_API_BASE_URL.replace(/\/+$/u, '');
-  const loginResponse = await fetch(`${apiBase}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!loginResponse.ok) return null;
 
-  const login = await loginResponse.json() as { token?: unknown };
-  if (typeof login.token !== 'string' || !login.token) return null;
+  let loginResponse: Response;
+  try {
+    loginResponse = await fetch(`${apiBase}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
 
-  const meResponse = await fetch(`${apiBase}/auth/me`, {
-    headers: { Authorization: `Bearer ${login.token}` },
-  });
-  if (!meResponse.ok) return null;
+  if (loginResponse.status === 401 || loginResponse.status === 400) {
+    return { ok: false, reason: 'invalid_credentials' };
+  }
+  if (!loginResponse.ok) {
+    return { ok: false, reason: 'unavailable' };
+  }
 
-  const me = await meResponse.json() as {
+  const loginBody = await readJson(loginResponse);
+  const login = loginBody as { token?: unknown } | null;
+  if (!login || typeof login.token !== 'string' || !login.token) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  let meResponse: Response;
+  try {
+    meResponse = await fetch(`${apiBase}/auth/me`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    });
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (!meResponse.ok) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const meBody = await readJson(meResponse);
+  const me = meBody as {
     user?: {
       id?: unknown;
       email?: unknown;
       displayName?: unknown;
       role?: unknown;
     };
-  };
+  } | null;
   if (
-    me.user?.role !== 'admin' ||
+    !me?.user ||
     typeof me.user.id !== 'string' ||
     typeof me.user.email !== 'string' ||
     typeof me.user.displayName !== 'string'
   ) {
-    return null;
+    return { ok: false, reason: 'unavailable' };
+  }
+  if (me.user.role !== 'admin') {
+    return { ok: false, reason: 'not_admin' };
   }
 
   return {
+    ok: true,
     token: login.token,
     user: {
       id: me.user.id,
@@ -72,6 +164,16 @@ async function authenticateAdmin(
       role: 'admin',
     },
   };
+}
+
+function loginFailureMessage(reason: AuthFailure['reason']): { message: string; status: 401 | 502 } {
+  if (reason === 'invalid_credentials') {
+    return { message: '邮箱或密码错误。', status: 401 };
+  }
+  if (reason === 'not_admin') {
+    return { message: '需要 LA 管理员账号。', status: 401 };
+  }
+  return { message: '服务暂时不可用，请稍后重试。', status: 502 };
 }
 
 async function revalidateAdmin(env: Bindings, session: Session): Promise<AdminUser | null> {
@@ -120,7 +222,7 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   const session = await readSession(c);
   if (!session) {
     return c.html(
-      loginPage('请先在部署控制台使用 LA 管理员账号登录。'),
+      previewAccessPage(normalizedOrigin(c.env.CONSOLE_ORIGIN)),
       401,
       { 'Cache-Control': 'no-store' },
     );
@@ -136,7 +238,6 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   const upstream = new URL(`${incoming.pathname}${incoming.search}`, upstreamOrigin);
   const headers = new Headers(c.req.raw.headers);
   for (const header of [
-    'authorization',
     'cf-connecting-ip',
     'cf-ipcountry',
     'cf-ray',
@@ -185,6 +286,14 @@ async function proxyPreview(c: AppContext): Promise<Response> {
 }
 
 app.use('*', async (c, next) => {
+  const requestId = normalizeRequestId(c.req.header('x-request-id'));
+  c.set('requestId', requestId);
+  c.header('X-Request-Id', requestId);
+  await next();
+  c.header('X-Request-Id', requestId);
+});
+
+app.use('*', async (c, next) => {
   if (isPreviewRequest(c)) return proxyPreview(c);
   if (!isConsoleRequest(c)) return c.text('Not found', 404);
   await next();
@@ -193,7 +302,7 @@ app.use('*', async (c, next) => {
 app.use('*', async (c, next) => {
   await next();
   c.header('Cache-Control', 'no-store');
-  c.header('Content-Security-Policy', "default-src 'self'; base-uri 'none'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'");
+  c.header('Content-Security-Policy', "default-src 'self'; base-uri 'none'; connect-src 'self' https://cloudflareinsights.com; form-action 'self'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'");
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   c.header('Referrer-Policy', 'no-referrer');
   c.header('X-Content-Type-Options', 'nosniff');
@@ -206,22 +315,36 @@ app.get('/app.js', (c) => c.body(applicationScript, 200, { 'Content-Type': 'text
 
 app.get('/', async (c) => {
   const session = await readSession(c);
-  return c.html(session ? dashboardPage(session.user, session.csrf) : loginPage());
+  return c.html(
+    session
+      ? dashboardPage(session.user, session.csrf)
+      : loginPage(undefined, {
+          formToken: await createLoginFormToken(c.env.SESSION_SECRET),
+        }),
+  );
 });
 
 app.post('/auth/login', async (c) => {
-  if (!sameOrigin(c)) return c.html(loginPage('请求来源无效。'), 403);
-
   const body = await c.req.parseBody();
+  const formToken = body.formToken;
+  if (
+    typeof formToken !== 'string' ||
+    !(await verifyLoginFormToken(formToken, c.env.SESSION_SECRET)) ||
+    isClearlyCrossSite(c)
+  ) {
+    return loginErrorPage(c, INVALID_ORIGIN_MESSAGE, 403, { includeConsoleLink: true });
+  }
+
   const email = body.email;
   const password = body.password;
   if (typeof email !== 'string' || typeof password !== 'string') {
-    return c.html(loginPage('请输入邮箱和密码。'), 400);
+    return loginErrorPage(c, '请输入邮箱和密码。', 400);
   }
 
   const authenticated = await authenticateAdmin(c.env, email, password);
-  if (!authenticated) {
-    return c.html(loginPage('账号、密码或管理员权限无效。'), 401);
+  if (!authenticated.ok) {
+    const failure = loginFailureMessage(authenticated.reason);
+    return loginErrorPage(c, failure.message, failure.status);
   }
 
   await writeSession(c, createSession(authenticated.token, authenticated.user));
@@ -306,10 +429,13 @@ app.onError((error, c) => {
   console.error(JSON.stringify({
     event: 'deploy_console.request_failed',
     path: c.req.path,
+    requestId: getRequestId(c),
     error: error instanceof Error ? error.message : String(error),
   }));
-  if (c.req.path.startsWith('/api/')) return c.json({ error: '服务暂时不可用' }, 502);
-  return c.html(loginPage('服务暂时不可用，请稍后重试。'), 502);
+  if (c.req.path.startsWith('/api/')) {
+    return c.json({ error: '服务暂时不可用', requestId: getRequestId(c) }, 502);
+  }
+  return loginErrorPage(c, '服务暂时不可用，请稍后重试。', 502);
 });
 
 export { app };

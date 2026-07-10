@@ -49,6 +49,9 @@ export function getErrorMessage(error: unknown, fallback = GENERIC_ERROR_MESSAGE
 }
 
 export function logApiError(path: string, error: ApiError): void {
+  if (import.meta.env.PROD) {
+    return;
+  }
   console.error('API request failed', {
     path,
     status: error.status,

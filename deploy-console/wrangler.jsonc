@@ -14,15 +14,5 @@
     "CONSOLE_ORIGIN": "https://deploy.liyuanstudio.com",
     "PREVIEW_ORIGIN": "https://gray.liyuanstudio.com",
     "COOKIE_DOMAIN": ".liyuanstudio.com"
-  },
-  "routes": [
-    {
-      "pattern": "deploy.liyuanstudio.com",
-      "custom_domain": true
-    },
-    {
-      "pattern": "gray.liyuanstudio.com",
-      "custom_domain": true
-    }
-  ]
+  }
 }

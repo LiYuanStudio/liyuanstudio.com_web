@@ -1,7 +1,7 @@
 export const AVATAR_MAX_LENGTH = 400_000;
 
-const DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp|svg\+xml)(;base64)?,/i;
-const HTTP_URL_PATTERN = /^https?:\/\/.+/i;
+const DATA_URL_PATTERN = /^data:image\/(jpeg|png|webp)(;base64)?,/i;
+const HTTPS_URL_PATTERN = /^https:\/\/.+/i;
 
 export function validateAvatarValue(avatar: unknown): string {
   if (typeof avatar !== 'string' || avatar.trim().length === 0) {
@@ -13,7 +13,7 @@ export function validateAvatarValue(avatar: unknown): string {
     throw new Error('头像数据过大');
   }
 
-  if (HTTP_URL_PATTERN.test(trimmed)) {
+  if (HTTPS_URL_PATTERN.test(trimmed)) {
     return trimmed;
   }
 

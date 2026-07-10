@@ -4,6 +4,11 @@ type GitHubDeployment = {
   id: number;
   sha: string;
   created_at: string;
+  creator?: {
+    login?: string;
+  } | null;
+  description?: string | null;
+  payload?: unknown;
 };
 
 type GitHubDeploymentStatus = {
@@ -52,13 +57,32 @@ async function latestStatus(
   return statuses[0] ?? null;
 }
 
-async function productionState(env: Bindings, sha: string): Promise<string | null> {
+function isConsolePromotion(deployment: GitHubDeployment, grayDeploymentId: number): boolean {
+  if (
+    deployment.creator?.login !== 'github-actions[bot]' ||
+    !deployment.description?.startsWith('Approved through LA deploy console by ')
+  ) {
+    return false;
+  }
+  if (!deployment.payload || typeof deployment.payload !== 'object') return false;
+  return (
+    'gray_deployment_id' in deployment.payload &&
+    deployment.payload.gray_deployment_id === grayDeploymentId
+  );
+}
+
+async function productionState(
+  env: Bindings,
+  sha: string,
+  grayDeploymentId: number,
+): Promise<string | null> {
   const deployments = await githubRequest<GitHubDeployment[]>(
     env,
     `${repositoryPath(env)}/deployments?environment=production&sha=${encodeURIComponent(sha)}&per_page=10`,
   );
   let activeState: string | null = null;
   for (const deployment of deployments) {
+    if (!isConsolePromotion(deployment, grayDeploymentId)) continue;
     const state = (await latestStatus(env, deployment.id))?.state;
     if (state === 'success') return state;
     if (state === 'pending' || state === 'in_progress') activeState = state;
@@ -77,7 +101,7 @@ export async function getLatestGrayDeployment(
   if (!deployment) return null;
 
   const status = await latestStatus(env, deployment.id);
-  const promotionState = await productionState(env, deployment.sha);
+  const promotionState = await productionState(env, deployment.sha, deployment.id);
   return {
     id: deployment.id,
     sha: deployment.sha,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import rehypeSanitize from 'rehype-sanitize';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import Cropper from 'react-easy-crop';
 import type { Area, Point } from 'react-easy-crop';
@@ -135,7 +135,7 @@ function textToTags(value: string): string[] {
   return [...new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean))].slice(0, 8);
 }
 
-function Nav({ user, onLogout }: { user?: User; onLogout?: () => void }) {
+function Nav({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<void> }) {
   return (
     <nav className="profile-nav">
       <a className="profile-brand" href="/">
@@ -167,7 +167,7 @@ function LoginPrompt({ title = '请先登录' }: { title?: string }) {
   );
 }
 
-function MemberRequiredPrompt({ user, onLogout }: { user?: User; onLogout?: () => void }) {
+function MemberRequiredPrompt({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<void> }) {
   return (
     <div className="profile-page">
       <Nav user={user} onLogout={onLogout} />
@@ -450,11 +450,26 @@ function PublicProfilePage({ username, prefix, currentUser }: { username: string
   );
 }
 
+const MARKDOWN_SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    href: ['http', 'https', 'mailto'],
+    src: ['http', 'https'],
+  },
+  tagNames: (defaultSchema.tagNames ?? []).filter((tag) => tag !== 'iframe' && tag !== 'script'),
+  attributes: {
+    ...defaultSchema.attributes,
+    a: [...(defaultSchema.attributes?.a ?? []), 'target', 'rel'],
+    img: ['src', 'alt', 'title'],
+  },
+};
+
 function renderArticleContent(content: string) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeSanitize]}
+      rehypePlugins={[[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]}
       components={{
         a({ href, children, node: _node, ...props }) {
           const isExternal = Boolean(href && /^https?:\/\//i.test(href));
@@ -463,7 +478,7 @@ function renderArticleContent(content: string) {
               {...props}
               href={href}
               target={isExternal ? '_blank' : undefined}
-              rel={isExternal ? 'noreferrer' : undefined}
+              rel={isExternal ? 'noopener noreferrer' : undefined}
             >
               {children}
             </a>
@@ -517,7 +532,7 @@ function BlogDetailPage({ username, blogNumber, prefix }: { username: string; bl
 
 function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   user: User;
-  logout: () => void;
+  logout: () => void | Promise<void>;
   updateAvatar: (avatarUrl: string) => Promise<void>;
   updateProfile: (profile: ProfileUpdateInput) => Promise<void>;
 }) {

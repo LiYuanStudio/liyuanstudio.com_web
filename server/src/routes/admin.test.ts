@@ -18,7 +18,8 @@ async function makeApp() {
   vi.stubEnv('JWT_SECRET', JWT_SECRET);
   vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
   vi.stubEnv('APP_URL', 'https://liyuanstudio.com');
-  vi.stubEnv('ADMIN_EMAILS', 'la@liyuanstudio.com');
+  vi.stubEnv('admin_emails', 'la@liyuanstudio.com');
+  delete process.env.ADMIN_EMAILS;
   const { createApp } = await import('../app.js');
   return createApp('/api');
 }
@@ -226,7 +227,7 @@ describe('admin routes', () => {
       expect(await res.json()).toEqual(expect.objectContaining({ error: '只能修改用户角色' }));
     });
 
-    it('prevents demoting ADMIN_EMAILS users', async () => {
+    it('prevents demoting admin_emails users', async () => {
       const app = await makeApp();
       mockUserModel.findById
         .mockResolvedValueOnce(adminAuthDoc() as never)
@@ -298,7 +299,7 @@ describe('admin routes', () => {
       expect(mockUserModel.findByIdAndDelete).not.toHaveBeenCalled();
     });
 
-    it('prevents deleting ADMIN_EMAILS users', async () => {
+    it('prevents deleting admin_emails users', async () => {
       const app = await makeApp();
       mockUserModel.findById
         .mockResolvedValueOnce(adminAuthDoc() as never)
