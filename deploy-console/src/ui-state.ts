@@ -46,6 +46,10 @@ export function isPartialPromotion(description: string | null | undefined): bool
   return typeof description === 'string' && /\bpartial:/i.test(description);
 }
 
+export function isCompensatedPromotion(description: string | null | undefined): boolean {
+  return typeof description === 'string' && /\bcompensated:/i.test(description);
+}
+
 export function deriveDeploymentView(
   deployment: DeploymentStatus,
   submitting: boolean,
@@ -68,14 +72,15 @@ export function deriveDeploymentView(
   const crossCandidate = Boolean(
     lastPromotion && deploymentKey(lastPromotion) !== currentKey,
   );
+  const description = deployment.promotionDescription ?? lastPromotion?.description;
+  const compensated = isCompensatedPromotion(description);
+  const partial = !compensated && isPartialPromotion(description);
   const lastFailed = Boolean(
     lastPromotion && (
       isFailedPromotionState(lastPromotion.state) ||
-      isPartialPromotion(lastPromotion.description)
+      isPartialPromotion(lastPromotion.description) ||
+      isCompensatedPromotion(lastPromotion.description)
     ),
-  );
-  const partial = isPartialPromotion(
-    deployment.promotionDescription ?? lastPromotion?.description,
   );
 
   let message = deployment.state === 'success'
@@ -90,13 +95,17 @@ export function deriveDeploymentView(
     const shortSha = lastPromotion.sha.slice(0, 7);
     const when = new Date(lastPromotion.dispatchedAt).toLocaleString('zh-CN');
     if (crossCandidate) {
-      message = partial
-        ? `上一候选 ${shortSha} 于 ${when} 发布部分失败且未完全回滚；当前显示最新灰度。`
-        : `上一候选 ${shortSha} 于 ${when} 全量发布失败或已取消；当前显示最新灰度。`;
+      message = compensated
+        ? `上一候选 ${shortSha} 于 ${when} 发布部分失败，已自动回滚成功；当前显示最新灰度。`
+        : partial
+          ? `上一候选 ${shortSha} 于 ${when} 发布部分失败且未完全回滚；当前显示最新灰度。`
+          : `上一候选 ${shortSha} 于 ${when} 全量发布失败或已取消；当前显示最新灰度。`;
     } else if (!promoting) {
-      message = partial
-        ? `该版本全量发布部分失败（${lastPromotion.description}）。请按文档执行人工恢复后再重试。`
-        : '全量发布失败或已取消，可在修复后重新提交。';
+      message = compensated
+        ? `该版本全量发布部分失败，已自动回滚到上一成功版本（${lastPromotion.description}）。可在修复后重新提交。`
+        : partial
+          ? `该版本全量发布部分失败（${lastPromotion.description}）。请按文档执行人工恢复后再重试。`
+          : '全量发布失败或已取消，可在修复后重新提交。';
     }
   }
 

@@ -66,12 +66,20 @@ npm run deploy --workspace=deploy-console
 
 合入 `deploy-console/**`、根目录 `package.json` / `package-lock.json`，或手动触发 GitHub Actions **Deploy deploy-console Worker** 都会执行 `wrangler deploy`。该日常发布只更新 Worker 脚本和变量，需要 **Workers Scripts → Edit**；不要把 custom domains 重新加入 `wrangler.jsonc`，否则 Wrangler 会在每次发布时调用 Zone routes API。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
 
-`SESSION_SECRET` 至少 32 个随机字符。`GITHUB_TOKEN` 使用 fine-grained token，仅授权当前仓库，并只开放读取 deployments/contents 和触发 Actions 所需的最小权限。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
+`SESSION_SECRET` 至少 32 个随机字符。`GITHUB_TOKEN` 使用 **fine-grained personal access token**，仅授权当前仓库，并只开放下列最小权限：
+
+| Permission | Access | 用途 |
+|---|---|---|
+| **Actions** | Read and write | 触发 `promote.yml`（`workflow_dispatch`） |
+| **Deployments** | Read-only | 读取 `gray` / `production` deployment 与 status |
+| **Contents** | Read-only | 解析工作流文件路径（dispatch 所需） |
+
+不要授予 Issues、Pull requests、Administration 等无关权限。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
 
 ## 权限和请求流程
 
 - 控制台把邮箱和密码直接转发给生产 LA `/auth/login`。启用双重验证的账号会进入完整的邮箱验证码或恢复码流程，并可重新发送验证码或取消；待验证 token 只保存在短期加密 `HttpOnly` Cookie 中。验证成功后仍会调用 `/auth/me` 确认管理员角色。
-- 只有 API 返回 `role=admin` 才会建立 15 分钟的加密、`HttpOnly`、`Secure`、`SameSite=Strict` 会话。
+- 只有 API 返回 `role=admin` 才会建立 15 分钟的加密、`HttpOnly`、`Secure`、`SameSite=Strict` 会话；控制台页面、状态轮询、灰度网关与全量发布等认证活动会滑动续期。
 - 生产 LA API（`LA_API_BASE_URL`）应公开可达；控制台登录不使用 `VERCEL_PROTECTION_BYPASS`。该 bypass 只用于灰度 Preview 网关代理。官网能登录但控制台不能，通常是账号不是 `admin`（检查 Vercel Production 的 `admin_emails`），而不是 Production Deployment Protection。
 - 登录失败会区分提示：邮箱/密码错误、需要 LA 管理员账号、或上游服务不可用；不再混成同一条文案。
 - 必须打开规范控制台地址登录（例如 `https://deploy.liyuanstudio.com`）。灰度域名 `gray.liyuanstudio.com` 不承载登录表单；未登录访问只会引导回控制台。
@@ -106,7 +114,7 @@ npm run deploy --workspace=deploy-console
    - `compensated: vercel=success; cloudflare=failure; rollback_vercel=success; ...`（部分失败且补偿成功）
    - `partial: vercel=success; cloudflare=failure; rollback_vercel=failure; ...`（部分失败且补偿失败，需人工处理）
 
-控制台会把带 `partial:` 前缀的失败视为显式部分失败状态，并在会话中保留最近一次 dispatch 的候选与时间；即使随后出现更新的灰度候选，仍继续展示上一发布的 failure / cancelled / partial 结果。
+控制台会把带 `compensated:` 前缀的结果视为“部分失败但已自动回滚成功”，并提示可在修复后重新提交；把带 `partial:` 前缀且补偿失败的结果视为需人工恢复。会话中保留最近一次 dispatch 的候选与时间；即使随后出现更新的灰度候选，仍继续展示上一发布的 failure / cancelled / compensated / partial 结果。
 
 ### 人工恢复（补偿失败时）
 
@@ -124,14 +132,25 @@ npm run deploy --workspace=deploy-console
 
 ```bash
 cp deploy-console/.dev.vars.example deploy-console/.dev.vars
-npm run dev --workspace=deploy-console
 ```
+
+本地 `wrangler dev` 默认监听 `http://127.0.0.1:8787`。控制台按 `Host` 与 `CONSOLE_ORIGIN` / `PREVIEW_ORIGIN` 分流，因此本地必须把这两个 Origin 指到同一主机，并清空生产用的 `COOKIE_DOMAIN`（否则 `__Host-` / 父域 Cookie 在 localhost 不可用）。可在 `deploy-console/wrangler.jsonc` 临时覆盖，或用 CLI 传入：
+
+```bash
+npm run dev --workspace=deploy-console -- \
+  --var CONSOLE_ORIGIN:http://127.0.0.1:8787 \
+  --var PREVIEW_ORIGIN:http://127.0.0.1:8787 \
+  --var COOKIE_DOMAIN:
+```
+
+用浏览器打开 `http://127.0.0.1:8787/` 访问控制台。登录表单校验 `Origin` / `Sec-Fetch-Site`，请从该地址直接打开页面，不要用 `file://` 或跨源代理提交。灰度网关路径与控制台共用同一本地端口时，未登录访问会按 Preview 逻辑返回引导页；生产双域名分流只在绑定 custom domain 后生效。
 
 常用检查：
 
 ```bash
 npm run test:deploy-console
 npm run build:deploy-console
+npm run test:workflows
 npm test
 npm run check:secrets
 ```

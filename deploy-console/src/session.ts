@@ -146,6 +146,14 @@ export function createSession(token: string, user: Session['user']): Session {
   };
 }
 
+/** Extend the absolute session expiry on authenticated activity (sliding TTL). */
+export function renewSession(session: Session): Session {
+  return {
+    ...session,
+    expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000,
+  };
+}
+
 export async function createLoginFormToken(secret: string): Promise<string> {
   const expiresAt = Date.now() + LOGIN_FORM_TTL_SECONDS * 1000;
   const nonce = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)));

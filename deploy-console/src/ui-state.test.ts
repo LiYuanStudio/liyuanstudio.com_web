@@ -3,6 +3,7 @@ import {
   deploymentKey,
   deriveDeploymentView,
   isActivePromotionState,
+  isCompensatedPromotion,
   isFailedPromotionState,
   isPartialPromotion,
   pollErrorMessage,
@@ -78,7 +79,7 @@ describe('deploy console UI state', () => {
   it('surfaces partial promotion failures from deployment descriptions', () => {
     const lastPromotion: LastPromotionStatus = {
       deploymentId: 42,
-      sha: 'abc123ffffffffffffffffffffffffffffffff',
+      sha: 'abc123',
       dispatchedAt: Date.parse('2026-07-09T11:00:00Z'),
       state: 'failure',
       description: 'partial: vercel=success; cloudflare=failure; rollback_vercel=failure',
@@ -86,6 +87,42 @@ describe('deploy console UI state', () => {
     expect(isPartialPromotion(lastPromotion.description)).toBe(true);
     const view = deriveDeploymentView(ready, false, null, lastPromotion);
     expect(view.message).toContain('部分失败');
+    expect(view.message).toContain('人工恢复');
+  });
+
+  it('surfaces compensated promotions with clear rollback-success copy', () => {
+    const description =
+      'compensated: vercel=success; cloudflare=failure; rollback_vercel=success; rollback_cloudflare=skipped';
+    expect(isCompensatedPromotion(description)).toBe(true);
+    expect(isPartialPromotion(description)).toBe(false);
+
+    const sameCandidate = deriveDeploymentView(ready, false, null, {
+      deploymentId: 42,
+      sha: 'abc123',
+      dispatchedAt: Date.parse('2026-07-09T11:00:00Z'),
+      state: 'failure',
+      description,
+    });
+    expect(sameCandidate.message).toContain('已自动回滚到上一成功版本');
+    expect(sameCandidate.message).not.toContain('人工恢复');
+
+    const newer: DeploymentStatus = {
+      id: 43,
+      sha: 'def456',
+      state: 'success',
+      promotionState: null,
+      promoted: false,
+      previewUrl: 'https://gray.example.com/',
+    };
+    const cross = deriveDeploymentView(newer, false, null, {
+      deploymentId: 42,
+      sha: 'abc123ffffffffffffffffffffffffffffffff',
+      dispatchedAt: Date.parse('2026-07-09T11:00:00Z'),
+      state: 'failure',
+      description,
+    });
+    expect(cross.message).toContain('已自动回滚成功');
+    expect(cross.message).toContain('当前显示最新灰度');
   });
 
   it('rejects stale poll responses and preserves the last good state message', () => {

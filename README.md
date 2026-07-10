@@ -67,7 +67,9 @@ npm run dev
 | `npm run build:api` | 编译后端 TypeScript |
 | `npm run build:deploy-console` | 检查独立灰度发布控制台 |
 | `npm run test:deploy-console` | 测试灰度发布控制台 |
+| `npm run test:workflows` | 校验发布相关 GitHub Actions 工作流结构 |
 | `npm run seed:api` | 向后端数据库写入示例新闻/博客数据 |
+| `npm run promote-admins:api` | 按邮箱将用户提升为管理员（见下方「管理员」） |
 | `npm run check:secrets` | 扫描仓库中可能的密钥泄漏 |
 
 ## 账号系统
@@ -83,7 +85,7 @@ npm run dev
 
 ### 管理员
 
-第一位管理员需要在 MongoDB Atlas 中手动把对应用户文档的 `role` 改为 `admin`。前端不会决定用户是否为管理员；管理员权限以后端 JWT 和 `role` 为准。
+第一位管理员可用 `npm run promote-admins:api -- you@example.com` 按邮箱提升（也可在 MongoDB Atlas 中手动把对应用户文档的 `role` 改为 `admin`）。生产环境还可配置 `admin_emails`，使列表中的邮箱在登录/注册时自动获得 `admin` 角色。前端不会决定用户是否为管理员；管理员权限以后端 JWT 和 `role` 为准。灰度发布控制台仅接受 `role=admin` 的 LA 账号，配置见 [`docs/gray-deployment.md`](docs/gray-deployment.md)。
 
 ## 部署
 

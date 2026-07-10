@@ -7,6 +7,7 @@ import {
   readSession,
   removePendingChallenge,
   removeSession,
+  renewSession,
   verifyLoginFormToken,
   writePendingChallenge,
   writeSession,
@@ -258,7 +259,17 @@ async function requireRevalidatedSession(
     removeSession(c);
     return c.json({ error: 'LA 管理员会话已失效', requestId: getRequestId(c) }, 401);
   }
-  return { session, admin: validation.user };
+  const renewed = renewSession({ ...session, user: validation.user });
+  await writeSession(c, renewed);
+  return { session: renewed, admin: validation.user };
+}
+
+function jsonError(
+  c: AppContext,
+  error: string,
+  status: 400 | 401 | 403 | 409 | 502,
+) {
+  return c.json({ error, requestId: getRequestId(c) }, status);
 }
 
 export function validVercelPreview(deployment: GrayDeployment): URL | null {
@@ -316,6 +327,7 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   if (validation.status === 'unavailable') {
     return gatePreviewResponse(c, 'LA 身份服务暂时不可用。', 502, false);
   }
+  await writeSession(c, renewSession({ ...session, user: validation.user }));
 
   const deployment = await getLatestGrayDeployment(c.env);
   const upstreamOrigin = deployment && validVercelPreview(deployment);
@@ -416,12 +428,15 @@ app.get('/app.js', (c) => c.body(applicationScript, 200, { 'Content-Type': 'text
 app.get('/', async (c) => {
   const session = await readSession(c);
   if (!session && await readPendingChallenge(c)) return c.redirect('/auth/2fa');
+  if (session) {
+    const renewed = renewSession(session);
+    await writeSession(c, renewed);
+    return c.html(dashboardPage(renewed.user, renewed.csrf));
+  }
   return c.html(
-    session
-      ? dashboardPage(session.user, session.csrf)
-      : loginPage(undefined, {
-          formToken: await createLoginFormToken(c.env.SESSION_SECRET),
-        }),
+    loginPage(undefined, {
+      formToken: await createLoginFormToken(c.env.SESSION_SECRET),
+    }),
   );
 });
 
@@ -594,9 +609,9 @@ app.get('/api/deployment', async (c) => {
 
 app.post('/api/promote', async (c) => {
   const session = await readSession(c);
-  if (!session) return c.json({ error: '未登录' }, 401);
+  if (!session) return jsonError(c, '未登录', 401);
   if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
-    return c.json({ error: '请求校验失败' }, 403);
+    return jsonError(c, '请求校验失败', 403);
   }
 
   const body = await c.req.json().catch(() => null) as {
@@ -604,16 +619,16 @@ app.post('/api/promote', async (c) => {
     sha?: unknown;
   } | null;
   if (!body || typeof body.deploymentId !== 'number' || typeof body.sha !== 'string') {
-    return c.json({ error: '部署参数无效' }, 400);
+    return jsonError(c, '部署参数无效', 400);
   }
 
   const validation = await revalidateAdmin(c.env, session);
   if (validation.status === 'unavailable') {
-    return c.json({ error: 'LA 身份服务暂时不可用', requestId: getRequestId(c) }, 502);
+    return jsonError(c, 'LA 身份服务暂时不可用', 502);
   }
   if (validation.status === 'invalid') {
     removeSession(c);
-    return c.json({ error: 'LA 管理员权限已失效', requestId: getRequestId(c) }, 401);
+    return jsonError(c, 'LA 管理员权限已失效', 401);
   }
   const admin = validation.user;
 
@@ -625,17 +640,17 @@ app.post('/api/promote', async (c) => {
     latest.state !== 'success' ||
     !validVercelPreview(latest)
   ) {
-    return c.json({ error: '只能发布最新且构建成功的灰度版本' }, 409);
+    return jsonError(c, '只能发布最新且构建成功的灰度版本', 409);
   }
   if (latest.promoted) {
-    return c.json({ error: '该版本已经全量发布' }, 409);
+    return jsonError(c, '该版本已经全量发布', 409);
   }
   if (isActivePromotionState(latest.promotionState)) {
-    return c.json({ error: '该版本正在全量发布' }, 409);
+    return jsonError(c, '该版本正在全量发布', 409);
   }
 
   await dispatchPromotion(c.env, latest, admin);
-  await writeSession(c, {
+  await writeSession(c, renewSession({
     ...session,
     user: admin,
     lastDispatch: {
@@ -643,8 +658,8 @@ app.post('/api/promote', async (c) => {
       sha: latest.sha,
       dispatchedAt: Date.now(),
     },
-  });
-  return c.json({ ok: true }, 202);
+  }));
+  return c.json({ ok: true, requestId: getRequestId(c) }, 202);
 });
 
 app.onError((error, c) => {

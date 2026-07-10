@@ -25,6 +25,7 @@ function stepBody(source: string, name: string): string {
 describe('release workflow structure', () => {
   const deploy = readWorkflow('deploy.yml');
   const promote = readWorkflow('promote.yml');
+  const deployConsole = readWorkflow('deploy-console.yml');
 
   it('uses distinct concurrency groups for gray builds and production promotes', () => {
     expect(concurrencyGroup(deploy)).toBe('gray-release');
@@ -59,5 +60,28 @@ describe('release workflow structure', () => {
     const cloudflareStep = stepBody(promote, 'Deploy frontend to Cloudflare Pages production');
     expect(vercelStep).toMatch(/continue-on-error:\s*true/u);
     expect(cloudflareStep).toMatch(/continue-on-error:\s*true/u);
+  });
+
+  it('pins Vercel CLI through a shared VERCEL_CLI_VERSION env', () => {
+    expect(deploy).toMatch(/VERCEL_CLI_VERSION:\s*50\.28\.0/u);
+    expect(promote).toMatch(/VERCEL_CLI_VERSION:\s*50\.28\.0/u);
+    expect(deploy).toMatch(/vercel@\$\{VERCEL_CLI_VERSION\}/u);
+    expect(promote).toMatch(/vercel@\$\{VERCEL_CLI_VERSION\}/u);
+    expect(deploy).not.toMatch(/vercel@50\.28\.0/u);
+    expect(promote).not.toMatch(/vercel@50\.28\.0/u);
+  });
+
+  it('scans secrets before deploying the deploy-console worker', () => {
+    expect(concurrencyGroup(deployConsole)).toBe('deploy-console-worker');
+    expect(deployConsole).toContain('npm run check:secrets');
+    expect(deployConsole).toContain('npm run build:deploy-console');
+    expect(deployConsole).toContain('npm run test:deploy-console');
+    expect(deployConsole).toContain('npm run deploy --workspace=deploy-console');
+    const secretsStep = stepBody(deployConsole, 'Scan for secrets');
+    const typecheckStep = stepBody(deployConsole, 'Typecheck and test');
+    expect(secretsStep).toContain('npm run check:secrets');
+    expect(typecheckStep).toContain('npm run build:deploy-console');
+    expect(deployConsole.indexOf('Scan for secrets'))
+      .toBeLessThan(deployConsole.indexOf('Typecheck and test'));
   });
 });

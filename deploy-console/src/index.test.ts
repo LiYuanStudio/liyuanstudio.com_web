@@ -837,7 +837,10 @@ describe('deploy console', () => {
       env,
     );
     expect(promote.status).toBe(409);
-    await expect(promote.json()).resolves.toEqual({ error: '该版本正在全量发布' });
+    await expect(promote.json()).resolves.toEqual({
+      error: '该版本正在全量发布',
+      requestId: expect.any(String),
+    });
   });
 
   it('keeps showing a previous candidate promote failure after a newer gray appears', async () => {
@@ -917,6 +920,39 @@ describe('deploy console', () => {
       env,
     );
     expect(response.status).toBe(401);
+  });
+
+  it('slides the session expiry on authenticated activity', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-09T10:00:00Z'));
+    installFetch();
+    const cookie = await login();
+    vi.advanceTimersByTime(10 * 60 * 1000);
+
+    const renewed = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    expect(renewed.status).toBe(200);
+    const renewedCookie = cookieFrom(renewed);
+    expect(renewedCookie).toContain('liyuan_deploy=');
+
+    vi.advanceTimersByTime(10 * 60 * 1000);
+    const stillValid = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: renewedCookie } },
+      env,
+    );
+    expect(stillValid.status).toBe(200);
+
+    vi.advanceTimersByTime(16 * 60 * 1000);
+    const expired = await app.request(
+      'https://console.example.com/api/deployment',
+      { headers: { Cookie: cookieFrom(stillValid) || renewedCookie } },
+      env,
+    );
+    expect(expired.status).toBe(401);
   });
 
   it('revalidates deployment reads and preview access, clearing revoked sessions', async () => {
@@ -1121,8 +1157,60 @@ describe('deploy console', () => {
     );
 
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({ error: '该版本正在全量发布' });
+    await expect(response.json()).resolves.toEqual({
+      error: '该版本正在全量发布',
+      requestId: expect.any(String),
+    });
     expect(requests.some(({ url }) => url.pathname.endsWith('/dispatches'))).toBe(false);
+  });
+
+  it('includes requestId on promote JSON errors', async () => {
+    installFetch();
+    const cookie = await login();
+    const missingCsrf = await app.request(
+      'https://console.example.com/api/promote',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: cookie,
+          'Content-Type': 'application/json',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: JSON.stringify({ deploymentId: 42, sha: 'abc123' }),
+      },
+      env,
+    );
+    expect(missingCsrf.status).toBe(403);
+    await expect(missingCsrf.json()).resolves.toEqual({
+      error: '请求校验失败',
+      requestId: expect.any(String),
+    });
+
+    const dashboard = await app.request(
+      'https://console.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+    const invalidBody = await app.request(
+      'https://console.example.com/api/promote',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: cookieFrom(dashboard) || cookie,
+          'Content-Type': 'application/json',
+          Origin: env.CONSOLE_ORIGIN,
+          'X-CSRF-Token': csrf,
+        },
+        body: JSON.stringify({ deploymentId: 'bad', sha: 1 }),
+      },
+      env,
+    );
+    expect(invalidBody.status).toBe(400);
+    await expect(invalidBody.json()).resolves.toEqual({
+      error: '部署参数无效',
+      requestId: expect.any(String),
+    });
   });
 
   it('proxies a protected preview without forwarding sessions or leaking bypass headers', async () => {
