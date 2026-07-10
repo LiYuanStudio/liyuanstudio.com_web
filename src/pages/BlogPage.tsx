@@ -21,6 +21,10 @@ function canWriteBlog(user?: User): boolean {
   return user?.role === 'member' || user?.role === 'admin';
 }
 
+function isValidPublicUsername(username: string | undefined): username is string {
+  return typeof username === 'string' && /^[a-zA-Z0-9_-]{2,32}$/.test(username);
+}
+
 function formatDate(post: BlogPost): string {
   const value = post.publishedAt || post.createdAt || post.updatedAt;
   if (!value) return '未发布';
@@ -147,6 +151,15 @@ function ReleaseGuard({ user }: { user?: User }) {
       </section>
     );
   }
+  if (!isValidPublicUsername(user.username)) {
+    return (
+      <section className="blog-release-card blog-release-prompt">
+        <h1>个人主页尚未初始化</h1>
+        <p>请先完成账号资料初始化，再管理文章。</p>
+        <a className="blog-page-button" href="/profile/">返回账号设置</a>
+      </section>
+    );
+  }
   return null;
 }
 
@@ -232,7 +245,7 @@ function BlogRelease() {
   }
 
   const guard = <ReleaseGuard user={user} />;
-  if (!user || !canWriteBlog(user)) return guard;
+  if (!user || !canWriteBlog(user) || !isValidPublicUsername(user.username)) return guard;
 
   return (
     <section className="blog-release-card" aria-labelledby="blog-release-title">

@@ -550,6 +550,155 @@ describe('ProfilePage', () => {
     expect(screen.queryByRole('heading', { name: '写文章' })).not.toBeInTheDocument();
   });
 
+  it('switches to update after the first create save so consecutive saves do not recreate', async () => {
+    localStorage.setItem('liyuan_auth_token', 'member-token');
+    const created = {
+      ...MARKDOWN_POST,
+      _id: 'new-post-id',
+      title: 'First draft',
+      content: 'Body',
+      status: 'draft' as const,
+    };
+    const fetchMock = vi.fn().mockImplementation(async (url: string, options?: RequestInit) => {
+      const href = url.toString();
+      if (href.includes('/auth/me')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog') && options?.method === 'POST') {
+        return { ok: true, status: 200, json: async () => created } as Response;
+      }
+      if (href.includes('/blog/new-post-id') && options?.method === 'PATCH') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...created, title: 'Updated draft' }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${href} ${options?.method ?? 'GET'}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPage('/me/posts/new/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: '写文章' });
+
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: 'First draft' } });
+    fireEvent.change(screen.getByLabelText('正文'), { target: { value: 'Body' } });
+    await user.click(screen.getByRole('button', { name: '保存草稿' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('草稿已保存');
+    });
+    expect(window.location.pathname).toBe('/me/posts/new-post-id/edit/');
+    expect(screen.getByRole('heading', { name: '编辑文章' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('标题'), { target: { value: 'Updated draft' } });
+    await user.click(screen.getByRole('button', { name: '保存草稿' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/blog/new-post-id'),
+        expect.objectContaining({ method: 'PATCH' }),
+      );
+    });
+    const createCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) => url.toString().endsWith('/blog') && (opts as RequestInit | undefined)?.method === 'POST',
+    );
+    expect(createCalls).toHaveLength(1);
+  });
+
+  it('re-syncs settings fields when AuthContext user updates without overwriting a dirty edit', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    const mockGetCroppedImg = vi.mocked(getCroppedImg);
+    mockGetCroppedImg.mockResolvedValue('data:image/jpeg;base64,cropped');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/me/avatar')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            user: {
+              ...CURRENT_USER,
+              displayName: 'Server Name',
+              bio: 'Server bio',
+              avatar: 'data:image/jpeg;base64,cropped',
+            },
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: CURRENT_USER }),
+      } as Response;
+    }));
+
+    renderPage('/profile/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'LA' });
+
+    fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'Local Draft' } });
+    expect(screen.getByLabelText('显示名称')).toHaveValue('Local Draft');
+
+    uploadFile(
+      screen.getByTestId('avatar-input'),
+      new File(['dummy'], 'avatar.png', { type: 'image/png' }),
+    );
+    await screen.findByRole('dialog', { name: '截取头像' });
+    await user.click(screen.getByRole('button', { name: '确认' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-message')).toHaveTextContent('头像已更新。');
+    });
+    expect(screen.getByLabelText('显示名称')).toHaveValue('Local Draft');
+  });
+
+  it('re-syncs settings fields from AuthContext when the form is not dirty', async () => {
+    localStorage.setItem('liyuan_auth_token', 'token');
+    const mockGetCroppedImg = vi.mocked(getCroppedImg);
+    mockGetCroppedImg.mockResolvedValue('data:image/jpeg;base64,cropped');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/me/avatar')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            user: {
+              ...CURRENT_USER,
+              displayName: 'Server Name',
+              bio: 'Server bio',
+              avatar: 'data:image/jpeg;base64,cropped',
+            },
+          }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: CURRENT_USER }),
+      } as Response;
+    }));
+
+    renderPage('/profile/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'LA' });
+
+    uploadFile(
+      screen.getByTestId('avatar-input'),
+      new File(['dummy'], 'avatar.png', { type: 'image/png' }),
+    );
+    await screen.findByRole('dialog', { name: '截取头像' });
+    await user.click(screen.getByRole('button', { name: '确认' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-message')).toHaveTextContent('头像已更新。');
+    });
+    expect(screen.getByLabelText('显示名称')).toHaveValue('Server Name');
+    expect(screen.getByLabelText('一句话介绍')).toHaveValue('Server bio');
+  });
+
   it('confirms article deletion and reports a delete failure', async () => {
     localStorage.setItem('liyuan_auth_token', 'member-token');
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: RequestInit) => {

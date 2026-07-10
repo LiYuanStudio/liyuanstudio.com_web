@@ -225,6 +225,58 @@ describe('AdminPage', () => {
     });
   });
 
+  it('rolls the role dropdown back when save fails', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    mockFetch({
+      '/auth/me': () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: ADMIN_USER }),
+      }),
+      '/news': () => ({
+        ok: true,
+        status: 200,
+        json: async () => [],
+      }),
+      '/admin/users': () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          users: [{ id: '1', email: 'a@b.com', displayName: 'Alice', role: 'tourist', emailVerified: true }],
+        }),
+      }),
+      '/admin/users/1': () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: '角色保存失败' }),
+      }),
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: '账号管理' })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('tab', { name: '账号管理' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    const roleSelect = screen.getByRole('combobox');
+    expect(roleSelect).toHaveValue('tourist');
+    await user.selectOptions(roleSelect, 'admin');
+    expect(roleSelect).toHaveValue('admin');
+
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('角色保存失败');
+    });
+    expect(screen.getByRole('combobox')).toHaveValue('tourist');
+  });
+
   it('deletes a user after confirmation', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({

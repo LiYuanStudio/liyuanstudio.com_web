@@ -181,6 +181,18 @@ describe('BlogPage release guards', () => {
     });
     expect(screen.getByText('游客账号不能发布博客，请联系管理员升级为成员。')).toBeInTheDocument();
   });
+
+  it('blocks members without a valid username from publishing', async () => {
+    await signIn({ ...MEMBER_USER, username: undefined });
+    renderBlogPage('/blog/release/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '个人主页尚未初始化' })).toBeInTheDocument();
+    });
+    expect(screen.getByText('请先完成账号资料初始化，再管理文章。')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '返回账号设置' })).toHaveAttribute('href', '/profile/');
+    expect(screen.queryByRole('heading', { name: '发布博客' })).not.toBeInTheDocument();
+  });
 });
 
 describe('BlogPage release form', () => {

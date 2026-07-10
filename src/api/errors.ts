@@ -2,6 +2,13 @@ const GENERIC_ERROR_MESSAGE = '请求失败，请稍后重试';
 const NETWORK_ERROR_MESSAGE = '网络连接异常，请检查网络后重试';
 export const AUTH_UNAUTHORIZED_EVENT = 'liyuan:auth-unauthorized';
 
+/** Server messages that mean the session/token itself is invalid (not business 401s). */
+const AUTH_TOKEN_INVALID_MESSAGES = new Set([
+  '未授权，请先登录',
+  '未授权',
+  '登录已过期',
+]);
+
 type ErrorResponse = {
   error?: unknown;
   requestId?: unknown;
@@ -26,6 +33,10 @@ function getHeaderRequestId(res: Response): string | undefined {
   return res.headers?.get?.('X-Request-Id') ?? undefined;
 }
 
+export function isInvalidAuthTokenError(error: string): boolean {
+  return AUTH_TOKEN_INVALID_MESSAGES.has(error.trim());
+}
+
 export async function parseApiErrorResponse(res: Response): Promise<ApiError> {
   const body = await res.json().catch((): ErrorResponse => ({}));
   const error = typeof body.error === 'string' && body.error.trim().length > 0
@@ -35,7 +46,11 @@ export async function parseApiErrorResponse(res: Response): Promise<ApiError> {
     ? body.requestId
     : getHeaderRequestId(res);
 
-  if (res.status === 401 && typeof window !== 'undefined') {
+  if (
+    res.status === 401
+    && typeof window !== 'undefined'
+    && isInvalidAuthTokenError(error)
+  ) {
     window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
   }
   return new ApiError(appendRequestId(error, requestId), res.status, requestId);

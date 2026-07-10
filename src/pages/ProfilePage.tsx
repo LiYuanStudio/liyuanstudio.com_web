@@ -260,9 +260,10 @@ function MyPostsPage() {
 }
 
 function BlogEditorPage({ id }: { id?: string }) {
-  const isEditing = Boolean(id);
+  const [postId, setPostId] = useState(id);
+  const isEditing = Boolean(postId);
   const [form, setForm] = useState<BlogPostInput>(EMPTY_BLOG_FORM);
-  const [loading, setLoading] = useState(isEditing);
+  const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -278,6 +279,7 @@ function BlogEditorPage({ id }: { id?: string }) {
           setError('文章不存在。');
           return;
         }
+        setPostId(post._id);
         setForm({
           title: post.title,
           slug: post.slug,
@@ -312,9 +314,10 @@ function BlogEditorPage({ id }: { id?: string }) {
     setMessage(null);
     const input = { ...form, status };
     try {
-      const saved = id ? await updateBlogPost(id, input) : await createBlogPost(input);
+      const saved = postId ? await updateBlogPost(postId, input) : await createBlogPost(input);
       setMessage(status === 'published' ? '文章已发布。' : '草稿已保存。');
-      if (!id && saved._id) {
+      if (!postId && saved._id) {
+        setPostId(saved._id);
         window.history.replaceState({}, '', `/me/posts/${saved._id}/edit/`);
       }
     } catch (err) {
@@ -565,6 +568,10 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cropDialogRef = useRef<HTMLDivElement>(null);
   const cropTriggerRef = useRef<HTMLElement | null>(null);
+  const lastSyncedRef = useRef({
+    displayName: user.displayName,
+    bio: user.bio ?? '',
+  });
   const [form, setForm] = useState<ProfileUpdateInput>({
     displayName: user.displayName,
     bio: user.bio ?? '',
@@ -582,6 +589,21 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   const handleCropComplete = useCallback((_: Area, pixels: Area) => {
     setCroppedAreaPixels(pixels);
   }, []);
+
+  useEffect(() => {
+    if (saving) return;
+    setForm((prev) => {
+      const synced = lastSyncedRef.current;
+      const isDirty = prev.displayName !== synced.displayName || prev.bio !== synced.bio;
+      if (isDirty) return prev;
+      const next = {
+        displayName: user.displayName,
+        bio: user.bio ?? '',
+      };
+      lastSyncedRef.current = next;
+      return next;
+    });
+  }, [user.displayName, user.bio, saving]);
 
   useEffect(() => {
     return () => {
@@ -679,11 +701,14 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
     setSaving(true);
     setMessage(null);
     setError(null);
+    const next = {
+      displayName: form.displayName.trim(),
+      bio: form.bio.trim(),
+    };
     try {
-      await updateProfile({
-        displayName: form.displayName.trim(),
-        bio: form.bio.trim(),
-      });
+      await updateProfile(next);
+      lastSyncedRef.current = next;
+      setForm(next);
       setMessage('个人主页已保存。');
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');

@@ -67,7 +67,9 @@ function UsersPanel() {
     try {
       const { user } = await updateUser(id, newRole);
       setUsers((prev) => prev.map((u) => (u.id === id ? user : u)));
+      setRoles((prev) => ({ ...prev, [id]: user.role }));
     } catch (err) {
+      setRoles((prev) => ({ ...prev, [id]: original.role }));
       setError(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSaving((prev) => ({ ...prev, [id]: false }));

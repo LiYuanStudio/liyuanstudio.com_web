@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   ApiError,
+  AUTH_UNAUTHORIZED_EVENT,
   createNetworkError,
   getErrorMessage,
+  isInvalidAuthTokenError,
   logApiError,
   parseApiErrorResponse,
 } from './errors.js';
@@ -50,6 +52,36 @@ describe('api errors', () => {
     const error = await parseApiErrorResponse(res);
     expect(error.message).toBe('请求失败，请稍后重试');
     expect(error.requestId).toBeUndefined();
+  });
+
+  it('dispatches auth unauthorized only for invalid-token 401s', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    const invalidTokenRes = {
+      status: 401,
+      headers: { get: () => null },
+      json: async () => ({ error: '未授权，请先登录' }),
+    } as unknown as Response;
+    await parseApiErrorResponse(invalidTokenRes);
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.any(Event));
+    expect((dispatchSpy.mock.calls[0]?.[0] as Event).type).toBe(AUTH_UNAUTHORIZED_EVENT);
+
+    dispatchSpy.mockClear();
+    const wrongPasswordRes = {
+      status: 401,
+      headers: { get: () => null },
+      json: async () => ({ error: '密码错误' }),
+    } as unknown as Response;
+    await parseApiErrorResponse(wrongPasswordRes);
+    expect(dispatchSpy).not.toHaveBeenCalled();
+  });
+
+  it('isInvalidAuthTokenError recognizes session failures only', () => {
+    expect(isInvalidAuthTokenError('未授权，请先登录')).toBe(true);
+    expect(isInvalidAuthTokenError('未授权')).toBe(true);
+    expect(isInvalidAuthTokenError('登录已过期')).toBe(true);
+    expect(isInvalidAuthTokenError('密码错误')).toBe(false);
+    expect(isInvalidAuthTokenError('邮箱或密码错误')).toBe(false);
   });
 
   it('createNetworkError returns a status-0 ApiError', () => {

@@ -170,7 +170,7 @@ describe('AuthProvider', () => {
     });
   });
 
-  it('clears an active session when an authenticated request returns 401', async () => {
+  it('clears an active session when an authenticated request returns an invalid-token 401', async () => {
     localStorage.setItem('liyuan_auth_token', 'expired-token');
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
       if (url.toString().includes('/auth/me/profile')) {
@@ -178,7 +178,7 @@ describe('AuthProvider', () => {
           ok: false,
           status: 401,
           headers: new Headers(),
-          json: async () => ({ error: '登录已过期' }),
+          json: async () => ({ error: '未授权，请先登录' }),
         } as Response;
       }
       return {
@@ -194,6 +194,60 @@ describe('AuthProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('unauthenticated')).toBeInTheDocument());
     expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
+  });
+
+  it('keeps the session when a business 401 like wrong password is returned', async () => {
+    localStorage.setItem('liyuan_auth_token', 'valid-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/auth/2fa/')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: new Headers(),
+          json: async () => ({ error: '密码错误' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: { id: '1', email: 'hello@example.com', displayName: 'Old Name', bio: 'Old bio' },
+        }),
+      } as Response;
+    }));
+
+    function TwoFactorConsumer() {
+      const { state, beginTwoFactorAction } = useAuth();
+      if (state.status !== 'authenticated') {
+        return <div data-testid="loading-or-out">{state.status}</div>;
+      }
+      return (
+        <div>
+          <span data-testid="email">{state.user.email}</span>
+          <button
+            type="button"
+            onClick={() => {
+              void beginTwoFactorAction('enable', 'wrong-password').catch(() => undefined);
+            }}
+          >
+            Begin 2FA
+          </button>
+        </div>
+      );
+    }
+
+    render(<AuthProvider><TwoFactorConsumer /></AuthProvider>);
+    await screen.findByTestId('email');
+    await userEvent.click(screen.getByRole('button', { name: 'Begin 2FA' }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/auth\/2fa\//),
+        expect.anything(),
+      );
+    });
+    expect(screen.getByTestId('email')).toBeInTheDocument();
+    expect(localStorage.getItem('liyuan_auth_token')).toBe('valid-token');
   });
 
   it('logs out and clears the token', async () => {
