@@ -13,6 +13,7 @@ import {
 } from './blog-settings.js';
 import type { BlogPost, NewsUpdate } from './types.js';
 import { AuthNav } from './components/AuthNav.js';
+import { getPublicPostPath } from './lib/profile-path.js';
 import { MaskedHeading } from './components/MaskedHeading.js';
 import './styles.css';
 
@@ -240,10 +241,6 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
     </section>
   );
 });
-
-function getPublicPostPath(username: string, blogNumber: number) {
-  return `/${encodeURIComponent(username)}/${encodeURIComponent(String(blogNumber))}/`;
-}
 
 export function App() {
   const navRef = useRef<HTMLElement>(null);

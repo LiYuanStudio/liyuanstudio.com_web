@@ -26,6 +26,12 @@ import type {
 } from '../types.js';
 import { UserAvatar } from '../components/UserAvatar.js';
 import { TwoFactorSettings } from '../components/TwoFactorSettings.js';
+import {
+  getPublicPostPath,
+  getPublicProfilePath,
+  isValidPublicUsername,
+  type ProfilePathPrefix,
+} from '../lib/profile-path.js';
 import './profile.css';
 
 const BIO_MAX_LENGTH = 120;
@@ -80,8 +86,8 @@ type Route =
   | { kind: 'my-posts' }
   | { kind: 'new-post' }
   | { kind: 'edit-post'; id: string }
-  | { kind: 'public-profile'; username: string }
-  | { kind: 'post-detail'; username: string; blogNumber: number };
+  | { kind: 'public-profile'; username: string; prefix: ProfilePathPrefix }
+  | { kind: 'post-detail'; username: string; blogNumber: number; prefix: ProfilePathPrefix };
 
 function parseRoute(): Route {
   const parts = window.location.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -90,32 +96,30 @@ function parseRoute(): Route {
     if (parts[2] && parts[3] === 'edit') return { kind: 'edit-post', id: parts[2] };
     return { kind: 'my-posts' };
   }
-  if (parts[0] === '~') return { kind: 'settings' };
+  if (parts[0] === '~') {
+    if (!parts[1]) return { kind: 'settings' };
+    if (parts[2]) {
+      const blogNumber = Number(parts[2]);
+      if (Number.isSafeInteger(blogNumber) && blogNumber > 0 && String(blogNumber) === parts[2]) {
+        return { kind: 'post-detail', username: parts[1], blogNumber, prefix: '/~' };
+      }
+      return { kind: 'settings' };
+    }
+    return { kind: 'public-profile', username: parts[1], prefix: '/~' };
+  }
   if (!parts[0] || parts[0] === 'profile' || NON_PROFILE_PATHS.has(parts[0])) return { kind: 'settings' };
   if (parts[1]) {
     const blogNumber = Number(parts[1]);
     if (Number.isSafeInteger(blogNumber) && blogNumber > 0 && String(blogNumber) === parts[1]) {
-      return { kind: 'post-detail', username: parts[0], blogNumber };
+      return { kind: 'post-detail', username: parts[0], blogNumber, prefix: '/' };
     }
     return { kind: 'settings' };
   }
-  return { kind: 'public-profile', username: parts[0] };
-}
-
-function isValidPublicUsername(username: string | undefined): username is string {
-  return typeof username === 'string' && /^[a-zA-Z0-9_-]{2,32}$/.test(username);
+  return { kind: 'public-profile', username: parts[0], prefix: '/' };
 }
 
 function getOwnProfilePath(username: string | undefined): string {
   return isValidPublicUsername(username) ? getPublicProfilePath(username) : '/profile/';
-}
-
-function getPublicProfilePath(username: string): string {
-  return `/${encodeURIComponent(username)}/`;
-}
-
-function getPublicPostPath(username: string, blogNumber: number): string {
-  return `/${encodeURIComponent(username)}/${encodeURIComponent(String(blogNumber))}/`;
 }
 
 function formatDate(value?: string): string {
@@ -346,7 +350,7 @@ function BlogEditorPage({ id }: { id?: string }) {
   );
 }
 
-function PublicProfilePage({ username, currentUser }: { username: string; currentUser?: User }) {
+function PublicProfilePage({ username, prefix, currentUser }: { username: string; prefix: ProfilePathPrefix; currentUser?: User }) {
   const [profile, setProfile] = useState<User | null>(null);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -360,7 +364,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
     fetchPublicProfile(username)
       .then(async (profileResponse) => {
         const canonicalUsername = profileResponse.user.username || username;
-        const canonicalPath = getPublicProfilePath(canonicalUsername);
+        const canonicalPath = getPublicProfilePath(canonicalUsername, prefix);
         if (window.location.pathname !== canonicalPath) {
           window.history.replaceState(
             {},
@@ -385,7 +389,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
     return () => {
       cancelled = true;
     };
-  }, [username]);
+  }, [prefix, username]);
 
   const profileUsername = profile?.username || username;
   const isOwnProfile = currentUser?.username === profileUsername;
@@ -435,7 +439,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
                     <p>{post.excerpt || '暂无摘要。'}</p>
                     <p>{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'}</p>
                   </div>
-                  <a className="profile-button profile-button-secondary" href={getPublicPostPath(post.authorUsername, post.blogNumber)}>阅读</a>
+                  <a className="profile-button profile-button-secondary" href={getPublicPostPath(post.authorUsername, post.blogNumber, prefix)}>阅读</a>
                 </article>
               ))}
             </div>
@@ -472,7 +476,7 @@ function renderArticleContent(content: string) {
   );
 }
 
-function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber: number }) {
+function BlogDetailPage({ username, blogNumber, prefix }: { username: string; blogNumber: number; prefix: ProfilePathPrefix }) {
   const [post, setPost] = useState<BlogPost | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -497,7 +501,7 @@ function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber
       {status === 'ready' && post && (
         <article className="profile-article">
           <header className="profile-article-header">
-            <a href={getPublicProfilePath(post.authorUsername)}>返回 {post.authorDisplayName}</a>
+            <a href={getPublicProfilePath(post.authorUsername, prefix)}>返回 {post.authorDisplayName}</a>
             <h1>{post.title}</h1>
             <p>{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'} · {post.authorDisplayName}</p>
             {post.tags.length > 0 && <div className="profile-tags">{post.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
@@ -699,8 +703,8 @@ export function ProfilePage() {
       {route.kind === 'my-posts' && <MyPostsPage />}
       {route.kind === 'new-post' && <BlogEditorPage />}
       {route.kind === 'edit-post' && <BlogEditorPage id={route.id} />}
-      {route.kind === 'public-profile' && <PublicProfilePage username={route.username} currentUser={user} />}
-      {route.kind === 'post-detail' && <BlogDetailPage username={route.username} blogNumber={route.blogNumber} />}
+      {route.kind === 'public-profile' && <PublicProfilePage username={route.username} prefix={route.prefix} currentUser={user} />}
+      {route.kind === 'post-detail' && <BlogDetailPage username={route.username} blogNumber={route.blogNumber} prefix={route.prefix} />}
     </div>
   );
 }

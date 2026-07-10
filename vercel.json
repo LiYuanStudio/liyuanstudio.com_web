@@ -10,7 +10,26 @@
     }
   },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/index" }
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/login/", "destination": "/login/index.html" },
+    { "source": "/register/", "destination": "/register/index.html" },
+    { "source": "/forgot-password/", "destination": "/forgot-password/index.html" },
+    { "source": "/reset-password/", "destination": "/reset-password/index.html" },
+    { "source": "/admin/", "destination": "/admin/index.html" },
+    { "source": "/profile/", "destination": "/profile/index.html" },
+    { "source": "/products/papyrusdesktop/", "destination": "/products/papyrusdesktop/index.html" },
+    { "source": "/blog/", "destination": "/blog/index.html" },
+    { "source": "/blog/release/", "destination": "/blog/index.html" },
+    { "source": "/~/", "destination": "/profile/" },
+    { "source": "/~/:username/:blogNumber([0-9]+)/", "destination": "/profile/" },
+    { "source": "/~/:username/:blogNumber([0-9]+)", "destination": "/profile/" },
+    { "source": "/~/:username/", "destination": "/profile/" },
+    { "source": "/~/:username", "destination": "/profile/" },
+    { "source": "/:username/:blogNumber([0-9]+)/", "destination": "/profile/" },
+    { "source": "/:username/:blogNumber([0-9]+)", "destination": "/profile/" },
+    { "source": "/:username/", "destination": "/profile/" },
+    { "source": "/:username", "destination": "/profile/" }
   ],
   "headers": [
     {

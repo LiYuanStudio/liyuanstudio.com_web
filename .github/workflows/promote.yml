@@ -173,6 +173,8 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+        env:
+          VITE_PUBLIC_PROFILE_PREFIX: /~
 
       - name: Build API
         run: npm run build:api

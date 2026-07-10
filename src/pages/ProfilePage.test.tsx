@@ -146,6 +146,17 @@ describe('ProfilePage', () => {
     expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login/');
   });
 
+  it('keeps the fixed legacy settings path at /~/', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('unauthenticated')));
+
+    renderPage('/~/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /个人主页/ })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /去登录/ })).toHaveAttribute('href', '/login/');
+  });
+
   it('renders another user public profile', async () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', mockFetch());
@@ -170,6 +181,33 @@ describe('ProfilePage', () => {
     expect(screen.getByText('Original bio')).toBeInTheDocument();
     expect(screen.getByText('暂无公开文章。')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
+  });
+
+  it('renders the legacy production profile path and preserves its prefix', async () => {
+    const canonicalUser: User = {
+      ...MEMBER_USER,
+      username: 'alice-smith',
+      displayName: 'Alice Smith',
+    };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/users/Alice')) {
+        return { ok: true, status: 200, json: async () => ({ user: canonicalUser }) } as Response;
+      }
+      if (href.includes('/blog/user/alice-smith')) {
+        return { ok: true, status: 200, json: async () => [] } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ user: canonicalUser }) } as Response;
+    }));
+
+    renderPage('/~/Alice/?from=old#profile');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Alice Smith' })).toBeInTheDocument();
+    });
+    expect(window.location.pathname).toBe('/~/alice-smith/');
+    expect(window.location.search).toBe('?from=old');
+    expect(window.location.hash).toBe('#profile');
   });
 
   it.each([
@@ -240,6 +278,17 @@ describe('ProfilePage', () => {
     expect(screen.getAllByText('Markdown').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('target', '_blank');
     expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('rel', 'noreferrer');
+  });
+
+  it('keeps the legacy prefix on production article detail pages', async () => {
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Legacy article'));
+
+    renderPage('/~/LA/1/');
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Markdown post' })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('link', { name: /LA$/ })).toHaveAttribute('href', '/~/LA/');
   });
 
   it('does not inject raw html from markdown content', async () => {

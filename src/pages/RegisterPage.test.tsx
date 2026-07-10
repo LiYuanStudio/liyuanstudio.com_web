@@ -31,6 +31,42 @@ describe('RegisterPage', () => {
     expect(screen.queryByRole('button', { name: '登录' })).not.toBeInTheDocument();
   });
 
+  it('redirects authenticated visitors home without rendering the authenticated card', async () => {
+    mockUseAuth.mockReturnValue({
+      state: {
+        status: 'authenticated',
+        user: { id: '1', email: 'hello@example.com', displayName: 'Hello', role: 'tourist' },
+      },
+      login: vi.fn(),
+      sendRegistrationCode: vi.fn(),
+      verifyRegistrationCode: vi.fn(),
+      logout: vi.fn(),
+      updateAvatar: vi.fn(),
+      updateProfile: vi.fn(),
+    } as unknown as ReturnType<typeof useAuth>);
+
+    const hrefSetter = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        set href(value: string) {
+          hrefSetter(value);
+        },
+        get href() {
+          return hrefSetter.mock.calls.at(-1)?.[0] ?? '';
+        },
+      },
+    });
+
+    render(<RegisterPage />);
+
+    await waitFor(() => {
+      expect(hrefSetter).toHaveBeenCalledWith('/');
+    });
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  });
+
   it('redirects home after successful registration verification', async () => {
     const sendRegistrationCode = vi.fn().mockResolvedValue(undefined);
     const verifyRegistrationCode = vi.fn().mockResolvedValue(undefined);

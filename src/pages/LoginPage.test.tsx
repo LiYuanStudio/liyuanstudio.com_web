@@ -30,6 +30,42 @@ describe('LoginPage', () => {
     expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument();
   });
 
+  it('redirects authenticated visitors home without rendering the authenticated card', async () => {
+    mockUseAuth.mockReturnValue({
+      state: {
+        status: 'authenticated',
+        user: { id: '1', email: 'hello@example.com', displayName: 'Hello', role: 'tourist' },
+      },
+      login: vi.fn(),
+      sendRegistrationCode: vi.fn(),
+      verifyRegistrationCode: vi.fn(),
+      logout: vi.fn(),
+      updateAvatar: vi.fn(),
+      updateProfile: vi.fn(),
+    } as unknown as ReturnType<typeof useAuth>);
+
+    const hrefSetter = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        ...window.location,
+        set href(value: string) {
+          hrefSetter(value);
+        },
+        get href() {
+          return hrefSetter.mock.calls.at(-1)?.[0] ?? '';
+        },
+      },
+    });
+
+    render(<LoginPage />);
+
+    await waitFor(() => {
+      expect(hrefSetter).toHaveBeenCalledWith('/');
+    });
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  });
+
   it('redirects home after a successful login', async () => {
     const login = vi.fn().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue({
