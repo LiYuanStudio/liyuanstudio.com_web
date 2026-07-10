@@ -283,10 +283,99 @@ describe('deploy console', () => {
     expect(await response.text()).toContain('服务暂时不可用');
   });
 
+  it('rejects wrong Origin with a diagnostic alert and request id', async () => {
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://gray.example.com',
+          'X-Request-Id': 'origin-req-1',
+        },
+        body: 'email=admin%40example.com&password=correct-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('X-Request-Id')).toBe('origin-req-1');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    const body = await response.text();
+    expect(body).toContain('当前页面的访问来源无效，请从规范的部署控制台重新登录。');
+    expect(body).toContain('调试 ID：origin-req-1');
+    expect(body).toContain('href="https://console.example.com"');
+    expect(body).toContain('前往规范控制台');
+  });
+
+  it('rejects opaque Origin null even when Sec-Fetch-Site claims same-origin', async () => {
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'null',
+          'Sec-Fetch-Site': 'same-origin',
+          'X-Request-Id': 'null-origin-1',
+        },
+        body: 'email=admin%40example.com&password=correct-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('X-Request-Id')).toBe('null-origin-1');
+    expect(await response.text()).toContain('当前页面的访问来源无效');
+  });
+
+  it('rejects missing Origin without same-origin fetch metadata', async () => {
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Request-Id': 'missing-origin-1',
+        },
+        body: 'email=admin%40example.com&password=correct-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.text()).toContain('当前页面的访问来源无效');
+  });
+
+  it('allows missing Origin when Sec-Fetch-Site is same-origin', async () => {
+    installFetch({ loginStatus: 401 });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Sec-Fetch-Site': 'same-origin',
+          'X-Request-Id': 'same-origin-nav-1',
+        },
+        body: 'email=admin%40example.com&password=wrong-password',
+      },
+      env,
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-Request-Id')).toBe('same-origin-nav-1');
+    const body = await response.text();
+    expect(body).toContain('邮箱或密码错误');
+    expect(body).toContain('调试 ID：same-origin-nav-1');
+    expect(body).not.toContain('前往规范控制台');
+  });
+
   it('sends unauthenticated gray visitors to the deploy console instead of rendering a cross-origin login form', async () => {
     const response = await app.request('https://gray.example.com/', undefined, env);
 
     expect(response.status).toBe(401);
+    expect(response.headers.get('X-Request-Id')).toBeTruthy();
     await expect(response.text()).resolves.toContain('href="https://console.example.com"');
   });
 

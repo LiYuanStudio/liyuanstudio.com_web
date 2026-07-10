@@ -74,6 +74,8 @@ npm run deploy --workspace=deploy-console
 - 只有 API 返回 `role=admin` 才会建立 15 分钟的加密、`HttpOnly`、`Secure`、`SameSite=Strict` 会话。
 - 生产 LA API（`LA_API_BASE_URL`）应公开可达；控制台登录不使用 `VERCEL_PROTECTION_BYPASS`。该 bypass 只用于灰度 Preview 网关代理。官网能登录但控制台不能，通常是账号不是 `admin`（检查 Vercel Production 的 `admin_emails`），而不是 Production Deployment Protection。
 - 登录失败会区分提示：邮箱/密码错误、需要 LA 管理员账号、或上游服务不可用；不再混成同一条文案。
+- 必须打开规范控制台地址登录（例如 `https://deploy.liyuanstudio.com`）。灰度域名 `gray.liyuanstudio.com` 不承载登录表单；未登录访问只会引导回控制台。
+- 登录 POST 要求 `Origin` 为 `CONSOLE_ORIGIN`；若浏览器省略 `Origin`，仅在 `Sec-Fetch-Site: same-origin` 时放行。错误来源会返回调试 ID。
 - 灰度网关每次只解析 GitHub 中最新的 `gray` deployment。旧 URL 或旧 deployment ID 不能选择。
 - 网关删除浏览器 Cookie 和 Authorization 后再访问 Vercel，并在服务端附加 protection bypass；该 secret 不会返回浏览器。
 - 点击全量发布时，控制台实时调用 `/auth/me` 复核角色，并检查 CSRF、deployment ID、SHA、成功状态和重复发布状态。
@@ -83,7 +85,7 @@ npm run deploy --workspace=deploy-console
 
 1. 合并或推送到 `main`。
 2. 等待 “Deploy gray candidate” 成功。
-3. LA 管理员登录独立控制台，打开灰度版本并验收前后端。
+3. LA 管理员打开规范控制台（例如 `https://deploy.liyuanstudio.com`）登录，打开灰度版本并验收前后端。
 4. 点击“全量发布”，等待 “Promote gray candidate” 完成。
 5. 在生产站执行最终冒烟检查。
 
