@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '../context/AuthContext.js';
 import { ProfilePage } from './ProfilePage.js';
@@ -127,6 +127,12 @@ describe('ProfilePage', () => {
       createObjectURL: vi.fn().mockReturnValue('blob:mock-image-url'),
       revokeObjectURL: vi.fn(),
     });
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: true,
+      media: '(max-width: 760px)',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
   });
 
   afterEach(() => {
@@ -283,6 +289,121 @@ describe('ProfilePage', () => {
     expect(screen.getAllByText('Markdown').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('target', '_blank');
     expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('shows only login in the unauthenticated article mobile menu', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/blog/number/1')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...MARKDOWN_POST, content: 'Article' }),
+        } as Response;
+      }
+      return { ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }) } as Response;
+    }));
+
+    renderPage('/LA/1/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Markdown post' });
+
+    const menuButton = screen.getByRole('button', { name: '打开导航菜单' });
+    await user.click(menuButton);
+
+    const menu = screen.getByLabelText('移动端导航');
+    expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+    expect(within(menu).getByRole('link', { name: '登录' })).toHaveAttribute('href', '/login/');
+    expect(within(menu).queryAllByRole('link')).toHaveLength(1);
+    expect(within(menu).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(menu).getByRole('link', { name: '登录' })).toHaveFocus();
+  });
+
+  it('shows all permitted entries in the admin mobile menu and closes from its controls', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/blog/number/1')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...MARKDOWN_POST, content: 'Article' }),
+        } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ user: ADMIN_USER }) } as Response;
+    }));
+
+    renderPage('/LA/1/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Markdown post' });
+
+    const menuButton = screen.getByRole('button', { name: '打开导航菜单' });
+    await user.click(menuButton);
+    let menu = screen.getByLabelText('移动端导航');
+    expect(within(menu).getByRole('link', { name: '个人主页' })).toHaveAttribute('href', '/Admin/');
+    expect(within(menu).getByRole('link', { name: '我的文章' })).toHaveAttribute('href', '/me/posts/');
+    expect(within(menu).getByRole('link', { name: '账号后台' })).toHaveAttribute('href', '/admin/');
+    expect(within(menu).getByRole('button', { name: '退出' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '关闭导航菜单' }));
+    expect(screen.queryByLabelText('移动端导航')).not.toBeInTheDocument();
+    expect(menuButton).toHaveFocus();
+
+    await user.click(menuButton);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByLabelText('移动端导航')).not.toBeInTheDocument();
+    expect(menuButton).toHaveFocus();
+
+    await user.click(menuButton);
+    await user.click(screen.getByRole('button', { name: '关闭导航菜单遮罩' }));
+    expect(screen.queryByLabelText('移动端导航')).not.toBeInTheDocument();
+
+    await user.click(menuButton);
+    menu = screen.getByLabelText('移动端导航');
+    const myPostsLink = within(menu).getByRole('link', { name: '我的文章' });
+    myPostsLink.addEventListener('click', (event) => event.preventDefault(), { once: true });
+    fireEvent.click(myPostsLink);
+    expect(screen.queryByLabelText('移动端导航')).not.toBeInTheDocument();
+  });
+
+  it('closes the mobile menu and logs out from its logout action', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Article'));
+
+    renderPage('/LA/1/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Markdown post' });
+    await user.click(screen.getByRole('button', { name: '打开导航菜单' }));
+    await user.click(within(screen.getByLabelText('移动端导航')).getByRole('button', { name: '退出' }));
+
+    expect(screen.queryByLabelText('移动端导航')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/logout'), expect.objectContaining({ method: 'POST' }));
+    });
+  });
+
+  it('closes the mobile menu and restores scrolling when leaving the mobile breakpoint', async () => {
+    let viewportChange: ((event: MediaQueryListEvent) => void) | undefined;
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: true,
+      media: '(max-width: 760px)',
+      addEventListener: vi.fn((_type: string, listener: (event: MediaQueryListEvent) => void) => {
+        viewportChange = listener;
+      }),
+      removeEventListener: vi.fn(),
+    }));
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Article'));
+
+    renderPage('/LA/1/');
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Markdown post' });
+    const menuButton = screen.getByRole('button', { name: '打开导航菜单' });
+    await user.click(menuButton);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    act(() => viewportChange?.({ matches: false } as MediaQueryListEvent));
+
+    expect(screen.queryByLabelText('移动端导航')).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('');
+    expect(menuButton).not.toHaveFocus();
   });
 
   it('keeps the legacy prefix on production article detail pages', async () => {

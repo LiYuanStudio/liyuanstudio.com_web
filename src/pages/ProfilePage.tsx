@@ -135,7 +135,97 @@ function textToTags(value: string): string[] {
   return [...new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean))].slice(0, 8);
 }
 
+type NavItem =
+  | { kind: 'link'; label: string; href: string }
+  | { kind: 'button'; label: string; onClick: () => void | Promise<void> };
+
 function Nav({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<void> }) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const firstMenuItemRef = useRef<HTMLAnchorElement | HTMLButtonElement>(null);
+  const mobileMenuId = 'profile-mobile-menu';
+
+  const navItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [];
+    if (user) {
+      items.push({ kind: 'link', label: '个人主页', href: getOwnProfilePath(user.username) });
+    }
+    if (canWriteBlog(user)) {
+      items.push({ kind: 'link', label: '我的文章', href: '/me/posts/' });
+    }
+    if (user?.role === 'admin') {
+      items.push({ kind: 'link', label: '账号后台', href: '/admin/' });
+    }
+    items.push(onLogout
+      ? { kind: 'button', label: '退出', onClick: onLogout }
+      : { kind: 'link', label: '登录', href: '/login/' });
+    return items;
+  }, [onLogout, user]);
+
+  const closeMobileMenu = useCallback((restoreFocus = false) => {
+    setIsMobileMenuOpen(false);
+    if (restoreFocus) {
+      menuButtonRef.current?.focus();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    firstMenuItemRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMobileMenu(true);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [closeMobileMenu, isMobileMenuOpen]);
+
+  useEffect(() => {
+    const mobileViewport = window.matchMedia('(max-width: 760px)');
+    const handleViewportChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) closeMobileMenu();
+    };
+    mobileViewport.addEventListener('change', handleViewportChange);
+    return () => mobileViewport.removeEventListener('change', handleViewportChange);
+  }, [closeMobileMenu]);
+
+  const renderNavItem = (item: NavItem, index: number, isMobile = false) => {
+    const ref = isMobile && index === 0 ? firstMenuItemRef : undefined;
+    if (item.kind === 'link') {
+      return (
+        <a
+          key={item.label}
+          ref={ref as React.Ref<HTMLAnchorElement>}
+          href={item.href}
+          onClick={isMobile ? () => closeMobileMenu() : undefined}
+        >
+          {item.label}
+        </a>
+      );
+    }
+    return (
+      <button
+        key={item.label}
+        ref={ref as React.Ref<HTMLButtonElement>}
+        type="button"
+        onClick={() => {
+          if (isMobile) closeMobileMenu();
+          void item.onClick();
+        }}
+      >
+        {item.label}
+      </button>
+    );
+  };
+
   return (
     <nav className="profile-nav">
       <a className="profile-brand" href="/">
@@ -143,11 +233,39 @@ function Nav({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<
         <span>LiYuan Studio</span>
       </a>
       <div className="profile-nav-actions">
-        {user && <a href={getOwnProfilePath(user.username)}>个人主页</a>}
-        {canWriteBlog(user) && <a href="/me/posts/">我的文章</a>}
-        {user?.role === 'admin' && <a href="/admin/">账号后台</a>}
-        {onLogout ? <button type="button" onClick={onLogout}>退出</button> : <a href="/login/">登录</a>}
+        {navItems.map((item, index) => renderNavItem(item, index))}
       </div>
+      <button
+        ref={menuButtonRef}
+        className="profile-menu-button"
+        type="button"
+        aria-expanded={isMobileMenuOpen}
+        aria-controls={mobileMenuId}
+        aria-label={isMobileMenuOpen ? '关闭导航菜单' : '打开导航菜单'}
+        onClick={() => {
+          if (isMobileMenuOpen) {
+            closeMobileMenu(true);
+          } else {
+            setIsMobileMenuOpen(true);
+          }
+        }}
+      >
+        <span aria-hidden="true" />
+        <span aria-hidden="true" />
+      </button>
+      {isMobileMenuOpen && (
+        <>
+          <button
+            className="profile-mobile-menu-backdrop"
+            type="button"
+            aria-label="关闭导航菜单遮罩"
+            onClick={() => closeMobileMenu(true)}
+          />
+          <div id={mobileMenuId} className="profile-mobile-menu" aria-label="移动端导航">
+            {navItems.map((item, index) => renderNavItem(item, index, true))}
+          </div>
+        </>
+      )}
     </nav>
   );
 }
