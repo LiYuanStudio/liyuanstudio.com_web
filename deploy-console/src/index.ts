@@ -14,6 +14,8 @@ import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles 
 type AppContext = Context<AppEnv>;
 
 const SITE_SESSION_COOKIE = '__Host-liyuan_session';
+const SITE_CSRF_COOKIE = '__Host-liyuan_csrf';
+const ALLOWED_SITE_COOKIES = new Set([SITE_SESSION_COOKIE, SITE_CSRF_COOKIE]);
 
 const app = new Hono<AppEnv>();
 
@@ -57,19 +59,27 @@ function isClearlyCrossSite(c: AppContext): boolean {
   return c.req.header('Sec-Fetch-Site') === 'cross-site';
 }
 
-function allowedSessionCookie(cookieHeader: string | null | undefined): string | undefined {
+function allowedSiteCookies(cookieHeader: string | null | undefined): string | undefined {
   if (!cookieHeader) return undefined;
-  return cookieHeader
+  const allowed = cookieHeader
     .split(';')
     .map((value) => value.trim())
-    .find((value) => value.startsWith(`${SITE_SESSION_COOKIE}=`));
+    .filter((value) => ALLOWED_SITE_COOKIES.has(value.slice(0, value.indexOf('='))));
+  return allowed.length > 0 ? allowed.join('; ') : undefined;
 }
 
-function allowedSessionSetCookie(setCookie: string | null): string | undefined {
-  if (!setCookie) return undefined;
-  return setCookie.trim().startsWith(`${SITE_SESSION_COOKIE}=`)
-    ? setCookie
-    : undefined;
+function splitSetCookieHeader(value: string): string[] {
+  return value.split(/,\s*(?=[^;,\s]+=)/u);
+}
+
+function allowedSiteSetCookies(headers: Headers): string[] {
+  const headersWithGetSetCookie = headers as Headers & { getSetCookie?: () => string[] };
+  const values = headersWithGetSetCookie.getSetCookie?.()
+    ?? splitSetCookieHeader(headers.get('set-cookie') ?? '');
+  return values.filter((value) => {
+    const cookieName = value.slice(0, value.indexOf('=')).trim();
+    return ALLOWED_SITE_COOKIES.has(cookieName);
+  });
 }
 
 async function loginErrorPage(
@@ -290,7 +300,7 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   const incoming = new URL(c.req.url);
   const upstream = new URL(`${incoming.pathname}${incoming.search}`, upstreamOrigin);
   const headers = new Headers(c.req.raw.headers);
-  const sessionCookie = allowedSessionCookie(headers.get('cookie'));
+  const siteCookies = allowedSiteCookies(headers.get('cookie'));
   for (const header of [
     'cf-connecting-ip',
     'cf-ipcountry',
@@ -305,7 +315,7 @@ async function proxyPreview(c: AppContext): Promise<Response> {
   ]) {
     headers.delete(header);
   }
-  if (sessionCookie) headers.set('cookie', sessionCookie);
+  if (siteCookies) headers.set('cookie', siteCookies);
   headers.set('x-vercel-protection-bypass', c.env.VERCEL_PROTECTION_BYPASS);
 
   const upstreamResponse = await fetch(upstream, {
@@ -315,13 +325,13 @@ async function proxyPreview(c: AppContext): Promise<Response> {
     redirect: 'manual',
   });
   const responseHeaders = new Headers(upstreamResponse.headers);
-  const upstreamSessionCookie = allowedSessionSetCookie(responseHeaders.get('set-cookie'));
+  const upstreamSiteCookies = allowedSiteSetCookies(responseHeaders);
   responseHeaders.delete('set-cookie');
   responseHeaders.delete('x-vercel-protection-bypass');
   responseHeaders.delete('x-vercel-set-bypass-cookie');
   responseHeaders.set('Cache-Control', 'private, no-store');
   responseHeaders.set('X-Robots-Tag', 'noindex, nofollow');
-  if (upstreamSessionCookie) responseHeaders.append('Set-Cookie', upstreamSessionCookie);
+  for (const cookie of upstreamSiteCookies) responseHeaders.append('Set-Cookie', cookie);
 
   const location = responseHeaders.get('Location');
   if (location) {
