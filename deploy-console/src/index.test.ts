@@ -36,6 +36,15 @@ function cookieFrom(response: Response): string {
   return value.split(';', 1)[0] ?? '';
 }
 
+function cookiesFrom(response: Response): string[] {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  const values = headers.getSetCookie?.()
+    ?? (response.headers.get('set-cookie') ?? '').split(/,\s*(?=[^;,\s]+=)/u);
+  return values
+    .map((value) => value.split(';', 1)[0]?.trim())
+    .filter((value): value is string => Boolean(value));
+}
+
 async function loginFormToken(): Promise<string> {
   const response = await app.request('https://console.example.com/', undefined, env);
   const body = await response.text();
@@ -525,6 +534,7 @@ describe('deploy console', () => {
 
   it('rejects a tampered signed form token', async () => {
     const token = await loginFormToken();
+    const tamperedSuffix = token.endsWith('x') ? 'y' : 'x';
     const response = await app.request(
       'https://console.example.com/auth/login',
       {
@@ -536,7 +546,7 @@ describe('deploy console', () => {
         body: new URLSearchParams({
           email: 'admin@example.com',
           password: 'correct-password',
-          formToken: `${token.slice(0, -1)}x`,
+          formToken: `${token.slice(0, -1)}${tamperedSuffix}`,
         }).toString(),
       },
       env,
@@ -722,6 +732,74 @@ describe('deploy console', () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ error: '该版本正在全量发布' });
     expect(requests.some(({ url }) => url.pathname.endsWith('/dispatches'))).toBe(false);
+  });
+
+  it('keeps the gray session authenticated when the homepage reloads /api/auth/me', async () => {
+    const { requests } = installFetch({
+      upstream: async (url) => {
+        if (url.pathname === '/api/auth/login') {
+          const headers = new Headers({ 'Content-Type': 'application/json' });
+          headers.append(
+            'Set-Cookie',
+            '__Host-liyuan_session=preview-session; Path=/; HttpOnly; Secure; SameSite=Lax',
+          );
+          headers.append(
+            'Set-Cookie',
+            '__Host-liyuan_csrf=preview-csrf; Path=/; Secure; SameSite=Lax',
+          );
+          return new Response(JSON.stringify({ user: admin }), { headers });
+        }
+        if (url.pathname === '/api/auth/me') {
+          return json({ user: admin });
+        }
+        throw new Error(`Unexpected preview request: ${url}`);
+      },
+    });
+    const consoleCookie = await login();
+
+    const loginResponse = await app.request(
+      'https://gray.example.com/api/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: consoleCookie,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: admin.email, password: 'correct-password' }),
+      },
+      env,
+    );
+
+    expect(loginResponse.status).toBe(200);
+    const siteCookies = cookiesFrom(loginResponse);
+    expect(siteCookies).toEqual(expect.arrayContaining([
+      '__Host-liyuan_session=preview-session',
+      '__Host-liyuan_csrf=preview-csrf',
+    ]));
+
+    const meResponse = await app.request(
+      'https://gray.example.com/api/auth/me',
+      {
+        headers: {
+          Cookie: `${consoleCookie}; ${siteCookies.join('; ')}`,
+        },
+      },
+      env,
+    );
+
+    expect(meResponse.status).toBe(200);
+    await expect(meResponse.json()).resolves.toEqual({ user: admin });
+    const previewRequests = requests.filter(({ url }) => url.hostname === 'candidate.vercel.app');
+    expect(previewRequests.map(({ url }) => url.pathname)).toEqual([
+      '/api/auth/login',
+      '/api/auth/me',
+    ]);
+    const meHeaders = new Headers(previewRequests[1]?.init?.headers);
+    expect(meHeaders.get('cookie')).toBe(
+      '__Host-liyuan_session=preview-session; __Host-liyuan_csrf=preview-csrf',
+    );
+    expect(meHeaders.get('authorization')).toBeNull();
+    expect(meHeaders.get('x-vercel-protection-bypass')).toBe('bypass-secret');
   });
 
   it('proxies only the main-site auth cookies without leaking console or bypass secrets', async () => {
