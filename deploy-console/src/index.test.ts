@@ -230,6 +230,57 @@ describe('deploy console', () => {
     });
   });
 
+  it('proxies root rollout reads and updates without a trailing slash', async () => {
+    const rolloutUrl = 'https://api.example.com/api/rollout';
+    const { requests } = installFetch({
+      rollout: (url, init) => {
+        if (url.href !== rolloutUrl) return null;
+        if (init?.method === 'PATCH') {
+          return json({ error: 'rollout conflict' }, 409);
+        }
+        return json({ rollout: null, audits: [] });
+      },
+    });
+    const cookie = await login();
+    const dashboard = await app.request('https://console.example.com/', { headers: { Cookie: cookie } }, env);
+    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+
+    const readResponse = await app.request(
+      'https://console.example.com/api/rollout',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+    const updateResponse = await app.request(
+      'https://console.example.com/api/rollout',
+      {
+        method: 'PATCH',
+        headers: {
+          Cookie: cookie,
+          Origin: env.CONSOLE_ORIGIN,
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrf,
+        },
+        body: JSON.stringify({ status: 'paused' }),
+      },
+      env,
+    );
+
+    expect(readResponse.status).toBe(200);
+    await expect(readResponse.json()).resolves.toEqual({ rollout: null, audits: [] });
+    expect(updateResponse.status).toBe(409);
+    await expect(updateResponse.json()).resolves.toEqual({ error: 'rollout conflict' });
+
+    const rolloutRequests = requests.filter(({ url }) => url.href === rolloutUrl);
+    expect(rolloutRequests).toHaveLength(2);
+    expect(requests.some(({ url }) => url.href === `${rolloutUrl}/`)).toBe(false);
+    expect(rolloutRequests.map(({ init }) => new Headers(init?.headers).get('authorization'))).toEqual([
+      'Bearer la-token',
+      'Bearer la-token',
+    ]);
+    expect(rolloutRequests[1]?.init?.method).toBe('PATCH');
+    expect(rolloutRequests[1]?.init?.body).toBe(JSON.stringify({ status: 'paused' }));
+  });
+
   it('proxies rollout controls only after revalidating the administrator', async () => {
     const { requests } = installFetch({
       github: githubResponses({ productionState: 'success' }),

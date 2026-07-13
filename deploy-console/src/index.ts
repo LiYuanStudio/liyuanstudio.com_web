@@ -240,8 +240,9 @@ async function proxyRolloutRequest(
   }
 
   const apiBase = c.env.LA_API_BASE_URL.replace(/\/+$/u, '');
+  const rolloutPath = path === '/' ? '' : path;
   try {
-    const response = await fetch(`${apiBase}/rollout${path}`, {
+    const response = await fetch(`${apiBase}/rollout${rolloutPath}`, {
       ...init,
       headers: {
         Accept: 'application/json',
