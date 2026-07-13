@@ -724,24 +724,40 @@ describe('deploy console', () => {
     expect(requests.some(({ url }) => url.pathname.endsWith('/dispatches'))).toBe(false);
   });
 
-  it('proxies only the main-site session cookie without leaking console or bypass secrets', async () => {
+  it('proxies only the main-site auth cookies without leaking console or bypass secrets', async () => {
+    const upstreamHeaders = new Headers({
+      'X-Vercel-Protection-Bypass': 'reflected-secret',
+    });
+    upstreamHeaders.append(
+      'Set-Cookie',
+      '__Host-liyuan_session=refreshed-session; Path=/; HttpOnly; Secure; SameSite=Lax',
+    );
+    upstreamHeaders.append(
+      'Set-Cookie',
+      '__Host-liyuan_csrf=refreshed-csrf; Path=/; Secure; SameSite=Lax',
+    );
+    upstreamHeaders.append(
+      'Set-Cookie',
+      'untrusted_cookie=secret; Path=/; Secure',
+    );
     const { requests } = installFetch({
       upstream: async () => new Response('candidate', {
-        headers: {
-          'Set-Cookie': '__Host-liyuan_session=refreshed-session; Path=/; HttpOnly; Secure; SameSite=Lax',
-          'X-Vercel-Protection-Bypass': 'reflected-secret',
-        },
+        headers: upstreamHeaders,
       }),
     });
     const cookie = await login();
 
     const response = await app.request(
-      'https://gray.example.com/products/example',
+      'https://gray.example.com/api/auth/logout',
       {
+        method: 'POST',
         headers: {
-          Cookie: `${cookie}; __Host-liyuan_session=site-jwt`,
+          Cookie: `${cookie}; __Host-liyuan_session=site-jwt; __Host-liyuan_csrf=site-csrf; untrusted_cookie=browser-secret`,
+          'Content-Type': 'application/json',
           Authorization: 'Bearer browser-secret',
+          'X-CSRF-Token': 'site-csrf',
         },
+        body: '{}',
       },
       env,
     );
@@ -749,10 +765,13 @@ describe('deploy console', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('candidate');
     expect(response.headers.get('set-cookie')).toContain('__Host-liyuan_session=refreshed-session');
+    expect(response.headers.get('set-cookie')).toContain('__Host-liyuan_csrf=refreshed-csrf');
+    expect(response.headers.get('set-cookie')).not.toContain('untrusted_cookie');
     expect(response.headers.get('x-vercel-protection-bypass')).toBeNull();
     const upstream = requests.find(({ url }) => url.hostname === 'candidate.vercel.app');
     const headers = new Headers(upstream?.init?.headers);
-    expect(headers.get('cookie')).toBe('__Host-liyuan_session=site-jwt');
+    expect(headers.get('cookie')).toBe('__Host-liyuan_session=site-jwt; __Host-liyuan_csrf=site-csrf');
+    expect(headers.get('x-csrf-token')).toBe('site-csrf');
     expect(headers.get('authorization')).toBeNull();
     expect(headers.get('x-vercel-protection-bypass')).toBe('bypass-secret');
   });
