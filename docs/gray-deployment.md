@@ -66,7 +66,7 @@ npm run deploy --workspace=deploy-console
 
 合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。该日常发布只更新 Worker 脚本和变量，需要 **Workers Scripts → Edit**；不要把 custom domains 重新加入 `wrangler.jsonc`，否则 Wrangler 会在每次发布时调用 Zone routes API。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
 
-`SESSION_SECRET` 至少 32 个随机字符。`GITHUB_TOKEN` 使用 fine-grained token，仅授权当前仓库，并只开放读取 deployments/contents 和触发 Actions 所需的最小权限。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
+`SESSION_SECRET` 至少 32 个随机字符。`GITHUB_TOKEN` 使用 fine-grained token，并配置为 **Only select repositories → `liyuanstudio.com_web`**，仓库权限只开放 **Actions: Read and write**、**Deployments: Read-only**、**Contents: Read-only**。如果 LiYuanStudio 组织要求审批，必须先确认 token 已获批准，再写入 Worker secret；否则 GitHub 会拒绝 `workflow_dispatch`。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
 
 ## 权限和请求流程
 
