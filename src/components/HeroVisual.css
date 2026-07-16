@@ -14,11 +14,7 @@
   will-change: transform;
 }
 
-.hv-layer-ring {
-  perspective: 1100px;
-}
-
-/* Subtle technical dot grid, faded out radially. */
+/* Subtle dot-grid backdrop, faded out radially. */
 .hv-grid {
   position: absolute;
   inset: -6%;
@@ -28,54 +24,49 @@
   mask-image: radial-gradient(circle at 50% 50%, #000 25%, transparent 72%);
 }
 
-/* Soft breathing glow behind the core. */
-.hv-halo {
-  position: absolute;
-  inset: -8%;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 46% 42%,
-    rgba(0, 113, 227, 0.22),
-    rgba(0, 199, 183, 0.12) 45%,
-    transparent 68%
-  );
-  filter: blur(18px);
-  animation: hv-breathe 9s ease-in-out infinite;
-}
-
-/* Orbit rings, tilted in 3D so they read as ellipses around the core.
-   Ring sizes/tilts are chosen so the ellipse always clears the core orb
-   (semi-minor axis > core radius), keeping the traveling dot visible. */
+/* Dotted orbit rings, squashed in 2D so they read as flat ellipses.
+   Ring sizes/squash factors are chosen so the ellipse always clears the
+   core dot circle (semi-minor axis > core radius), keeping the traveling
+   dot visible all the way around. */
 .hv-ring {
   position: absolute;
   top: 50%;
   left: 50%;
   aspect-ratio: 1 / 1;
-  transform-style: preserve-3d;
 }
 
 .hv-ring-outer {
   width: 92%;
-  transform: translate(-50%, -50%) rotateX(55deg) rotateZ(-12deg);
+  transform: translate(-50%, -50%) scaleY(0.58) rotate(-10deg);
 }
 
 .hv-ring-inner {
   width: 74%;
-  transform: translate(-50%, -50%) rotateX(48deg) rotateZ(10deg);
+  transform: translate(-50%, -50%) scaleY(0.64) rotate(8deg);
 }
 
-.hv-ring-circle {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
+.hv-ring-line {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.hv-ring-outer .hv-ring-circle {
-  border: 1px solid rgba(32, 108, 207, 0.3);
+.hv-ring-line circle {
+  fill: none;
+  stroke-linecap: round;
+  /* A zero-length dash with a round cap renders as a row of dots. */
+  stroke-dasharray: 0.1 7;
 }
 
-.hv-ring-inner .hv-ring-circle {
-  border: 1px solid rgba(29, 29, 31, 0.14);
+.hv-ring-outer .hv-ring-line circle {
+  stroke: rgba(32, 108, 207, 0.38);
+  stroke-width: 2.6;
+}
+
+.hv-ring-inner .hv-ring-line circle {
+  stroke: rgba(29, 29, 31, 0.22);
+  stroke-width: 2.2;
+  stroke-dasharray: 0.1 6;
 }
 
 .hv-ring-spin {
@@ -91,7 +82,7 @@
 
 .hv-ring-dot {
   position: absolute;
-  top: 0;
+  top: 2%;
   left: 50%;
   border-radius: 50%;
   transform: translate(-50%, -50%);
@@ -101,20 +92,33 @@
   width: 11px;
   height: 11px;
   background: #14b8a6;
-  box-shadow: 0 0 12px rgba(20, 184, 166, 0.9);
 }
 
 .hv-ring-dot-blue {
   width: 9px;
   height: 9px;
   background: #206ccf;
-  box-shadow: 0 0 10px rgba(32, 108, 207, 0.8);
 }
 
-/* Central glowing orb. */
+/* Dot-matrix circles: wrappers handle position and float motion,
+   the SVG inside renders the flat dots and rotates slowly. */
 .hv-orb {
   position: absolute;
   border-radius: 50%;
+}
+
+.hv-matrix {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hv-matrix-spin {
+  animation: hv-spin 90s linear infinite;
+}
+
+.hv-matrix-spin-reverse {
+  animation: hv-spin 70s linear infinite reverse;
 }
 
 .hv-orb-core {
@@ -122,18 +126,9 @@
   left: 50%;
   width: 40%;
   aspect-ratio: 1 / 1;
-  background:
-    radial-gradient(circle at 31% 26%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 30%),
-    radial-gradient(circle at 72% 80%, rgba(0, 199, 183, 0.5), rgba(0, 199, 183, 0) 55%),
-    linear-gradient(138deg, #4ea1ff 0%, #206ccf 58%, #0a3a8c 100%);
-  box-shadow:
-    0 36px 90px rgba(32, 108, 207, 0.38),
-    inset 0 -22px 44px rgba(7, 38, 92, 0.5),
-    inset 0 14px 32px rgba(255, 255, 255, 0.35);
   animation: hv-core-float 8s ease-in-out infinite;
 }
 
-/* Smaller satellite orbs drifting around the core. */
 .hv-orb-sat {
   aspect-ratio: 1 / 1;
 }
@@ -142,12 +137,6 @@
   top: 18%;
   left: 74%;
   width: 11%;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(140deg, #2dd4bf, #0d9488);
-  box-shadow:
-    0 16px 36px rgba(13, 148, 136, 0.35),
-    inset 0 -8px 16px rgba(4, 78, 71, 0.4);
   animation: hv-drift-teal 9s ease-in-out infinite;
 }
 
@@ -155,12 +144,6 @@
   top: 60%;
   left: 14%;
   width: 8%;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(140deg, #9ec9ff, #4ea1ff);
-  box-shadow:
-    0 14px 30px rgba(78, 161, 255, 0.4),
-    inset 0 -6px 12px rgba(32, 108, 207, 0.35);
   animation: hv-drift-blue 11s ease-in-out infinite;
 }
 
@@ -168,10 +151,6 @@
   top: 80%;
   left: 62%;
   width: 5.5%;
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 34%),
-    linear-gradient(140deg, #6ee7a0, #30d158);
-  box-shadow: 0 10px 24px rgba(48, 209, 88, 0.4);
   animation: hv-drift-green 7s ease-in-out infinite;
 }
 
@@ -199,19 +178,17 @@
 .hv-particle:nth-child(7) { top: 6%; left: 50%; width: 3px; height: 3px; animation-delay: 3.3s; animation-duration: 5s; }
 .hv-particle:nth-child(8) { top: 70%; left: 8%; background: rgba(20, 184, 166, 0.5); animation-delay: 2.4s; animation-duration: 4s; }
 
-/* Floating glass chips referencing real products. */
+/* Floating flat chips referencing real products. */
 .hv-chip {
   position: absolute;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 16px 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(29, 29, 31, 0.1);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.6);
-  box-shadow: 0 18px 44px rgba(29, 29, 31, 0.12);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(29, 29, 31, 0.07);
 }
 
 .hv-chip-product {
@@ -265,11 +242,6 @@
   font-weight: 700;
 }
 
-@keyframes hv-breathe {
-  0%, 100% { opacity: 0.75; transform: scale(0.97); }
-  50% { opacity: 1; transform: scale(1.04); }
-}
-
 @keyframes hv-spin {
   to { transform: rotate(360deg); }
 }
@@ -305,7 +277,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hv-halo,
+  .hv-matrix,
   .hv-ring-spin,
   .hv-orb,
   .hv-particle,

@@ -122,7 +122,7 @@ Key configuration files:
 │   │   └── PapyrusDesktopPage.tsx
 │   ├── components/         # Shared React components
 │   │   ├── AuthForm.tsx
-│   │   ├── HeroVisual.tsx  # Animated hero graphic (orbs, orbit rings, cursor parallax)
+│   │   ├── HeroVisual.tsx  # Dot-matrix hero graphic (halftone dots, orbit rings, cursor parallax)
 │   │   ├── MouseFollower.tsx
 │   │   └── MaskedHeading.tsx
 │   ├── context/
@@ -154,7 +154,7 @@ Key configuration files:
   - `AuthNav` — renders login/register or user/admin links based on `AuthContext` state.
   - `MouseFollower` — fixed-position cursor glow that follows the mouse.
   - `MaskedHeading` — renders two stacked text layers and reveals a white overlay clipped to a circle near the cursor.
-  - `HeroVisual` — decorative "living core" graphic beside the hero heading (layered orbs, 3D orbit rings, particles, glass product chips) with lerped cursor parallax; all motion is disabled under `prefers-reduced-motion`.
+  - `HeroVisual` — decorative dot-matrix graphic beside the hero heading (flat halftone dot circles, dotted orbit rings, particles, product chips) with lerped cursor parallax; all motion is disabled under `prefers-reduced-motion`.
   - `News` / `Blog` — currently render placeholder content; wired to fetch dynamic data in `src/api.ts`.
   - `Footer` — site footer.
 - **Auth pages** (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `ProfilePage`) wrap `AuthForm` or forms and use `AuthContext`.
