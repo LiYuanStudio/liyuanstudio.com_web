@@ -14,6 +14,7 @@ import {
 import type { BlogPost, NewsUpdate } from './types.js';
 import { AuthNav } from './components/AuthNav.js';
 import { getPublicPostPath } from './lib/profile-path.js';
+import { HeroVisual } from './components/HeroVisual.js';
 import { MaskedHeading } from './components/MaskedHeading.js';
 import './styles.css';
 
@@ -313,9 +314,12 @@ export function App() {
           className="hero"
           aria-labelledby="hero-title"
         >
-          <MaskedHeading as="h1" id="hero-title" className="fixed-blue-period">
-            打造「有生机的科技」
-          </MaskedHeading>
+          <div className="hero-inner">
+            <MaskedHeading as="h1" id="hero-title" className="fixed-blue-period">
+              打造「有生机的科技」
+            </MaskedHeading>
+            <HeroVisual />
+          </div>
         </section>
 
         <section

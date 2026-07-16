@@ -1,0 +1,315 @@
+.hero-visual {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 240px;
+  max-width: 620px;
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hv-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.hv-layer-ring {
+  perspective: 1100px;
+}
+
+/* Subtle technical dot grid, faded out radially. */
+.hv-grid {
+  position: absolute;
+  inset: -6%;
+  background-image: radial-gradient(rgba(29, 29, 31, 0.08) 1.2px, transparent 1.3px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 25%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 25%, transparent 72%);
+}
+
+/* Soft breathing glow behind the core. */
+.hv-halo {
+  position: absolute;
+  inset: -8%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 46% 42%,
+    rgba(0, 113, 227, 0.22),
+    rgba(0, 199, 183, 0.12) 45%,
+    transparent 68%
+  );
+  filter: blur(18px);
+  animation: hv-breathe 9s ease-in-out infinite;
+}
+
+/* Orbit rings, tilted in 3D so they read as ellipses around the core.
+   Ring sizes/tilts are chosen so the ellipse always clears the core orb
+   (semi-minor axis > core radius), keeping the traveling dot visible. */
+.hv-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  aspect-ratio: 1 / 1;
+  transform-style: preserve-3d;
+}
+
+.hv-ring-outer {
+  width: 92%;
+  transform: translate(-50%, -50%) rotateX(55deg) rotateZ(-12deg);
+}
+
+.hv-ring-inner {
+  width: 74%;
+  transform: translate(-50%, -50%) rotateX(48deg) rotateZ(10deg);
+}
+
+.hv-ring-circle {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.hv-ring-outer .hv-ring-circle {
+  border: 1px solid rgba(32, 108, 207, 0.3);
+}
+
+.hv-ring-inner .hv-ring-circle {
+  border: 1px solid rgba(29, 29, 31, 0.14);
+}
+
+.hv-ring-spin {
+  position: absolute;
+  inset: 0;
+  animation: hv-spin 26s linear infinite;
+}
+
+.hv-ring-spin-fast {
+  animation-duration: 17s;
+  animation-direction: reverse;
+}
+
+.hv-ring-dot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.hv-ring-dot-teal {
+  width: 11px;
+  height: 11px;
+  background: #14b8a6;
+  box-shadow: 0 0 12px rgba(20, 184, 166, 0.9);
+}
+
+.hv-ring-dot-blue {
+  width: 9px;
+  height: 9px;
+  background: #206ccf;
+  box-shadow: 0 0 10px rgba(32, 108, 207, 0.8);
+}
+
+/* Central glowing orb. */
+.hv-orb {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.hv-orb-core {
+  top: 50%;
+  left: 50%;
+  width: 40%;
+  aspect-ratio: 1 / 1;
+  background:
+    radial-gradient(circle at 31% 26%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 30%),
+    radial-gradient(circle at 72% 80%, rgba(0, 199, 183, 0.5), rgba(0, 199, 183, 0) 55%),
+    linear-gradient(138deg, #4ea1ff 0%, #206ccf 58%, #0a3a8c 100%);
+  box-shadow:
+    0 36px 90px rgba(32, 108, 207, 0.38),
+    inset 0 -22px 44px rgba(7, 38, 92, 0.5),
+    inset 0 14px 32px rgba(255, 255, 255, 0.35);
+  animation: hv-core-float 8s ease-in-out infinite;
+}
+
+/* Smaller satellite orbs drifting around the core. */
+.hv-orb-sat {
+  aspect-ratio: 1 / 1;
+}
+
+.hv-orb-sat-teal {
+  top: 18%;
+  left: 74%;
+  width: 11%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(140deg, #2dd4bf, #0d9488);
+  box-shadow:
+    0 16px 36px rgba(13, 148, 136, 0.35),
+    inset 0 -8px 16px rgba(4, 78, 71, 0.4);
+  animation: hv-drift-teal 9s ease-in-out infinite;
+}
+
+.hv-orb-sat-blue {
+  top: 60%;
+  left: 14%;
+  width: 8%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(140deg, #9ec9ff, #4ea1ff);
+  box-shadow:
+    0 14px 30px rgba(78, 161, 255, 0.4),
+    inset 0 -6px 12px rgba(32, 108, 207, 0.35);
+  animation: hv-drift-blue 11s ease-in-out infinite;
+}
+
+.hv-orb-sat-green {
+  top: 80%;
+  left: 62%;
+  width: 5.5%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 34%),
+    linear-gradient(140deg, #6ee7a0, #30d158);
+  box-shadow: 0 10px 24px rgba(48, 209, 88, 0.4);
+  animation: hv-drift-green 7s ease-in-out infinite;
+}
+
+/* Twinkling particle dots scattered across the stage. */
+.hv-particles {
+  position: absolute;
+  inset: 0;
+}
+
+.hv-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(32, 108, 207, 0.55);
+  animation: hv-twinkle 4.2s ease-in-out infinite;
+}
+
+.hv-particle:nth-child(1) { top: 26%; left: 16%; animation-delay: 0s; }
+.hv-particle:nth-child(2) { top: 12%; left: 70%; width: 3px; height: 3px; background: rgba(20, 184, 166, 0.6); animation-delay: 0.7s; animation-duration: 3.6s; }
+.hv-particle:nth-child(3) { top: 44%; left: 84%; animation-delay: 1.4s; animation-duration: 4.8s; }
+.hv-particle:nth-child(4) { top: 44%; left: 16%; width: 3px; height: 3px; background: rgba(20, 184, 166, 0.55); animation-delay: 2.1s; }
+.hv-particle:nth-child(5) { top: 82%; left: 30%; animation-delay: 2.8s; animation-duration: 3.8s; }
+.hv-particle:nth-child(6) { top: 68%; left: 76%; width: 3px; height: 3px; background: rgba(48, 209, 88, 0.6); animation-delay: 1.1s; animation-duration: 4.5s; }
+.hv-particle:nth-child(7) { top: 6%; left: 50%; width: 3px; height: 3px; animation-delay: 3.3s; animation-duration: 5s; }
+.hv-particle:nth-child(8) { top: 70%; left: 8%; background: rgba(20, 184, 166, 0.5); animation-delay: 2.4s; animation-duration: 4s; }
+
+/* Floating glass chips referencing real products. */
+.hv-chip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 18px 44px rgba(29, 29, 31, 0.12);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+
+.hv-chip-product {
+  top: 74%;
+  left: 0;
+  animation: hv-chip-float 7s ease-in-out infinite;
+}
+
+.hv-chip-product img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.hv-chip-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.hv-chip-text strong {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hv-chip-text span {
+  color: #6e6e73;
+  font-size: 11px;
+}
+
+.hv-chip-cli {
+  top: 5%;
+  right: 0;
+  padding: 9px 14px;
+  animation: hv-chip-float 8s ease-in-out 1.2s infinite;
+}
+
+.hv-chip-cli strong {
+  color: #1d1d1f;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hv-chip-glyph {
+  color: #206ccf;
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@keyframes hv-breathe {
+  0%, 100% { opacity: 0.75; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes hv-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes hv-core-float {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0) scale(1); }
+  50% { transform: translate(-50%, -50%) translateY(-14px) scale(1.025); }
+}
+
+@keyframes hv-drift-teal {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-12px, 16px) scale(1.08); }
+}
+
+@keyframes hv-drift-blue {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(14px, -12px) scale(1.05); }
+}
+
+@keyframes hv-drift-green {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-8px, -10px); }
+}
+
+@keyframes hv-twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(0.7); }
+  50% { opacity: 0.9; transform: scale(1.15); }
+}
+
+@keyframes hv-chip-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hv-halo,
+  .hv-ring-spin,
+  .hv-orb,
+  .hv-particle,
+  .hv-chip {
+    animation: none;
+  }
+}
