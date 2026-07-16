@@ -4,16 +4,16 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { env } from '../config/env.js';
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
-export const SESSION_COOKIE_NAME = env.IS_PRODUCTION
+export const SESSION_COOKIE_NAME = env.SECURE_SITE_COOKIES
   ? '__Host-liyuan_session'
   : 'liyuan_session';
-export const CSRF_COOKIE_NAME = env.IS_PRODUCTION
+export const CSRF_COOKIE_NAME = env.SECURE_SITE_COOKIES
   ? '__Host-liyuan_csrf'
   : 'liyuan_csrf';
 
 const sharedCookieOptions = {
   path: '/',
-  secure: env.IS_PRODUCTION,
+  secure: env.SECURE_SITE_COOKIES,
   sameSite: 'Lax' as const,
   maxAge: SESSION_TTL_SECONDS,
 };
@@ -50,13 +50,13 @@ export function issueSession(c: Context, token: string): void {
 export function clearSession(c: Context): void {
   deleteCookie(c, SESSION_COOKIE_NAME, {
     path: '/',
-    secure: env.IS_PRODUCTION,
+    secure: env.SECURE_SITE_COOKIES,
     sameSite: 'Lax',
     httpOnly: true,
   });
   deleteCookie(c, CSRF_COOKIE_NAME, {
     path: '/',
-    secure: env.IS_PRODUCTION,
+    secure: env.SECURE_SITE_COOKIES,
     sameSite: 'Lax',
     httpOnly: false,
   });

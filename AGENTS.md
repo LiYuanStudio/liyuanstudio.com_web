@@ -160,7 +160,7 @@ Key configuration files:
 - **Auth pages** (`LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `ResetPasswordPage`, `ProfilePage`) wrap `AuthForm` or forms and use `AuthContext`.
 - **Admin page** (`AdminPage`) lists users and allows role changes/deletion for admin users.
 - **Data fetching:** `src/api.ts` exports `fetchNews()` and `fetchBlogPosts()`; `src/api/auth.ts` and `src/api/admin.ts` handle authenticated requests. All helpers call `${env.API_BASE_URL}/...`.
-- **Authentication state:** `src/context/AuthContext.tsx` provides global auth state, token storage in `localStorage`, and profile update helpers.
+- **Authentication state:** `src/context/AuthContext.tsx` provides global auth state backed by HttpOnly session cookies (plus a JS-readable CSRF cookie), and profile update helpers.
 - **Environment access:** `src/config/env.ts` validates `import.meta.env.VITE_API_BASE_URL` at runtime. Local dev uses `/api`; production uses a full URL from `.env.production`.
 - **Static assets:** images referenced from `/png/...` live in `public/png/`. Vite serves `public/` at the site root in dev and copies it to `dist/` on build. Favicons are referenced explicitly in each page's `index.html`.
 
@@ -323,7 +323,7 @@ These files are either gitignored or contain only non-functional placeholders an
 - `npm run dev` now starts the API first and waits for `/api/health` before launching Vite. If the backend cannot start (e.g., missing `MONGODB_URI`), `npm run dev` will fail after a timeout.
 - `server/` is an npm workspace. You can run backend scripts either from inside `server/` or from the root with `npm run <script> --workspace=server`; root aliases like `dev:api` and `build:api` are provided for convenience.
 - The frontend is an MPA. When adding a new page, create both an `src/entries/<page>.tsx` and a top-level `<page>/index.html`, then add the entry to `vite.config.ts` `rollupOptions.input`.
-- `localStorage` is used for the auth token on the client. Clearing site data / localStorage logs the user out.
+- Authentication persists in HttpOnly session cookies: `__Host-liyuan_session` on HTTPS deployments (any Vercel runtime, including gray previews) and `liyuan_session` in local dev. `localStorage` only ever held a legacy token key that is now cleared on load.
 - When adding dependencies, keep the bundle small; this is a lightweight landing page.
 
 ## Cursor Cloud specific instructions

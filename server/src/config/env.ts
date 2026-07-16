@@ -89,6 +89,11 @@ function parseOrigins(raw: string): string[] {
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
+// Every Vercel deployment is served over HTTPS, including previews behind the gray
+// gateway, which only forwards the Secure __Host- site cookies. NODE_ENV is not a
+// production signal there (preview runtimes do not set it), so key cookie security
+// off the Vercel platform itself instead of NODE_ENV alone.
+const secureSiteCookies = isProduction || Boolean(process.env.VERCEL);
 const emailConfig = resolveEmailConfig(isProduction);
 const CORS_ORIGIN = parseOrigins(requireEnv('CORS_ORIGIN'));
 const APP_URL = resolveAppUrl(isProduction);
@@ -98,6 +103,7 @@ const additionalTrustedOrigins = process.env.TRUSTED_ORIGINS?.trim()
 
 export const env = {
   IS_PRODUCTION: isProduction,
+  SECURE_SITE_COOKIES: secureSiteCookies,
   PORT: Number(process.env.PORT ?? '3000'),
   MONGODB_URI: requireEnv('MONGODB_URI'),
   API_KEY: requireEnv('API_KEY'),

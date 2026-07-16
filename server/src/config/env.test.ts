@@ -211,4 +211,32 @@ describe('server env', () => {
 
     await expect(import('./env.js')).rejects.toThrow('Missing required environment variable: EMAIL_FROM');
   });
+
+  it('disables secure site cookies outside production and Vercel', async () => {
+    stubBaseEnv({ VERCEL: undefined });
+
+    const { env } = await import('./env.js');
+    expect(env.SECURE_SITE_COOKIES).toBe(false);
+  });
+
+  it('enables secure site cookies in production', async () => {
+    stubBaseEnv({
+      NODE_ENV: 'production',
+      APP_URL: 'https://www.liyuanstudio.com',
+      EMAIL_PROVIDER: 'resend',
+      RESEND_API_KEY: 're_test_key',
+      EMAIL_FROM: 'noreply@example.com',
+      VERCEL: undefined,
+    });
+
+    const { env } = await import('./env.js');
+    expect(env.SECURE_SITE_COOKIES).toBe(true);
+  });
+
+  it('enables secure site cookies on Vercel preview runtimes', async () => {
+    stubBaseEnv({ VERCEL: '1' });
+
+    const { env } = await import('./env.js');
+    expect(env.SECURE_SITE_COOKIES).toBe(true);
+  });
 });

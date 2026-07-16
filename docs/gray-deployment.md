@@ -77,7 +77,7 @@ npm run deploy --workspace=deploy-console
 - 必须打开规范控制台地址登录（例如 `https://deploy.liyuanstudio.com`）。灰度域名 `gray.liyuanstudio.com` 不承载登录表单；未登录访问只会引导回控制台。
 - 登录页面签发 10 分钟有效的 HMAC 表单令牌，登录 POST 必须携带有效令牌；因此隐私浏览器省略或改写 `Origin` 时不会误伤合法登录。浏览器明确标记为 `Sec-Fetch-Site: cross-site` 的请求仍会被拒绝，校验失败会返回调试 ID 和可重新提交的新表单。
 - 灰度网关每次只解析 GitHub 中最新的 `gray` deployment。旧 URL 或旧 deployment ID 不能选择。
-- 网关删除浏览器 Cookie 后再访问 Vercel，保留官网 `Authorization` Bearer 令牌，并在服务端附加 protection bypass；该 secret 不会返回浏览器。
+- 网关只向 Vercel 透传官网的 `__Host-liyuan_session` / `__Host-liyuan_csrf` 两个 Cookie（响应方向同样只放行这两个 `Set-Cookie`），其余浏览器 Cookie 和 `Authorization` 头一律删除，并在服务端附加 protection bypass；该 secret 不会返回浏览器。灰度 API 在任何 Vercel 运行时（含 Preview）都签发 `Secure` 的 `__Host-` Cookie——由平台变量 `VERCEL` 判定而不是 `NODE_ENV`——因此 gray 上的登录态可以跨页面保持。
 - 点击全量发布时，控制台实时调用 `/auth/me` 复核角色，并检查 CSRF、deployment ID、SHA、成功状态和重复发布状态。
 - GitHub production deployment 记录审批 LA 账号和发布结果。生产任一步骤失败都会写入失败状态，不会把候选标记为已发布。
 
