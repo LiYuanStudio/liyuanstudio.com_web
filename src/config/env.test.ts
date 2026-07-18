@@ -12,13 +12,6 @@ describe('frontend env', () => {
     expect(env.API_BASE_URL).toBe('https://api.example.com');
   });
 
-  it('accepts the production public profile prefix', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com');
-    vi.stubEnv('VITE_PUBLIC_PROFILE_PREFIX', '/~');
-    const { env } = await import('./env.js');
-    expect(env.PUBLIC_PROFILE_PREFIX).toBe('/~');
-  });
-
   it('accepts whitespace-only values without trimming the returned value', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '  /api  ');
     const { env } = await import('./env.js');

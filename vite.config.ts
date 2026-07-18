@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { matchProfileContentPath } from './src/lib/profile-path.js';
 
 const API_HEALTH_URL = 'http://localhost:3000/api/health';
 
@@ -40,27 +41,9 @@ function backendHealthCheck(): Plugin {
   };
 }
 
-const NON_PROFILE_SEGMENTS = new Set([
-  '',
-  'login',
-  'register',
-  'forgot-password',
-  'reset-password',
-  'admin',
-  'profile',
-  'products',
-  'blog',
-  'me',
-]);
-
 function isProfilePath(url: string): boolean {
   const [path] = url.split('?');
-  if (path.includes('.')) return false;
-  const segments = path.split('/').filter(Boolean);
-  const segment = segments[0];
-  if (segment?.startsWith('@') || segment?.startsWith('__vite')) return false;
-  if (segment === 'me' && segments[1] === 'posts') return true;
-  return Boolean(segment && !NON_PROFILE_SEGMENTS.has(segment));
+  return !path.includes('.') && matchProfileContentPath(path) !== null;
 }
 
 function profileRewrite(): Plugin {

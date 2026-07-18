@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": [
+    "/",
+    "/404.html",
+    "/admin",
+    "/admin/*",
+    "/api",
+    "/api/*",
+    "/assets/*",
+    "/blog",
+    "/blog/*",
+    "/forgot-password",
+    "/forgot-password/*",
+    "/icons/*",
+    "/login",
+    "/login/*",
+    "/png/*",
+    "/products",
+    "/products/*",
+    "/profile",
+    "/profile/*",
+    "/register",
+    "/register/*",
+    "/reset-password",
+    "/reset-password/*"
+  ]
+}

@@ -30,7 +30,8 @@ import {
   getPublicPostPath,
   getPublicProfilePath,
   isValidPublicUsername,
-  type ProfilePathPrefix,
+  matchProfileContentPath,
+  type ProfileContentRoute,
 } from '../lib/profile-path.js';
 import './profile.css';
 
@@ -69,53 +70,10 @@ const EMPTY_BLOG_FORM: BlogPostInput = {
   visibility: 'public',
 };
 
-const NON_PROFILE_PATHS = new Set([
-  '',
-  'login',
-  'register',
-  'forgot-password',
-  'reset-password',
-  'admin',
-  'profile',
-  'products',
-  'blog',
-]);
-
-type Route =
-  | { kind: 'settings' }
-  | { kind: 'my-posts' }
-  | { kind: 'new-post' }
-  | { kind: 'edit-post'; id: string }
-  | { kind: 'public-profile'; username: string; prefix: ProfilePathPrefix }
-  | { kind: 'post-detail'; username: string; blogNumber: number; prefix: ProfilePathPrefix };
+type Route = { kind: 'settings' } | ProfileContentRoute;
 
 function parseRoute(): Route {
-  const parts = window.location.pathname.split('/').filter(Boolean).map(decodeURIComponent);
-  if (parts[0] === 'me' && parts[1] === 'posts') {
-    if (parts[2] === 'new') return { kind: 'new-post' };
-    if (parts[2] && parts[3] === 'edit') return { kind: 'edit-post', id: parts[2] };
-    return { kind: 'my-posts' };
-  }
-  if (parts[0] === '~') {
-    if (!parts[1]) return { kind: 'settings' };
-    if (parts[2]) {
-      const blogNumber = Number(parts[2]);
-      if (Number.isSafeInteger(blogNumber) && blogNumber > 0 && String(blogNumber) === parts[2]) {
-        return { kind: 'post-detail', username: parts[1], blogNumber, prefix: '/~' };
-      }
-      return { kind: 'settings' };
-    }
-    return { kind: 'public-profile', username: parts[1], prefix: '/~' };
-  }
-  if (!parts[0] || parts[0] === 'profile' || NON_PROFILE_PATHS.has(parts[0])) return { kind: 'settings' };
-  if (parts[1]) {
-    const blogNumber = Number(parts[1]);
-    if (Number.isSafeInteger(blogNumber) && blogNumber > 0 && String(blogNumber) === parts[1]) {
-      return { kind: 'post-detail', username: parts[0], blogNumber, prefix: '/' };
-    }
-    return { kind: 'settings' };
-  }
-  return { kind: 'public-profile', username: parts[0], prefix: '/' };
+  return matchProfileContentPath(window.location.pathname) ?? { kind: 'settings' };
 }
 
 function getOwnProfilePath(username: string | undefined): string {
@@ -350,7 +308,7 @@ function BlogEditorPage({ id }: { id?: string }) {
   );
 }
 
-function PublicProfilePage({ username, prefix, currentUser }: { username: string; prefix: ProfilePathPrefix; currentUser?: User }) {
+function PublicProfilePage({ username, currentUser }: { username: string; currentUser?: User }) {
   const [profile, setProfile] = useState<User | null>(null);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -364,7 +322,7 @@ function PublicProfilePage({ username, prefix, currentUser }: { username: string
     fetchPublicProfile(username)
       .then(async (profileResponse) => {
         const canonicalUsername = profileResponse.user.username || username;
-        const canonicalPath = getPublicProfilePath(canonicalUsername, prefix);
+        const canonicalPath = getPublicProfilePath(canonicalUsername);
         if (window.location.pathname !== canonicalPath) {
           window.history.replaceState(
             {},
@@ -389,7 +347,7 @@ function PublicProfilePage({ username, prefix, currentUser }: { username: string
     return () => {
       cancelled = true;
     };
-  }, [prefix, username]);
+  }, [username]);
 
   const profileUsername = profile?.username || username;
   const isOwnProfile = currentUser?.username === profileUsername;
@@ -439,7 +397,7 @@ function PublicProfilePage({ username, prefix, currentUser }: { username: string
                     <p>{post.excerpt || '暂无摘要。'}</p>
                     <p>{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'}</p>
                   </div>
-                  <a className="profile-button profile-button-secondary" href={getPublicPostPath(post.authorUsername, post.blogNumber, prefix)}>阅读</a>
+                  <a className="profile-button profile-button-secondary" href={getPublicPostPath(post.authorUsername, post.blogNumber)}>阅读</a>
                 </article>
               ))}
             </div>
@@ -491,7 +449,7 @@ function renderArticleContent(content: string) {
   );
 }
 
-function BlogDetailPage({ username, blogNumber, prefix }: { username: string; blogNumber: number; prefix: ProfilePathPrefix }) {
+function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber: number }) {
   const [post, setPost] = useState<BlogPost | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -516,7 +474,7 @@ function BlogDetailPage({ username, blogNumber, prefix }: { username: string; bl
       {status === 'ready' && post && (
         <article className="profile-article">
           <header className="profile-article-header">
-            <a href={getPublicProfilePath(post.authorUsername, prefix)}>返回 {post.authorDisplayName}</a>
+            <a href={getPublicProfilePath(post.authorUsername)}>返回 {post.authorDisplayName}</a>
             <h1>{post.title}</h1>
             <p>{formatDate(post.publishedAt || post.createdAt)} · {post.readTime || '1 分钟阅读'} · {post.authorDisplayName}</p>
             {post.tags.length > 0 && <div className="profile-tags">{post.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
@@ -718,8 +676,8 @@ export function ProfilePage() {
       {route.kind === 'my-posts' && <MyPostsPage />}
       {route.kind === 'new-post' && <BlogEditorPage />}
       {route.kind === 'edit-post' && <BlogEditorPage id={route.id} />}
-      {route.kind === 'public-profile' && <PublicProfilePage username={route.username} prefix={route.prefix} currentUser={user} />}
-      {route.kind === 'post-detail' && <BlogDetailPage username={route.username} blogNumber={route.blogNumber} prefix={route.prefix} />}
+      {route.kind === 'public-profile' && <PublicProfilePage username={route.username} currentUser={user} />}
+      {route.kind === 'post-detail' && <BlogDetailPage username={route.username} blogNumber={route.blogNumber} />}
     </div>
   );
 }
