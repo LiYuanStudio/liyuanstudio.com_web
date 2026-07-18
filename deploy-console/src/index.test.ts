@@ -540,7 +540,16 @@ describe('deploy console', () => {
 
   it('rejects a tampered signed form token', async () => {
     const token = await loginFormToken();
-    const tamperedSuffix = token.endsWith('x') ? 'y' : 'x';
+    const signatureStart = token.lastIndexOf('.') + 1;
+    const signatureFirstCharacter = token[signatureStart];
+    if (!signatureFirstCharacter) {
+      throw new Error('Expected the login form token to include a signature');
+    }
+    const tamperedSignatureFirstCharacter = signatureFirstCharacter === 'A' ? 'B' : 'A';
+    const tamperedToken =
+      token.slice(0, signatureStart) +
+      tamperedSignatureFirstCharacter +
+      token.slice(signatureStart + 1);
     const response = await app.request(
       'https://console.example.com/auth/login',
       {
@@ -552,7 +561,7 @@ describe('deploy console', () => {
         body: new URLSearchParams({
           email: 'admin@example.com',
           password: 'correct-password',
-          formToken: `${token.slice(0, -1)}${tamperedSuffix}`,
+          formToken: tamperedToken,
         }).toString(),
       },
       env,
