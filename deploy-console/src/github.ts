@@ -80,14 +80,12 @@ async function productionState(
     env,
     `${repositoryPath(env)}/deployments?environment=production&sha=${encodeURIComponent(sha)}&per_page=10`,
   );
-  let activeState: string | null = null;
   for (const deployment of deployments) {
     if (!isConsolePromotion(deployment, grayDeploymentId)) continue;
     const state = (await latestStatus(env, deployment.id))?.state;
-    if (state === 'success') return state;
-    if (state === 'pending' || state === 'in_progress') activeState = state;
+    if (state) return state;
   }
-  return activeState;
+  return null;
 }
 
 export async function getLatestGrayDeployment(

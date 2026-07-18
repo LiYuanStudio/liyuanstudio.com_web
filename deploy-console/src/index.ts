@@ -541,7 +541,11 @@ app.post('/api/promote', async (c) => {
   if (latest.promoted) {
     return c.json({ error: '该版本已经全量发布' }, 409);
   }
-  if (latest.promotionState === 'pending' || latest.promotionState === 'in_progress') {
+  if (
+    latest.promotionState === 'queued' ||
+    latest.promotionState === 'pending' ||
+    latest.promotionState === 'in_progress'
+  ) {
     return c.json({ error: '该版本正在全量发布' }, 409);
   }
 

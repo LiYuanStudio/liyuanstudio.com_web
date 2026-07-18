@@ -81,6 +81,14 @@ jobs:
               per_page: 10,
             });
             for (const previous of production.data) {
+              const isConsolePromotion =
+                previous.creator?.login === 'github-actions[bot]' &&
+                previous.description?.startsWith('Approved through LA deploy console by ') &&
+                previous.payload &&
+                typeof previous.payload === 'object' &&
+                'gray_deployment_id' in previous.payload;
+              if (!isConsolePromotion) continue;
+
               const previousStatuses = await github.rest.repos.listDeploymentStatuses({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -88,7 +96,12 @@ jobs:
                 per_page: 1,
               });
               const state = previousStatuses.data[0]?.state;
-              if (state === 'success' || state === 'pending' || state === 'in_progress') {
+              if (
+                state === 'success' ||
+                state === 'queued' ||
+                state === 'pending' ||
+                state === 'in_progress'
+              ) {
                 core.setFailed('This commit is already released or has an active production deployment');
                 return;
               }
