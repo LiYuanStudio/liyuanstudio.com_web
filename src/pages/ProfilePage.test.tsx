@@ -146,17 +146,6 @@ describe('ProfilePage', () => {
     expect(screen.getByRole('link', { name: '去登录' })).toHaveAttribute('href', '/login/');
   });
 
-  it('keeps the fixed legacy settings path at /~/', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('unauthenticated')));
-
-    renderPage('/~/');
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /个人主页/ })).toBeInTheDocument();
-    });
-    expect(screen.getByRole('link', { name: /去登录/ })).toHaveAttribute('href', '/login/');
-  });
-
   it('renders another user public profile', async () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', mockFetch());
@@ -188,7 +177,7 @@ describe('ProfilePage', () => {
     expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
   });
 
-  it('renders the legacy production profile path and preserves its prefix', async () => {
+  it('normalizes a public profile to the canonical username path', async () => {
     const canonicalUser: User = {
       ...MEMBER_USER,
       username: 'alice-smith',
@@ -205,12 +194,12 @@ describe('ProfilePage', () => {
       return { ok: true, status: 200, json: async () => ({ user: canonicalUser }) } as Response;
     }));
 
-    renderPage('/~/Alice/?from=old#profile');
+    renderPage('/Alice/?from=old#profile');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Alice Smith' })).toBeInTheDocument();
     });
-    expect(window.location.pathname).toBe('/~/alice-smith/');
+    expect(window.location.pathname).toBe('/alice-smith/');
     expect(window.location.search).toBe('?from=old');
     expect(window.location.hash).toBe('#profile');
   });
@@ -285,15 +274,15 @@ describe('ProfilePage', () => {
     expect(screen.getByRole('link', { name: 'docs' })).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
-  it('keeps the legacy prefix on production article detail pages', async () => {
-    vi.stubGlobal('fetch', mockBlogDetailFetch('Legacy article'));
+  it('links article details back to the canonical public profile', async () => {
+    vi.stubGlobal('fetch', mockBlogDetailFetch('Canonical article'));
 
-    renderPage('/~/LA/1/');
+    renderPage('/LA/1/');
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Markdown post' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: /LA$/ })).toHaveAttribute('href', '/~/LA/');
+    expect(screen.getByRole('link', { name: /LA$/ })).toHaveAttribute('href', '/LA/');
   });
 
   it('does not inject raw html from markdown content', async () => {
