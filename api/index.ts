@@ -2,6 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 
+type HeadersWithSetCookie = Headers & {
+  getSetCookie?: () => string[];
+};
+
 function getBody(req: IncomingMessage): ReadableStream<Uint8Array> | undefined {
   if (req.method === 'GET' || req.method === 'HEAD') {
     return undefined;
@@ -14,6 +18,24 @@ function getBody(req: IncomingMessage): ReadableStream<Uint8Array> | undefined {
       req.on('error', (err) => controller.error(err));
     },
   });
+}
+
+export function forwardResponseHeaders(response: Response, res: ServerResponse): void {
+  const headers = response.headers as HeadersWithSetCookie;
+  const hasGetSetCookie = typeof headers.getSetCookie === 'function';
+  const setCookies = hasGetSetCookie ? headers.getSetCookie() : [];
+
+  headers.forEach((value: string, key: string) => {
+    if (key.toLowerCase() === 'set-cookie') {
+      if (!hasGetSetCookie) setCookies.push(value);
+      return;
+    }
+    res.setHeader(key, value);
+  });
+
+  if (setCookies.length > 0) {
+    res.setHeader('set-cookie', setCookies);
+  }
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -38,9 +60,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const response = await app.fetch(request);
 
     res.statusCode = response.status;
-    response.headers.forEach((value: string, key: string) => {
-      res.setHeader(key, value);
-    });
+    forwardResponseHeaders(response, res);
 
     if (response.body) {
       const reader = response.body.getReader();
