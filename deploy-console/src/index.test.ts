@@ -349,8 +349,12 @@ describe('deploy console', () => {
   });
 
   it.each([
+    ['queued', false],
+    ['pending', false],
     ['in_progress', false],
     ['success', true],
+    ['failure', false],
+    ['error', false],
   ])('recognizes an LA production deployment in state %s', async (productionState, promoted) => {
     installFetch({ github: githubResponses({ productionState }) });
     const cookie = await login();
@@ -702,37 +706,40 @@ describe('deploy console', () => {
     expect(staleResponse.status).toBe(409);
   });
 
-  it('rejects a duplicate approval while production is pending', async () => {
-    const { requests } = installFetch({
-      github: githubResponses({ productionState: 'pending' }),
-    });
-    const cookie = await login();
-    const dashboard = await app.request(
-      'https://console.example.com/',
-      { headers: { Cookie: cookie } },
-      env,
-    );
-    const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
+  it.each(['queued', 'pending', 'in_progress'])(
+    'rejects a duplicate approval while production is %s',
+    async (productionState) => {
+      const { requests } = installFetch({
+        github: githubResponses({ productionState }),
+      });
+      const cookie = await login();
+      const dashboard = await app.request(
+        'https://console.example.com/',
+        { headers: { Cookie: cookie } },
+        env,
+      );
+      const csrf = (await dashboard.text()).match(/name="csrf-token" content="([^"]+)"/u)?.[1] ?? '';
 
-    const response = await app.request(
-      'https://console.example.com/api/promote',
-      {
-        method: 'POST',
-        headers: {
-          Cookie: cookie,
-          'Content-Type': 'application/json',
-          Origin: env.CONSOLE_ORIGIN,
-          'X-CSRF-Token': csrf,
+      const response = await app.request(
+        'https://console.example.com/api/promote',
+        {
+          method: 'POST',
+          headers: {
+            Cookie: cookie,
+            'Content-Type': 'application/json',
+            Origin: env.CONSOLE_ORIGIN,
+            'X-CSRF-Token': csrf,
+          },
+          body: JSON.stringify({ deploymentId: 42, sha: 'abc123' }),
         },
-        body: JSON.stringify({ deploymentId: 42, sha: 'abc123' }),
-      },
-      env,
-    );
+        env,
+      );
 
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({ error: '该版本正在全量发布' });
-    expect(requests.some(({ url }) => url.pathname.endsWith('/dispatches'))).toBe(false);
-  });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({ error: '该版本正在全量发布' });
+      expect(requests.some(({ url }) => url.pathname.endsWith('/dispatches'))).toBe(false);
+    },
+  );
 
   it('keeps the gray session authenticated when the homepage reloads /api/auth/me', async () => {
     const { requests } = installFetch({

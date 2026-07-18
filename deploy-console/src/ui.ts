@@ -221,6 +221,11 @@ const rolloutUser = document.querySelector('#rollout-user');
 const rolloutAudienceType = document.querySelector('#rollout-audience-type');
 let current = null;
 let rollout = null;
+let promotionRequestedAt = null;
+
+function promotionIsActive(state) {
+  return state === 'queued' || state === 'pending' || state === 'in_progress';
+}
 
 function setUnavailable(text) {
   current = null;
@@ -244,12 +249,30 @@ async function loadDeployment() {
     if (!data.deployment) return setUnavailable('main 分支尚未产生灰度部署。');
     current = data.deployment;
     version.textContent = current.sha;
-    const promoting = current.promotionState === 'pending' || current.promotionState === 'in_progress';
-    status.textContent = current.promoted ? '已部署到生产' : (promoting ? '生产部署中' : current.state);
+    const promoting = promotionIsActive(current.promotionState);
+    const promotionFailed = Boolean(current.promotionState) && !current.promoted && !promoting;
+    if (current.promotionState) promotionRequestedAt = null;
+    const awaitingPromotion = promotionRequestedAt !== null && !current.promotionState;
+    const promotionStateUnknown = awaitingPromotion && Date.now() - promotionRequestedAt >= 60000;
+    status.textContent = current.promoted
+      ? '已部署到生产'
+      : (promoting || awaitingPromotion
+          ? (promotionStateUnknown ? '需检查工作流' : '生产部署中')
+          : (promotionFailed ? '生产部署失败' : current.state));
     deploymentId.textContent = String(current.id);
     createdAt.textContent = new Date(current.createdAt).toLocaleString('zh-CN');
     message.textContent = current.state === 'success'
-      ? (current.promoted ? '候选代码已部署到生产，可在下方按账号逐步开放。' : (promoting ? '生产工作流正在运行，请勿重复提交。' : '请检查灰度版本，确认无误后再部署候选到生产。'))
+      ? (current.promoted
+          ? '候选代码已部署到生产，可在下方按账号逐步开放。'
+          : (promoting
+              ? '生产工作流正在运行，状态会自动更新，请勿重复提交。'
+              : (promotionFailed
+                  ? '生产部署失败，请检查 GitHub Actions 日志后重试。'
+                  : (awaitingPromotion
+                      ? (promotionStateUnknown
+                          ? '一分钟内未检测到生产部署记录，请检查 GitHub Actions；确认失败后刷新页面重试。'
+                          : '生产部署请求已提交，正在等待 GitHub Actions 状态。')
+                      : '请检查灰度版本，确认无误后再部署候选到生产。'))))
       : '最新灰度构建尚未成功，不能验收或发布。';
     const ready = current.state === 'success' && Boolean(current.previewUrl);
     if (ready) {
@@ -261,7 +284,7 @@ async function loadDeployment() {
       previewLink.classList.add('is-disabled');
       previewLink.setAttribute('aria-disabled', 'true');
     }
-    promoteButton.disabled = !ready || current.promoted || promoting;
+    promoteButton.disabled = !ready || current.promoted || promoting || awaitingPromotion;
     renderRollout();
   } catch (error) {
     setUnavailable(error instanceof Error ? error.message : '读取部署状态失败');
@@ -343,7 +366,9 @@ promoteButton.addEventListener('click', async () => {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '提交失败');
-    message.textContent = '生产部署工作流已启动，请稍后刷新查看结果。';
+    promotionRequestedAt = Date.now();
+    status.textContent = '生产部署中';
+    message.textContent = '生产部署工作流已启动，状态会自动更新。';
   } catch (error) {
     message.textContent = error instanceof Error ? error.message : '提交失败';
     promoteButton.disabled = false;
