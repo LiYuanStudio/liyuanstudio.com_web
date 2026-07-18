@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from './index.js';
+import {
+  SITE_CSRF_COOKIE,
+  SITE_SESSION_COOKIE,
+  getSetCookieHeaderValues,
+} from './cookies.js';
 import type { Bindings } from './types.js';
 
 const env: Bindings = {
@@ -37,10 +42,7 @@ function cookieFrom(response: Response): string {
 }
 
 function cookiesFrom(response: Response): string[] {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  const values = headers.getSetCookie?.()
-    ?? (response.headers.get('set-cookie') ?? '').split(/,\s*(?=[^;,\s]+=)/u);
-  return values
+  return getSetCookieHeaderValues(response.headers)
     .map((value) => value.split(';', 1)[0]?.trim())
     .filter((value): value is string => Boolean(value));
 }
@@ -742,6 +744,8 @@ describe('deploy console', () => {
   );
 
   it('keeps the gray session authenticated when the homepage reloads /api/auth/me', async () => {
+    const info = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { requests } = installFetch({
       upstream: async (url) => {
         if (url.pathname === '/api/auth/login') {
@@ -778,10 +782,14 @@ describe('deploy console', () => {
     );
 
     expect(loginResponse.status).toBe(200);
+    expect(getSetCookieHeaderValues(loginResponse.headers)).toEqual([
+      `${SITE_SESSION_COOKIE}=preview-session; Path=/; HttpOnly; Secure; SameSite=Lax`,
+      `${SITE_CSRF_COOKIE}=preview-csrf; Path=/; Secure; SameSite=Lax`,
+    ]);
     const siteCookies = cookiesFrom(loginResponse);
     expect(siteCookies).toEqual(expect.arrayContaining([
-      '__Host-liyuan_session=preview-session',
-      '__Host-liyuan_csrf=preview-csrf',
+      `${SITE_SESSION_COOKIE}=preview-session`,
+      `${SITE_CSRF_COOKIE}=preview-csrf`,
     ]));
 
     const meResponse = await app.request(
@@ -807,20 +815,121 @@ describe('deploy console', () => {
     );
     expect(meHeaders.get('authorization')).toBeNull();
     expect(meHeaders.get('x-vercel-protection-bypass')).toBe('bypass-secret');
+
+    expect(warning).not.toHaveBeenCalled();
+    const logs = info.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
+    expect(logs).toEqual([
+      expect.objectContaining({
+        level: 'info',
+        event: 'gray.preview_cookie_proxy',
+        method: 'POST',
+        path: '/api/auth/login',
+        status: 200,
+        incomingCookieNames: [],
+        incomingCookieCount: 0,
+        upstreamSetCookieNames: [SITE_SESSION_COOKIE, SITE_CSRF_COOKIE],
+        upstreamSetCookieCount: 2,
+        forwardedSetCookieNames: [SITE_SESSION_COOKIE, SITE_CSRF_COOKIE],
+        forwardedSetCookieCount: 2,
+      }),
+      expect.objectContaining({
+        level: 'info',
+        event: 'gray.preview_cookie_proxy',
+        method: 'GET',
+        path: '/api/auth/me',
+        status: 200,
+        incomingCookieNames: [SITE_SESSION_COOKIE, SITE_CSRF_COOKIE],
+        incomingCookieCount: 2,
+        upstreamSetCookieNames: [],
+        upstreamSetCookieCount: 0,
+        forwardedSetCookieNames: [],
+        forwardedSetCookieCount: 0,
+      }),
+    ]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).not.toContain('preview-session');
+    expect(serializedLogs).not.toContain('preview-csrf');
+    expect(serializedLogs).not.toContain('correct-password');
+  });
+
+  it.each([
+    {
+      label: 'CSRF cookie',
+      setCookies: [
+        `${SITE_SESSION_COOKIE}=session-only; Path=/; HttpOnly; Secure; SameSite=Lax`,
+      ],
+      missingCookieNames: [SITE_CSRF_COOKIE],
+    },
+    {
+      label: 'session cookie',
+      setCookies: [
+        `${SITE_CSRF_COOKIE}=csrf-only; Path=/; Secure; SameSite=Lax`,
+      ],
+      missingCookieNames: [SITE_SESSION_COOKIE],
+    },
+    {
+      label: 'both required cookies',
+      setCookies: [],
+      missingCookieNames: [SITE_SESSION_COOKIE, SITE_CSRF_COOKIE],
+    },
+  ])('warns when a successful gray login is missing $label', async ({
+    setCookies,
+    missingCookieNames,
+  }) => {
+    const info = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    installFetch({
+      upstream: async () => {
+        const headers = new Headers({ 'Content-Type': 'application/json' });
+        for (const cookie of setCookies) headers.append('Set-Cookie', cookie);
+        return new Response(JSON.stringify({ user: admin }), { headers });
+      },
+    });
+    const consoleCookie = await login();
+
+    const response = await app.request(
+      'https://gray.example.com/api/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          Cookie: consoleCookie,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: admin.email, password: 'correct-password' }),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(info).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(String(warning.mock.calls[0]?.[0])) as Record<string, unknown>;
+    expect(logged).toMatchObject({
+      level: 'warn',
+      event: 'gray.preview_cookie_proxy',
+      warning: 'missing_required_site_cookies',
+      method: 'POST',
+      path: '/api/auth/login',
+      status: 200,
+      missingCookieNames,
+      forwardedSetCookieCount: setCookies.length,
+    });
+    const serialized = JSON.stringify(logged);
+    expect(serialized).not.toContain('session-only');
+    expect(serialized).not.toContain('csrf-only');
+    expect(serialized).not.toContain('correct-password');
+    expect(serialized).not.toContain('la-token');
   });
 
   it('proxies only the main-site auth cookies without leaking console or bypass secrets', async () => {
+    const info = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const clearedSessionCookie = `${SITE_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+    const clearedCsrfCookie = `${SITE_CSRF_COOKIE}=; Path=/; Secure; SameSite=Lax; Max-Age=0`;
     const upstreamHeaders = new Headers({
       'X-Vercel-Protection-Bypass': 'reflected-secret',
     });
-    upstreamHeaders.append(
-      'Set-Cookie',
-      '__Host-liyuan_session=refreshed-session; Path=/; HttpOnly; Secure; SameSite=Lax',
-    );
-    upstreamHeaders.append(
-      'Set-Cookie',
-      '__Host-liyuan_csrf=refreshed-csrf; Path=/; Secure; SameSite=Lax',
-    );
+    upstreamHeaders.append('Set-Cookie', clearedSessionCookie);
+    upstreamHeaders.append('Set-Cookie', clearedCsrfCookie);
     upstreamHeaders.append(
       'Set-Cookie',
       'untrusted_cookie=secret; Path=/; Secure',
@@ -849,9 +958,10 @@ describe('deploy console', () => {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('candidate');
-    expect(response.headers.get('set-cookie')).toContain('__Host-liyuan_session=refreshed-session');
-    expect(response.headers.get('set-cookie')).toContain('__Host-liyuan_csrf=refreshed-csrf');
-    expect(response.headers.get('set-cookie')).not.toContain('untrusted_cookie');
+    expect(getSetCookieHeaderValues(response.headers)).toEqual([
+      clearedSessionCookie,
+      clearedCsrfCookie,
+    ]);
     expect(response.headers.get('x-vercel-protection-bypass')).toBeNull();
     const upstream = requests.find(({ url }) => url.hostname === 'candidate.vercel.app');
     const headers = new Headers(upstream?.init?.headers);
@@ -859,9 +969,69 @@ describe('deploy console', () => {
     expect(headers.get('x-csrf-token')).toBe('site-csrf');
     expect(headers.get('authorization')).toBeNull();
     expect(headers.get('x-vercel-protection-bypass')).toBe('bypass-secret');
+
+    expect(info).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(String(info.mock.calls[0]?.[0])) as Record<string, unknown>;
+    expect(logged).toMatchObject({
+      level: 'info',
+      event: 'gray.preview_cookie_proxy',
+      method: 'POST',
+      path: '/api/auth/logout',
+      status: 200,
+      incomingCookieNames: [SITE_SESSION_COOKIE, SITE_CSRF_COOKIE],
+      incomingCookieCount: 2,
+      upstreamSetCookieNames: [SITE_SESSION_COOKIE, SITE_CSRF_COOKIE, 'untrusted_cookie'],
+      upstreamSetCookieCount: 3,
+      forwardedSetCookieNames: [SITE_SESSION_COOKIE, SITE_CSRF_COOKIE],
+      forwardedSetCookieCount: 2,
+    });
+    const serialized = JSON.stringify(logged);
+    expect(serialized).not.toContain('site-jwt');
+    expect(serialized).not.toContain('site-csrf');
+    expect(serialized).not.toContain('browser-secret');
+    expect(serialized).not.toContain('reflected-secret');
+    expect(serialized).not.toContain('bypass-secret');
+  });
+
+  it('preserves refreshed site cookie attributes from the preview API', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const refreshedSessionCookie = `${SITE_SESSION_COOKIE}=refreshed-session; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`;
+    const refreshedCsrfCookie = `${SITE_CSRF_COOKIE}=refreshed-csrf; Path=/; Secure; SameSite=Lax; Max-Age=604800`;
+    const { requests } = installFetch({
+      upstream: async () => {
+        const headers = new Headers({ 'Content-Type': 'application/json' });
+        headers.append('Set-Cookie', refreshedSessionCookie);
+        headers.append('Set-Cookie', refreshedCsrfCookie);
+        return new Response(JSON.stringify({ user: admin }), { headers });
+      },
+    });
+    const consoleCookie = await login();
+
+    const response = await app.request(
+      'https://gray.example.com/api/auth/me',
+      {
+        headers: {
+          Cookie: `${consoleCookie}; ${SITE_SESSION_COOKIE}=old-session; ${SITE_CSRF_COOKIE}=old-csrf`,
+        },
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(getSetCookieHeaderValues(response.headers)).toEqual([
+      refreshedSessionCookie,
+      refreshedCsrfCookie,
+    ]);
+    const upstream = requests.find(
+      ({ url }) => url.hostname === 'candidate.vercel.app' && url.pathname === '/api/auth/me',
+    );
+    expect(new Headers(upstream?.init?.headers).get('cookie')).toBe(
+      `${SITE_SESSION_COOKIE}=old-session; ${SITE_CSRF_COOKIE}=old-csrf`,
+    );
   });
 
   it('does not forward browser bearer tokens to the preview API', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
     const { requests } = installFetch({
       upstream: async () => new Response(JSON.stringify({ user: { id: 'u1' } }), {
         headers: { 'Content-Type': 'application/json' },

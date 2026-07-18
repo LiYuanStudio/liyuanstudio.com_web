@@ -8,14 +8,18 @@ import {
   verifyLoginFormToken,
   writeSession,
 } from './session.js';
+import {
+  REQUIRED_SITE_COOKIE_NAMES,
+  allowedSiteCookies,
+  cookieName,
+  filterAllowedSiteSetCookies,
+  getSetCookieHeaderValues,
+  siteCookieNames,
+} from './cookies.js';
 import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
 import { applicationScript, dashboardPage, loginPage, previewAccessPage, styles } from './ui.js';
 
 type AppContext = Context<AppEnv>;
-
-const SITE_SESSION_COOKIE = '__Host-liyuan_session';
-const SITE_CSRF_COOKIE = '__Host-liyuan_csrf';
-const ALLOWED_SITE_COOKIES = new Set([SITE_SESSION_COOKIE, SITE_CSRF_COOKIE]);
 
 const app = new Hono<AppEnv>();
 
@@ -59,27 +63,59 @@ function isClearlyCrossSite(c: AppContext): boolean {
   return c.req.header('Sec-Fetch-Site') === 'cross-site';
 }
 
-function allowedSiteCookies(cookieHeader: string | null | undefined): string | undefined {
-  if (!cookieHeader) return undefined;
-  const allowed = cookieHeader
-    .split(';')
-    .map((value) => value.trim())
-    .filter((value) => ALLOWED_SITE_COOKIES.has(value.slice(0, value.indexOf('='))));
-  return allowed.length > 0 ? allowed.join('; ') : undefined;
-}
+function logPreviewCookieProxy(options: {
+  context: AppContext;
+  incomingSiteCookies: string | undefined;
+  path: string;
+  status: number;
+  upstreamSetCookies: string[];
+  forwardedSetCookies: string[];
+}): void {
+  const {
+    context,
+    incomingSiteCookies,
+    path,
+    status,
+    upstreamSetCookies,
+    forwardedSetCookies,
+  } = options;
+  const incomingCookieNames = siteCookieNames(incomingSiteCookies?.split(';') ?? []);
+  const upstreamSetCookieNames = upstreamSetCookies
+    .map(cookieName)
+    .filter((name): name is string => Boolean(name));
+  const forwardedSetCookieNames = siteCookieNames(forwardedSetCookies);
+  const successfulLogin = context.req.method === 'POST'
+    && path === '/api/auth/login'
+    && status >= 200
+    && status < 300;
+  const missingCookieNames = successfulLogin
+    ? REQUIRED_SITE_COOKIE_NAMES.filter((name) => !forwardedSetCookieNames.includes(name))
+    : [];
+  const details = {
+    event: 'gray.preview_cookie_proxy',
+    requestId: getRequestId(context),
+    method: context.req.method,
+    path,
+    status,
+    incomingCookieNames,
+    incomingCookieCount: incomingCookieNames.length,
+    upstreamSetCookieNames,
+    upstreamSetCookieCount: upstreamSetCookieNames.length,
+    forwardedSetCookieNames,
+    forwardedSetCookieCount: forwardedSetCookieNames.length,
+  };
 
-function splitSetCookieHeader(value: string): string[] {
-  return value.split(/,\s*(?=[^;,\s]+=)/u);
-}
+  if (missingCookieNames.length > 0) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      ...details,
+      warning: 'missing_required_site_cookies',
+      missingCookieNames,
+    }));
+    return;
+  }
 
-function allowedSiteSetCookies(headers: Headers): string[] {
-  const headersWithGetSetCookie = headers as Headers & { getSetCookie?: () => string[] };
-  const values = headersWithGetSetCookie.getSetCookie?.()
-    ?? splitSetCookieHeader(headers.get('set-cookie') ?? '');
-  return values.filter((value) => {
-    const cookieName = value.slice(0, value.indexOf('=')).trim();
-    return ALLOWED_SITE_COOKIES.has(cookieName);
-  });
+  console.log(JSON.stringify({ level: 'info', ...details }));
 }
 
 async function loginErrorPage(
@@ -324,14 +360,26 @@ async function proxyPreview(c: AppContext): Promise<Response> {
     body: c.req.method === 'GET' || c.req.method === 'HEAD' ? undefined : c.req.raw.body,
     redirect: 'manual',
   });
+  const upstreamSetCookies = getSetCookieHeaderValues(upstreamResponse.headers);
+  const upstreamSiteCookies = filterAllowedSiteSetCookies(upstreamSetCookies);
   const responseHeaders = new Headers(upstreamResponse.headers);
-  const upstreamSiteCookies = allowedSiteSetCookies(responseHeaders);
   responseHeaders.delete('set-cookie');
   responseHeaders.delete('x-vercel-protection-bypass');
   responseHeaders.delete('x-vercel-set-bypass-cookie');
   responseHeaders.set('Cache-Control', 'private, no-store');
   responseHeaders.set('X-Robots-Tag', 'noindex, nofollow');
   for (const cookie of upstreamSiteCookies) responseHeaders.append('Set-Cookie', cookie);
+
+  if (incoming.pathname.startsWith('/api/auth/') || upstreamSetCookies.length > 0) {
+    logPreviewCookieProxy({
+      context: c,
+      incomingSiteCookies: siteCookies,
+      path: incoming.pathname,
+      status: upstreamResponse.status,
+      upstreamSetCookies,
+      forwardedSetCookies: upstreamSiteCookies,
+    });
+  }
 
   const location = responseHeaders.get('Location');
   if (location) {
