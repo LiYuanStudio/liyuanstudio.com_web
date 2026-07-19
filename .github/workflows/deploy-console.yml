@@ -49,6 +49,19 @@ jobs:
             fi
           done
 
+      - name: Sync Vercel API token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_API_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not configured"
+            exit 1
+          fi
+          printf '%s' "$VERCEL_API_TOKEN" |
+            npx wrangler secret put VERCEL_API_TOKEN --config deploy-console/wrangler.jsonc
+
       - name: Deploy Worker
         run: npm run deploy --workspace=deploy-console
         env:
