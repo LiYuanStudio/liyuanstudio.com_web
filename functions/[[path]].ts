@@ -2,6 +2,7 @@ import {
   getCanonicalProfileContentPath,
   matchProfileContentPath,
 } from '../src/lib/profile-path.js';
+import { proxyApiRequest } from '../src/lib/api-proxy.js';
 
 type AssetFetcher = {
   fetch(input: Request | URL | string, init?: RequestInit): Promise<Response>;
@@ -11,6 +12,7 @@ export type PagesRoutingContext = {
   request: Request;
   env: {
     ASSETS: AssetFetcher;
+    API_UPSTREAM_ORIGIN: string;
   };
   next(): Promise<Response>;
 };
@@ -20,6 +22,11 @@ function isPageRequest(method: string): boolean {
 }
 
 export async function onRequest(context: PagesRoutingContext): Promise<Response> {
+  const requestUrl = new URL(context.request.url);
+  if (requestUrl.pathname === '/api' || requestUrl.pathname.startsWith('/api/')) {
+    return proxyApiRequest(context.request, context.env.API_UPSTREAM_ORIGIN);
+  }
+
   if (!isPageRequest(context.request.method)) {
     return context.next();
   }
@@ -29,7 +36,6 @@ export async function onRequest(context: PagesRoutingContext): Promise<Response>
     return assetResponse;
   }
 
-  const requestUrl = new URL(context.request.url);
   const route = matchProfileContentPath(requestUrl.pathname);
   if (!route) {
     return assetResponse;

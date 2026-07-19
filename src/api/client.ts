@@ -6,6 +6,7 @@ import {
 } from './errors.js';
 
 const LEGACY_TOKEN_KEY = 'liyuan_auth_token';
+const BROWSER_REQUEST_HEADER = 'X-Liyuan-Client';
 const CSRF_COOKIE_NAMES = ['__Host-liyuan_csrf', 'liyuan_csrf'];
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -50,6 +51,7 @@ export async function apiFetchJson<T>(path: string, options?: RequestInit): Prom
     headers['Content-Type'] = 'application/json';
   }
   if (isUnsafeRequest(requestInit.method)) {
+    headers[BROWSER_REQUEST_HEADER] = 'web';
     const csrfToken = getCsrfToken();
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
   }

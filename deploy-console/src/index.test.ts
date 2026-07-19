@@ -16,6 +16,9 @@ const env: Bindings = {
   PROMOTE_WORKFLOW: 'promote.yml',
   SESSION_SECRET: 'a-secure-test-session-secret-with-32-chars',
   VERCEL_PROTECTION_BYPASS: 'bypass-secret',
+  VERCEL_API_TOKEN: 'vercel-api-token',
+  VERCEL_PROJECT_ID: 'project-id',
+  VERCEL_TEAM_ID: 'team-id',
   CONSOLE_ORIGIN: 'https://console.example.com',
   PREVIEW_ORIGIN: 'https://gray.example.com',
   COOKIE_DOMAIN: '.example.com',
@@ -134,6 +137,7 @@ function installFetch(options?: {
   meContentType?: string;
   loginThrows?: boolean;
   meThrows?: boolean;
+  vercelProjectId?: string;
   github?: ReturnType<typeof githubResponses>;
   upstream?: (url: URL, init?: RequestInit) => Promise<Response>;
   rollout?: (url: URL, init?: RequestInit) => Response | null;
@@ -180,6 +184,18 @@ function installFetch(options?: {
         });
       }
       return json({ user: { ...admin, role: options?.role ?? 'admin' } });
+    }
+    if (
+      url.hostname === 'api.vercel.com' &&
+      url.pathname.startsWith('/v13/deployments/')
+    ) {
+      const hostname = decodeURIComponent(url.pathname.slice('/v13/deployments/'.length));
+      return json({
+        projectId: options?.vercelProjectId ?? env.VERCEL_PROJECT_ID,
+        readyState: 'READY',
+        target: null,
+        url: hostname,
+      });
     }
     const rolloutResponse = options?.rollout?.(url, init);
     if (rolloutResponse) return rolloutResponse;
@@ -616,6 +632,41 @@ describe('deploy console', () => {
     expect(response.status).toBe(401);
     expect(response.headers.get('X-Request-Id')).toBeTruthy();
     await expect(response.text()).resolves.toContain('href="https://console.example.com"');
+  });
+
+  it('rejects a gray upstream that belongs to a different Vercel project', async () => {
+    installFetch();
+    const cookie = await login();
+    const { mock } = installFetch({
+      vercelProjectId: 'attacker-project',
+      upstream: async () => new Response('must not be reached'),
+    });
+
+    const response = await app.request(
+      'https://gray.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+
+    expect(response.status).toBe(503);
+    expect(mock.mock.calls.some(([input]) =>
+      new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
+        .hostname === 'candidate.vercel.app')).toBe(false);
+  });
+
+  it('revokes gray preview access immediately when admin revalidation fails', async () => {
+    installFetch();
+    const cookie = await login();
+    installFetch({ meStatus: 401 });
+
+    const response = await app.request(
+      'https://gray.example.com/',
+      { headers: { Cookie: cookie } },
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
   });
 
   it('allows the Cloudflare Insights beacon while retaining a restrictive content security policy', async () => {

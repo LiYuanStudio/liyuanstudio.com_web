@@ -161,8 +161,8 @@ describe('ProfilePage', () => {
 
   it('renders a public profile without login', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
-      if (url.toString().includes('/auth/me')) {
-        return { ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }) } as Response;
+      if (url.toString().includes('/auth/session')) {
+        return { ok: true, status: 200, json: async () => ({ user: null }) } as Response;
       }
       return mockFetch(MEMBER_USER)(url);
     }));

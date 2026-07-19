@@ -37,7 +37,7 @@ cp .env.example .env
 
 # 后端
 cp server/.env.example server/.env
-# 编辑 server/.env，填入本地 MongoDB/Atlas、API_KEY、JWT_SECRET、CORS_ORIGIN、APP_URL、API_PUBLIC_URL
+# 编辑 server/.env，填入本地 MongoDB/Atlas、API_KEY、JWT_SECRET、CORS_ORIGIN、APP_URL
 ```
 
 本地开发可以不配置邮件服务：保持 `EMAIL_PROVIDER=` 为空，注册时后端会在控制台打印邮箱验证链接。不要把 `.env`、API Key、token、密码或真实数据库连接提交到仓库。
@@ -100,12 +100,14 @@ npm run dev
 npm run build
 ```
 
-然后在 Cloudflare Pages 控制台设置环境变量：
+生产构建继续使用同源 API：
 
 ```text
-VITE_API_BASE_URL=https://api.liyuanstudio.com/api
-VITE_LEGACY_API_BASE_URL=https://liyuanstudio-com-web.vercel.app/api
+VITE_API_BASE_URL=/api
 ```
+
+Cloudflare Pages Function 根据 `wrangler.jsonc` 中固定的
+`API_UPSTREAM_ORIGIN=https://liyuanstudio-com-web.vercel.app` 转发 `/api/*`。
 
 ### 后端（Vercel）
 
@@ -114,7 +116,6 @@ VITE_LEGACY_API_BASE_URL=https://liyuanstudio-com-web.vercel.app/api
 - `MONGODB_URI`
 - `API_KEY`
 - `JWT_SECRET`
-- `API_PUBLIC_URL=https://api.liyuanstudio.com`
 - `CORS_ORIGIN`，包含生产前端域名；如果同时使用 apex 和 www，配置为 `https://liyuanstudio.com,https://www.liyuanstudio.com`
 - `APP_URL`，生产前端地址；如果正式站以 www 访问，配置为 `https://www.liyuanstudio.com`
 - `EMAIL_PROVIDER=resend`
@@ -123,7 +124,8 @@ VITE_LEGACY_API_BASE_URL=https://liyuanstudio-com-web.vercel.app/api
 
 生产邮件使用 Resend。请在 Resend 配置发信域名，并在 Cloudflare DNS 中添加 Resend 要求的 DNS 记录，等域名验证通过后再启用生产注册邮件。
 
-部署完成后，固定 API 入口为 `https://api.liyuanstudio.com/api/*`。Vercel 项目必须绑定该自定义域名；Cloudflare DNS 按 Vercel 项目给出的记录配置 CNAME。`VITE_LEGACY_API_BASE_URL` 只在旧 JWT Cookie 的七天迁移窗口内保留。
+浏览器只访问主站同源的 `/api/*`；Vercel 原始地址只作为 Cloudflare Pages
+Function 的固定服务端上游。上线此变更后，旧跨域 Cookie 不做迁移，现有用户需重新登录一次。
 
 ## API 说明
 
@@ -143,7 +145,7 @@ VITE_LEGACY_API_BASE_URL=https://liyuanstudio-com-web.vercel.app/api
 ## 安全
 
 - 所有敏感信息均通过环境变量注入，代码中无真实默认值。
-- `JWT_SECRET` 必须来自环境变量，仅用于迁移期旧 JWT 校验；新会话使用 MongoDB 中的随机令牌哈希。
+- 登录会话使用 MongoDB 中的高熵随机令牌哈希；浏览器 Cookie 不保存 JWT。
 - 后端 `API_KEY` 使用恒定时间比较，防止时序攻击。
 - `npm run check:secrets` 会扫描 `.env` 文件、MongoDB URI、API Key、JWT secret、Resend key、token、密码等常见模式。
 - 不要提交 `.env`、真实 API Key、token、密码、Resend key 或 MongoDB 连接串。

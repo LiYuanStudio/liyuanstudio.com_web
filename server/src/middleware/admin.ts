@@ -37,7 +37,7 @@ export const requireAdminOrApiKey = createMiddleware<{ Variables: AuthVariables 
     }
 
     try {
-      const { user, kind } = await authenticateToken(token);
+      const { user } = await authenticateToken(token);
       if (user.role !== 'admin') {
         return jsonError(c, '没有权限', 403);
       }
@@ -45,7 +45,6 @@ export const requireAdminOrApiKey = createMiddleware<{ Variables: AuthVariables 
       c.set('userId', user.id);
       c.set('authUser', user);
       c.set('authToken', token);
-      c.set('authSessionKind', kind);
       await next();
     } catch {
       return jsonError(c, '未授权，请先登录', 401);

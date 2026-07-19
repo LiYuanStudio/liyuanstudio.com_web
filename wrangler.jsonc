@@ -6,6 +6,9 @@
   "observability": {
     "enabled": true
   },
+  "vars": {
+    "API_UPSTREAM_ORIGIN": "https://liyuanstudio-com-web.vercel.app"
+  },
   "compatibility_flags": [
     "nodejs_compat"
   ]

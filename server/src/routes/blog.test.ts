@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BlogModel } from '../models/blog.js';
 import { CounterModel } from '../models/counter.js';
+import { SessionModel } from '../models/session.js';
 import { UserModel } from '../models/user.js';
 
 vi.mock('../lib/db.js', () => ({
@@ -10,10 +11,10 @@ vi.mock('../models/blog.js');
 vi.mock('../models/counter.js');
 vi.mock('../models/user.js');
 vi.mock('../models/session.js');
-vi.mock('../models/session-migration.js');
 
 const mockBlogModel = vi.mocked(BlogModel);
 const mockCounterModel = vi.mocked(CounterModel);
+const mockSessionModel = vi.mocked(SessionModel);
 const mockUserModel = vi.mocked(UserModel);
 
 const AUTHOR_ID = '64a000000000000000000001';
@@ -111,6 +112,7 @@ describe('blog routes', () => {
     mockBlogModel.create.mockReset();
     mockBlogModel.findById.mockReset();
     mockBlogModel.findByIdAndDelete.mockReset();
+    mockSessionModel.findOne.mockReset();
     mockUserModel.findById.mockReset();
     mockCounterModel.findOneAndUpdate.mockReset();
   });
@@ -122,12 +124,18 @@ describe('blog routes', () => {
 
   async function tokenFor(user = author) {
     const { signToken } = await import('../middleware/auth.js');
-    return await signToken({
+    const token = await signToken({
       id: user._id.toString(),
       email: user.email,
       role: user.role,
       tokenVersion: user.tokenVersion,
     });
+    mockSessionModel.findOne.mockResolvedValue({
+      userId: { toString: () => user._id.toString() },
+      tokenVersion: user.tokenVersion,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
+    return token;
   }
 
   function authHeaders(token: string) {

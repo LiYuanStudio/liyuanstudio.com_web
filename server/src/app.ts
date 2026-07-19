@@ -21,7 +21,14 @@ export function createApp(basePath?: string) {
     cors({
       origin: env.CORS_ORIGIN,
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'X-API-Key', 'Authorization', 'X-CSRF-Token', 'X-Request-Id'],
+      allowHeaders: [
+        'Content-Type',
+        'X-API-Key',
+        'Authorization',
+        'X-CSRF-Token',
+        'X-Liyuan-Client',
+        'X-Request-Id',
+      ],
       credentials: true,
     }),
   );

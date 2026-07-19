@@ -7,9 +7,11 @@
     "enabled": true
   },
   "vars": {
-    "LA_API_BASE_URL": "https://api.liyuanstudio.com/api",
+    "LA_API_BASE_URL": "https://liyuanstudio-com-web.vercel.app/api",
     "GITHUB_OWNER": "liyuanstudio",
     "GITHUB_REPO": "liyuanstudio.com_web",
+    "VERCEL_PROJECT_ID": "prj_GWA2MHwmjPLxbQw3vqqWthutWY7Z",
+    "VERCEL_TEAM_ID": "team_I2l4qs9iDsMVQTTvVZ3kNg5n",
     "PROMOTE_WORKFLOW": "promote.yml",
     "CONSOLE_ORIGIN": "https://deploy.liyuanstudio.com",
     "PREVIEW_ORIGIN": "https://gray.liyuanstudio.com",

@@ -27,6 +27,7 @@ function createContext(
       ASSETS: {
         fetch: assetFetch,
       },
+      API_UPSTREAM_ORIGIN: 'https://liyuanstudio-com-web.vercel.app',
     },
     next,
   };

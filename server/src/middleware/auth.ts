@@ -23,10 +23,9 @@ export type AuthVariables = RequestVariables & {
   userId: string;
   authUser: TokenUser;
   authToken: string;
-  authSessionKind: 'persistent' | 'legacy';
 };
 
-/** Transitional signer retained only while the seven-day JWT migration bridge is active. */
+/** Legacy JWT helper retained for compatibility tests; runtime authentication never accepts it directly. */
 export async function signToken(user: TokenUser): Promise<string> {
   return new SignJWT({
     sub: user.id,
@@ -42,7 +41,7 @@ export async function signToken(user: TokenUser): Promise<string> {
     .sign(SECRET);
 }
 
-/** Transitional verifier retained only while the seven-day JWT migration bridge is active. */
+/** Legacy JWT helper retained for compatibility tests; runtime authentication never calls it. */
 export async function verifyToken(token: string): Promise<TokenUser> {
   const { payload } = await jwtVerify(token, SECRET, {
     issuer: ISSUER,
@@ -69,23 +68,13 @@ export async function verifyToken(token: string): Promise<TokenUser> {
 
 export async function authenticateToken(token: string): Promise<{
   user: TokenUser;
-  kind: 'persistent' | 'legacy';
 }> {
   const persistentSession = await findPersistentSession(token);
-  let userId: string;
-  let tokenVersion: number;
-  let kind: 'persistent' | 'legacy';
-
-  if (persistentSession) {
-    userId = persistentSession.userId.toString();
-    tokenVersion = persistentSession.tokenVersion;
-    kind = 'persistent';
-  } else {
-    const legacyUser = await verifyToken(token);
-    userId = legacyUser.id;
-    tokenVersion = legacyUser.tokenVersion;
-    kind = 'legacy';
+  if (!persistentSession) {
+    throw new Error('session_not_found');
   }
+  const userId = persistentSession.userId.toString();
+  const tokenVersion = persistentSession.tokenVersion;
 
   const dbUser = await UserModel.findById(userId);
   if (!dbUser) {
@@ -104,7 +93,6 @@ export async function authenticateToken(token: string): Promise<{
       role: normalizeUserRole(dbUser.role),
       tokenVersion: dbTokenVersion,
     },
-    kind,
   };
 }
 
@@ -133,11 +121,10 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
     }
 
     try {
-      const { user, kind } = await authenticateToken(token);
+      const { user } = await authenticateToken(token);
       c.set('userId', user.id);
       c.set('authUser', user);
       c.set('authToken', token);
-      c.set('authSessionKind', kind);
       await next();
     } catch (error) {
       const reason = error instanceof Error &&

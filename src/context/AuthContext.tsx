@@ -29,7 +29,6 @@ import type {
   User,
 } from '../types.js';
 import { ApiError } from '../api/errors.js';
-import { beginLegacySessionMigration } from '../api/session-migration.js';
 
 type AuthState =
   | { status: 'loading' }
@@ -76,12 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadUser = useCallback(async () => {
     try {
       const { user } = await fetchMe();
-      setState({ status: 'authenticated', user });
+      setState(user
+        ? { status: 'authenticated', user }
+        : { status: 'unauthenticated' });
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-        if (error.status === 401 && beginLegacySessionMigration()) {
-          return;
-        }
         setState({ status: 'unauthenticated' });
         return;
       }

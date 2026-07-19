@@ -6,7 +6,6 @@ process.env.MONGODB_URI ??= 'mongodb://localhost/test';
 process.env.API_KEY ??= 'test-api-key';
 process.env.JWT_SECRET ??= 'test-secret-must-be-at-least-32-characters';
 process.env.CORS_ORIGIN ??= 'https://liyuanstudio.com';
-process.env.API_PUBLIC_URL ??= 'https://api.liyuanstudio.com';
 
 // Suppress Hono request logger output in test runs.
 vi.mock('hono/logger', () => ({

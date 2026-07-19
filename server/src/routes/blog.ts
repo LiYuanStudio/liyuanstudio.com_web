@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { BlogModel, type BlogPost, type BlogStatus, type BlogVisibility } from '../models/blog.js';
 import { CounterModel } from '../models/counter.js';
 import { UserModel, type User } from '../models/user.js';
-import { requireAuth, verifyToken, type TokenUser, type AuthVariables } from '../middleware/auth.js';
+import { authenticateToken, requireAuth, type TokenUser, type AuthVariables } from '../middleware/auth.js';
 import { canWriteBlog, normalizeUserRole } from '../lib/roles.js';
 import { jsonError } from '../middleware/request-id.js';
 
@@ -268,15 +268,7 @@ async function getOptionalAuthUser(c: Context<{ Variables: AuthVariables }>): Pr
   if (scheme?.toLowerCase() !== 'bearer' || !token) return null;
 
   try {
-    const tokenUser = await verifyToken(token);
-    const dbUser = await UserModel.findById(tokenUser.id);
-    if (!dbUser || (dbUser.tokenVersion ?? 0) !== tokenUser.tokenVersion) return null;
-    return {
-      id: dbUser._id.toString(),
-      email: dbUser.email,
-      role: normalizeUserRole(dbUser.role),
-      tokenVersion: dbUser.tokenVersion ?? 0,
-    };
+    return (await authenticateToken(token)).user;
   } catch {
     return null;
   }

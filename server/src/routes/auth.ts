@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
-import type { Context } from 'hono';
+import type { Context, Next } from 'hono';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
 import { PendingRegistrationModel } from '../models/pending-registration.js';
@@ -26,10 +26,9 @@ import {
   isDeployConsoleRequest,
   issueSession,
   readSessionToken,
-  renewPersistentSession,
+  touchPersistentSession,
   revokeUserSessions,
 } from '../lib/session.js';
-import { SessionMigrationModel } from '../models/session-migration.js';
 import {
   createUniqueUsername,
   ensureUsername,
@@ -51,7 +50,6 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 10 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const TWO_FACTOR_CHALLENGE_TTL_MS = 10 * 60 * 1000;
-const SESSION_MIGRATION_TTL_MS = 2 * 60 * 1000;
 const TWO_FACTOR_MAX_ATTEMPTS = 5;
 const RECOVERY_CODE_COUNT = 10;
 const FORGOT_PASSWORD_COOLDOWN_MS = 60 * 1000;
@@ -259,19 +257,6 @@ function badRequest(c: Context, error: unknown) {
   return jsonError(c, error instanceof Error ? error.message : '请求无效', 400);
 }
 
-function trustedReturnUrl(raw: unknown): URL | null {
-  if (typeof raw !== 'string' || raw.length > 2048) return null;
-  try {
-    const parsed = new URL(raw);
-    if (parsed.username || parsed.password || !env.TRUSTED_ORIGINS.includes(parsed.origin)) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 function createRegistrationCode(): string {
   return String(randomInt(100000, 1000000));
 }
@@ -415,6 +400,23 @@ async function issueAuthResponse(c: Context, user: UserForResponse) {
     : { user: serializeUser(user) };
 }
 
+async function requireTrustedSessionCreation(c: Context, next: Next) {
+  if (isDeployConsoleRequest(c)) {
+    return next();
+  }
+  const origin = c.req.header('Origin');
+  if (origin && (
+    !env.TRUSTED_ORIGINS.includes(origin) ||
+    c.req.header('X-Liyuan-Client') !== 'web'
+  )) {
+    return jsonError(c, '请求来源不受信任', 403);
+  }
+  if (!origin && c.req.header('Sec-Fetch-Site') === 'cross-site') {
+    return jsonError(c, '请求来源不受信任', 403);
+  }
+  return next();
+}
+
 async function verifyChallengeCode(
   challengeToken: string,
   purpose: TwoFactorChallengePurpose,
@@ -509,7 +511,7 @@ app.post('/register/send-code', async (c) => {
   return c.json({ message: '验证码已发送，请查收邮箱。' });
 });
 
-app.post('/register/verify', async (c) => {
+app.post('/register/verify', requireTrustedSessionCreation, async (c) => {
   let email: string;
   let code: string;
 
@@ -564,7 +566,7 @@ app.post('/register/verify', async (c) => {
   return c.json(await issueAuthResponse(c, user), 201);
 });
 
-app.post('/login', async (c) => {
+app.post('/login', requireTrustedSessionCreation, async (c) => {
   let email: string;
   let password: string;
 
@@ -700,7 +702,7 @@ app.post('/login', async (c) => {
   return c.json(await issueAuthResponse(c, user));
 });
 
-app.post('/2fa/login/verify', async (c) => {
+app.post('/2fa/login/verify', requireTrustedSessionCreation, async (c) => {
   let challengeToken: string;
   let code: string | undefined;
   let recoveryCode: string | undefined;
@@ -958,21 +960,38 @@ app.get('/me', requireAuth, async (c) => {
     return jsonError(c, '用户不存在', 404);
   }
   const currentToken = c.get('authToken');
-  if (c.get('authSessionKind') === 'persistent') {
-    const renewed = await renewPersistentSession(currentToken);
-    if (!renewed) {
-      clearSession(c);
-      return jsonError(c, '未授权，请先登录', 401);
-    }
-    issueSession(c, currentToken);
-  } else {
-    const upgradedToken = await createPersistentSession(
-      user._id.toString(),
-      user.tokenVersion ?? 0,
-    );
-    issueSession(c, upgradedToken);
+  const touched = await touchPersistentSession(currentToken);
+  if (!touched) {
+    clearSession(c);
+    return jsonError(c, '未授权，请先登录', 401);
   }
+  issueSession(c, currentToken);
   return c.json({ user: serializeUser(await ensureUsernameForRequest(c, user, 'me')) });
+});
+
+app.get('/session', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const token = readSessionToken(c);
+  if (!token) {
+    return c.json({ user: null });
+  }
+
+  try {
+    const { user: tokenUser } = await authenticateToken(token);
+    const user = await UserModel.findById(tokenUser.id);
+    const touched = await touchPersistentSession(token);
+    if (!user || !touched) {
+      clearSession(c);
+      return c.json({ user: null });
+    }
+    issueSession(c, token);
+    return c.json({
+      user: serializeUser(await ensureUsernameForRequest(c, user, 'session')),
+    });
+  } catch {
+    clearSession(c);
+    return c.json({ user: null });
+  }
 });
 
 app.post('/logout', requireAuth, async (c) => {
@@ -986,66 +1005,6 @@ app.post('/logout', requireAuth, async (c) => {
   await revokeUserSessions(user._id.toString());
   clearSession(c);
   return c.json({ message: '已退出登录' });
-});
-
-app.get('/session-migration/start', async (c) => {
-  c.header('Cache-Control', 'no-store');
-  c.header('Referrer-Policy', 'no-referrer');
-  const returnTo = trustedReturnUrl(c.req.query('returnTo'));
-  if (!returnTo) {
-    return jsonError(c, '会话迁移返回地址无效', 400);
-  }
-
-  const token = readSessionToken(c);
-  if (!token) {
-    return c.redirect(returnTo.toString(), 302);
-  }
-
-  try {
-    const { user } = await authenticateToken(token);
-    const migrationToken = randomBytes(32).toString('base64url');
-    await SessionMigrationModel.create({
-      tokenHash: hashToken(migrationToken),
-      userId: user.id,
-      tokenVersion: user.tokenVersion,
-      expiresAt: new Date(Date.now() + SESSION_MIGRATION_TTL_MS),
-    });
-    const completeUrl = new URL('/api/auth/session-migration/complete', env.API_PUBLIC_URL);
-    completeUrl.searchParams.set('code', migrationToken);
-    completeUrl.searchParams.set('returnTo', returnTo.toString());
-    return c.redirect(completeUrl.toString(), 302);
-  } catch {
-    return c.redirect(returnTo.toString(), 302);
-  }
-});
-
-app.get('/session-migration/complete', async (c) => {
-  c.header('Cache-Control', 'no-store');
-  c.header('Referrer-Policy', 'no-referrer');
-  const returnTo = trustedReturnUrl(c.req.query('returnTo'));
-  if (!returnTo) {
-    return jsonError(c, '会话迁移返回地址无效', 400);
-  }
-
-  const code = c.req.query('code');
-  if (typeof code === 'string' && code.length >= 32 && code.length <= 128) {
-    const migration = await SessionMigrationModel.findOneAndDelete({
-      tokenHash: hashToken(code),
-      expiresAt: { $gt: new Date() },
-    });
-    if (migration) {
-      const user = await UserModel.findById(migration.userId);
-      if (user && (user.tokenVersion ?? 0) === migration.tokenVersion) {
-        const token = await createPersistentSession(
-          user._id.toString(),
-          user.tokenVersion ?? 0,
-        );
-        issueSession(c, token);
-      }
-    }
-  }
-
-  return c.redirect(returnTo.toString(), 302);
 });
 
 app.get('/users/:username', async (c) => {
@@ -1145,20 +1104,27 @@ app.post('/reset-password', async (c) => {
     return badRequest(c, error);
   }
 
-  const user = await UserModel.findOne({
-    passwordResetTokenHash: hashToken(token),
-    passwordResetExpiresAt: { $gt: new Date() },
-  });
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await UserModel.findOneAndUpdate(
+    {
+      passwordResetTokenHash: hashToken(token),
+      passwordResetExpiresAt: { $gt: new Date() },
+    },
+    {
+      $set: { passwordHash },
+      $unset: {
+        passwordResetTokenHash: 1,
+        passwordResetExpiresAt: 1,
+      },
+      $inc: { tokenVersion: 1 },
+    },
+    { new: true },
+  );
 
   if (!user) {
     return jsonError(c, '重置链接无效或已过期', 400);
   }
 
-  user.passwordHash = await bcrypt.hash(password, 10);
-  user.passwordResetTokenHash = undefined;
-  user.passwordResetExpiresAt = undefined;
-  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
-  await user.save();
   await revokeUserSessions(user._id.toString());
 
   return c.json({ message: '密码已重置，请使用新密码登录。' });

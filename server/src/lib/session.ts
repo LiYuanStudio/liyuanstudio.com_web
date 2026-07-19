@@ -3,7 +3,6 @@ import type { Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { env } from '../config/env.js';
 import { SessionModel } from '../models/session.js';
-import { SessionMigrationModel } from '../models/session-migration.js';
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 export const SESSION_COOKIE_NAME = env.SECURE_SITE_COOKIES
@@ -53,7 +52,7 @@ export function findPersistentSession(token: string) {
   });
 }
 
-export function renewPersistentSession(token: string) {
+export function touchPersistentSession(token: string) {
   const now = new Date();
   return SessionModel.findOneAndUpdate(
     {
@@ -62,17 +61,13 @@ export function renewPersistentSession(token: string) {
     },
     {
       lastSeenAt: now,
-      expiresAt: new Date(now.getTime() + SESSION_TTL_SECONDS * 1000),
     },
     { new: true },
   );
 }
 
 export function revokeUserSessions(userId: string) {
-  return Promise.all([
-    SessionModel.deleteMany({ userId }),
-    SessionMigrationModel.deleteMany({ userId }),
-  ]);
+  return SessionModel.deleteMany({ userId });
 }
 
 export function readSessionToken(c: Context): string | undefined {

@@ -59,7 +59,10 @@ describe('news api', () => {
       expect.objectContaining({
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Liyuan-Client': 'web',
+        },
         body: JSON.stringify({
           title: 'Hello',
           description: 'World',

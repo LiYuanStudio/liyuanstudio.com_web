@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import mongoose from 'mongoose';
+import { SessionModel } from '../models/session.js';
 import { UserModel } from '../models/user.js';
 import { signToken } from '../middleware/auth.js';
 
@@ -8,9 +9,9 @@ vi.mock('../lib/db.js', () => ({
 }));
 vi.mock('../models/user.js');
 vi.mock('../models/session.js');
-vi.mock('../models/session-migration.js');
 
 const mockUserModel = vi.mocked(UserModel);
+const mockSessionModel = vi.mocked(SessionModel);
 
 const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
 
@@ -53,6 +54,12 @@ describe('admin routes', () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     mockUserModel.find.mockReset();
+    mockSessionModel.findOne.mockReset();
+    mockSessionModel.findOne.mockResolvedValue({
+      userId: { toString: () => 'admin-1' },
+      tokenVersion: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
     mockUserModel.findById.mockReset();
     mockUserModel.findById.mockResolvedValue(adminAuthDoc() as never);
     mockUserModel.findByIdAndUpdate.mockReset();
