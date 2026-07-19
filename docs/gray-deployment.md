@@ -41,6 +41,7 @@ Repository variables（已有默认值，但建议显式配置）：
 - 邮件相关变量（预发布建议关闭真实发送或使用测试域名）
 
 灰度工作流通过 build env 把 `VITE_API_BASE_URL` 设为 `/api`，所以候选前端和候选 API 始终使用同一个 Preview deployment。
+灰度工作流还会把 `TRUSTED_ORIGINS=https://gray.liyuanstudio.com` 作为 Preview Runtime 环境变量注入，允许 gray 网关上的 Cookie 会话通过服务端 Origin 与 CSRF 校验。该值只作用于候选部署，不修改生产环境。
 
 必须为 Preview 开启 Vercel Deployment Protection，并创建 Protection Bypass for Automation secret。该 secret 只保存为 Cloudflare Worker secret。没有平台保护时，知道原始 `*.vercel.app` 地址的人可以绕过 LA 登录，因此不满足“仅管理员访问”。
 
