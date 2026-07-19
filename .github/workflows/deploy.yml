@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_VERSION: 22
+      GRAY_TRUSTED_ORIGIN: https://gray.liyuanstudio.com
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID || 'team_I2l4qs9iDsMVQTTvVZ3kNg5n' }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || 'prj_GWA2MHwmjPLxbQw3vqqWthutWY7Z' }}
 
@@ -104,7 +105,12 @@ jobs:
         id: vercel_preview
         if: steps.deployment_secrets.outputs.can_deploy == 'true'
         run: |
-          preview_url="$(npx --yes vercel@50.28.0 deploy --yes --token "$VERCEL_TOKEN" --build-env VITE_API_BASE_URL=/api --build-env VITE_PUBLIC_PROFILE_PREFIX=/)"
+          preview_url="$(
+            npx --yes vercel@50.28.0 deploy --yes --token "$VERCEL_TOKEN" \
+              --build-env VITE_API_BASE_URL=/api \
+              --build-env VITE_PUBLIC_PROFILE_PREFIX=/ \
+              --env "TRUSTED_ORIGINS=$GRAY_TRUSTED_ORIGIN"
+          )"
           echo "url=$preview_url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

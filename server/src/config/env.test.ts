@@ -6,6 +6,7 @@ function stubBaseEnv(overrides: Record<string, string | undefined> = {}) {
     API_KEY: 'secret-key',
     JWT_SECRET: 'test-secret-must-be-at-least-32-characters',
     CORS_ORIGIN: 'https://liyuanstudio.com',
+    TRUSTED_ORIGINS: undefined,
     NODE_ENV: 'test',
     APP_URL: undefined,
     EMAIL_PROVIDER: undefined,
@@ -90,6 +91,20 @@ describe('server env', () => {
 
     const { env } = await import('./env.js');
     expect(env.CORS_ORIGIN).toEqual(['https://a.com', 'https://b.com']);
+  });
+
+  it('adds configured gray origins to the trusted session-write origins', async () => {
+    stubBaseEnv({
+      APP_URL: 'https://www.liyuanstudio.com',
+      TRUSTED_ORIGINS: 'https://gray.liyuanstudio.com, https://liyuanstudio.com',
+    });
+
+    const { env } = await import('./env.js');
+    expect(env.TRUSTED_ORIGINS).toEqual([
+      'https://liyuanstudio.com',
+      'https://www.liyuanstudio.com',
+      'https://gray.liyuanstudio.com',
+    ]);
   });
 
   it('parses admin_emails and matches case-insensitively', async () => {
