@@ -22,6 +22,7 @@ function todayDateString(): string {
 const EMPTY_NEWS_FORM: NewsInput = {
   title: '',
   description: '',
+  content: '',
   tag: '',
   date: todayDateString(),
   image: '',
@@ -178,6 +179,7 @@ function NewsEditor({
       ? {
           title: item.title,
           description: item.description,
+          content: item.content ?? '',
           tag: item.tag,
           date: item.date,
           image: item.image ?? '',
@@ -204,6 +206,9 @@ function NewsEditor({
     const payload: NewsInput = {
       title: form.title.trim(),
       description: form.description.trim(),
+      content: isEditing
+        ? form.content?.trim() ?? ''
+        : form.content?.trim() || undefined,
       tag: form.tag.trim(),
       date: form.date.trim(),
       image: form.image?.trim() || undefined,
@@ -255,6 +260,17 @@ function NewsEditor({
           value={form.description}
           onChange={(event) => updateField('description', event.target.value)}
           required
+        />
+
+        <label htmlFor="news-content">正文（Markdown，可选）</label>
+        <textarea
+          id="news-content"
+          className="admin-textarea admin-textarea-content"
+          rows={18}
+          maxLength={100000}
+          value={form.content}
+          onChange={(event) => updateField('content', event.target.value)}
+          placeholder="支持 Markdown；填写后首页动态可进入详情页阅读完整正文。"
         />
 
         <label htmlFor="news-tag">标签</label>

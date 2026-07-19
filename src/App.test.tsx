@@ -186,6 +186,10 @@ describe('News component', () => {
     expect(await screen.findByText('官网视觉全新升级')).toBeInTheDocument();
     expect(screen.getByText('更轻盈的界面')).toBeInTheDocument();
     expect(screen.getByText('2026-06-10')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '阅读全文' })).toHaveAttribute(
+      'href',
+      '/news/site-refresh/',
+    );
   });
 });
 

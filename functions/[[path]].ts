@@ -3,6 +3,10 @@ import {
   matchProfileContentPath,
 } from '../src/lib/profile-path.js';
 import { proxyApiRequest } from '../src/lib/api-proxy.js';
+import {
+  getNewsContentPath,
+  matchNewsContentPath,
+} from '../src/lib/news-path.js';
 
 type AssetFetcher = {
   fetch(input: Request | URL | string, init?: RequestInit): Promise<Response>;
@@ -34,6 +38,22 @@ export async function onRequest(context: PagesRoutingContext): Promise<Response>
   const assetResponse = await context.next();
   if (assetResponse.status !== 404) {
     return assetResponse;
+  }
+
+  const newsSlug = matchNewsContentPath(requestUrl.pathname);
+  if (newsSlug) {
+    const canonicalPath = getNewsContentPath(newsSlug);
+    if (requestUrl.pathname !== canonicalPath) {
+      requestUrl.pathname = canonicalPath;
+      return Response.redirect(requestUrl.toString(), 301);
+    }
+
+    const newsUrl = new URL('/news/', requestUrl);
+    newsUrl.search = '';
+    return context.env.ASSETS.fetch(new Request(newsUrl, {
+      method: context.request.method,
+      headers: context.request.headers,
+    }));
   }
 
   const route = matchProfileContentPath(requestUrl.pathname);

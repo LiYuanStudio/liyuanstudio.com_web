@@ -109,4 +109,29 @@ describe('Cloudflare Pages profile routing', () => {
     if (!(assetRequest instanceof Request)) throw new Error('Expected an asset Request');
     expect(assetRequest.method).toBe('HEAD');
   });
+
+  it('serves the news entry for canonical news detail paths', async () => {
+    const { assetFetch, context } = createContext('/news/product-update/', {
+      profileResponse: new Response('<title>最新动态 | LiYuan Studio</title>'),
+    });
+
+    const response = await onRequest(context);
+
+    expect(await response.text()).toContain('最新动态');
+    const [assetRequest] = assetFetch.mock.calls[0];
+    if (!(assetRequest instanceof Request)) throw new Error('Expected an asset Request');
+    expect(new URL(assetRequest.url).pathname).toBe('/news/');
+  });
+
+  it('canonicalizes news detail paths with a trailing slash', async () => {
+    const { assetFetch, context } = createContext('/news/Product-Update?from=home');
+
+    const response = await onRequest(context);
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe(
+      'https://liyuanstudio.com/news/product-update/?from=home',
+    );
+    expect(assetFetch).not.toHaveBeenCalled();
+  });
 });

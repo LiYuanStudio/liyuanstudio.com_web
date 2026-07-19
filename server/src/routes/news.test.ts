@@ -20,6 +20,7 @@ const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
 const validNews = {
   title: 'New Update',
   description: 'Something happened',
+  content: '## Full update\n\nDetailed release notes.',
   tag: '产品动态',
   date: '2026-07-09',
   slug: 'new-update',
@@ -187,7 +188,9 @@ describe('news routes', () => {
     const res = await app.request('/api/news', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${await adminToken()}`,
+        Cookie: 'liyuan_session=session-token; liyuan_csrf=csrf-token',
+        Origin: 'https://liyuanstudio.com',
+        'X-CSRF-Token': 'csrf-token',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(validNews),
@@ -197,7 +200,11 @@ describe('news routes', () => {
     expect(await res.json()).toEqual(created);
     expect(mockNewsModel.create).toHaveBeenCalledWith(expect.objectContaining({
       title: 'New Update',
+      content: '## Full update\n\nDetailed release notes.',
       slug: 'new-update',
+    }));
+    expect(mockSessionModel.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      tokenHash: expect.any(String),
     }));
   });
 
@@ -316,6 +323,7 @@ describe('news routes', () => {
     [{ ...validNews, date: '2026-02-30' }],
     [{ ...validNews, slug: 'admin' }],
     [{ ...validNews, image: 'javascript:alert(1)' }],
+    [{ ...validNews, content: 'x'.repeat(100001) }],
   ])('POST /api/news rejects invalid fields', async (body) => {
     const app = await makeApp();
     const res = await app.request('/api/news', {

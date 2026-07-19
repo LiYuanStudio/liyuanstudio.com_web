@@ -16,6 +16,7 @@ const NEWS_ITEM = {
   _id: 'n1',
   title: '官网视觉全新升级',
   description: '更轻盈的界面',
+  content: '## 完整内容',
   tag: '品牌',
   date: '2026-06-10',
   slug: 'site-refresh',
@@ -117,6 +118,7 @@ describe('AdminPage', () => {
     await user.click(screen.getByRole('button', { name: '发布动态' }));
     await user.type(screen.getByLabelText('标题'), '新动态');
     await user.type(screen.getByLabelText('摘要'), '内容摘要');
+    await user.type(screen.getByLabelText('正文（Markdown，可选）'), '## 完整正文');
     await user.type(screen.getByLabelText('标签'), '产品动态');
     await user.clear(screen.getByLabelText('日期'));
     await user.type(screen.getByLabelText('日期'), '2026-07-09');
@@ -125,7 +127,10 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringMatching(/\/news$/),
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"content":"## 完整正文"'),
+        }),
       );
     });
   });

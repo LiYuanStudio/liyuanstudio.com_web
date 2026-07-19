@@ -6,5 +6,5 @@
     "moduleResolution": "Bundler",
     "allowSyntheticDefaultImports": true
   },
-  "include": ["vite.config.ts", "src/lib/profile-path.ts"]
+  "include": ["vite.config.ts", "src/lib/profile-path.ts", "src/lib/news-path.ts"]
 }

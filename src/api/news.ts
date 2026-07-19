@@ -4,6 +4,7 @@ import { apiFetchJson } from './client.js';
 export interface NewsInput {
   title: string;
   description: string;
+  content?: string;
   tag: string;
   date: string;
   image?: string;
