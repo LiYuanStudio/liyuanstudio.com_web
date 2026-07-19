@@ -17,6 +17,7 @@ describe('NewsModel', () => {
     const doc = new NewsModel({
       title: 'Title',
       description: 'Desc',
+      content: '## Details\n\nFull update.',
       tag: 'Product',
       date: '2026-01-01',
       slug: 'unique-slug',
@@ -36,5 +37,26 @@ describe('NewsModel', () => {
     });
     const err = doc.validateSync();
     expect(err).toBeUndefined();
+  });
+
+  it('content field is optional and bounded', () => {
+    const legacy = new NewsModel({
+      title: 'Legacy',
+      description: 'Summary only',
+      tag: 'Product',
+      date: '2026-01-01',
+      slug: 'legacy-update',
+    });
+    expect(legacy.validateSync()).toBeUndefined();
+
+    const oversized = new NewsModel({
+      title: 'Too long',
+      description: 'Summary',
+      content: 'x'.repeat(100001),
+      tag: 'Product',
+      date: '2026-01-01',
+      slug: 'oversized-update',
+    });
+    expect(oversized.validateSync()?.errors.content).toBeDefined();
   });
 });

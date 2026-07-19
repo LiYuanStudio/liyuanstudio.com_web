@@ -7,6 +7,7 @@ const RESERVED_PROFILE_SEGMENTS = new Set([
   'icons',
   'login',
   'me',
+  'news',
   'png',
   'products',
   'profile',

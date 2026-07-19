@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { matchProfileContentPath } from './src/lib/profile-path.js';
+import { matchNewsContentPath } from './src/lib/news-path.js';
 
 const API_HEALTH_URL = 'http://localhost:3000/api/health';
 
@@ -73,8 +74,23 @@ function blogRewrite(): Plugin {
     },
   };
 }
+
+function newsRewrite(): Plugin {
+  return {
+    name: 'news-rewrite',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url) {
+          const [path] = req.url.split('?');
+          if (matchNewsContentPath(path)) req.url = '/news/';
+        }
+        next();
+      });
+    },
+  };
+}
 export default defineConfig({
-  plugins: [react(), backendHealthCheck(), profileRewrite(), blogRewrite()],
+  plugins: [react(), backendHealthCheck(), profileRewrite(), blogRewrite(), newsRewrite()],
   base: '/',
   build: {
     rollupOptions: {
@@ -88,6 +104,7 @@ export default defineConfig({
         admin: resolve(__dirname, 'admin/index.html'),
         profile: resolve(__dirname, 'profile/index.html'),
         blog: resolve(__dirname, 'blog/index.html'),
+        news: resolve(__dirname, 'news/index.html'),
       },
     },
   },

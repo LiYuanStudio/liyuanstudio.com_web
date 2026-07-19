@@ -141,6 +141,9 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
               <p>{item.description}</p>
               <div className="news-card-footer">
                 <span className="news-date">{item.date}</span>
+                <a className="product-card-button" href={`/news/${encodeURIComponent(item.slug)}/`}>
+                  阅读全文
+                </a>
               </div>
             </div>
           </article>

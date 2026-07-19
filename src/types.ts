@@ -9,6 +9,7 @@ export interface NewsUpdate {
   _id?: string;
   title: string;
   description: string;
+  content?: string;
   tag: string;
   date: string;
   image?: string;
@@ -20,6 +21,7 @@ export interface NewsUpdate {
 export interface NewsInput {
   title: string;
   description: string;
+  content?: string;
   tag: string;
   date: string;
   image?: string;

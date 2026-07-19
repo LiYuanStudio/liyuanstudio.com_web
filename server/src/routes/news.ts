@@ -25,6 +25,7 @@ const RESERVED_SLUGS = new Set([
 type NewsInput = Partial<{
   title: unknown;
   description: unknown;
+  content: unknown;
   tag: unknown;
   date: unknown;
   image: unknown;
@@ -104,6 +105,7 @@ function createSlugFromTitle(title: string): string {
 function validateNewsInput(body: NewsInput, { partial }: { partial: boolean }) {
   const title = getString(body.title, 'title', 80, !partial);
   const description = getString(body.description, 'description', 500, !partial);
+  const content = getString(body.content, 'content', 100000, false);
   const tag = getString(body.tag, 'tag', 32, !partial);
   const date = validateDate(body.date, !partial);
   const imageProvided = Object.prototype.hasOwnProperty.call(body, 'image');
@@ -117,6 +119,7 @@ function validateNewsInput(body: NewsInput, { partial }: { partial: boolean }) {
   const update: Record<string, string> = {};
   if (title !== undefined) update.title = title;
   if (description !== undefined) update.description = description;
+  if (body.content !== undefined) update.content = content ?? '';
   if (tag !== undefined) update.tag = tag;
   if (date !== undefined) update.date = date;
   if (image !== undefined) update.image = image;
