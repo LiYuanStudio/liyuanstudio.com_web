@@ -1,3 +1,25 @@
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body,
+#root {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 .profile-page {
   min-height: 100vh;
   background: #f5f5f7;
@@ -27,6 +49,7 @@
 }
 
 .profile-brand {
+  flex: 0 0 auto;
   gap: 10px;
   color: #1d1d1f;
   font-size: 18px;
@@ -41,6 +64,8 @@
 
 .profile-nav-actions {
   gap: 16px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .profile-nav-actions a,
@@ -420,7 +445,11 @@
 
 @media (max-width: 760px) {
   .profile-nav {
-    padding: 0 24px;
+    padding: 0 16px;
+  }
+
+  .profile-nav-actions {
+    gap: 10px;
   }
 
   .profile-main {
@@ -455,6 +484,13 @@
     flex-direction: column;
   }
 }
+
+@media (max-width: 520px) {
+  .profile-brand span {
+    display: none;
+  }
+}
+
 .profile-inline-actions,
 .profile-form-actions,
 .profile-post-actions,
