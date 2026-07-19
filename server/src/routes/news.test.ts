@@ -187,7 +187,9 @@ describe('news routes', () => {
     const res = await app.request('/api/news', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${await adminToken()}`,
+        Cookie: 'liyuan_session=session-token; liyuan_csrf=csrf-token',
+        Origin: 'https://liyuanstudio.com',
+        'X-CSRF-Token': 'csrf-token',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(validNews),
@@ -198,6 +200,9 @@ describe('news routes', () => {
     expect(mockNewsModel.create).toHaveBeenCalledWith(expect.objectContaining({
       title: 'New Update',
       slug: 'new-update',
+    }));
+    expect(mockSessionModel.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      tokenHash: expect.any(String),
     }));
   });
 
