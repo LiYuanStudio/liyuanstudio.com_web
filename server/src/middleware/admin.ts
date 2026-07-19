@@ -1,6 +1,7 @@
 import { createMiddleware } from 'hono/factory';
 import { timingSafeEqual } from 'node:crypto';
 import { env } from '../config/env.js';
+import { readSessionToken } from '../lib/session.js';
 import { authenticateToken, type AuthVariables } from './auth.js';
 import { jsonError } from './request-id.js';
 
@@ -31,8 +32,10 @@ export const requireAdminOrApiKey = createMiddleware<{ Variables: AuthVariables 
     }
 
     const header = c.req.header('authorization') ?? '';
-    const [scheme, token] = header.split(' ');
-    if (scheme?.toLowerCase() !== 'bearer' || !token) {
+    const [scheme, bearerToken] = header.split(' ');
+    const token = readSessionToken(c)
+      ?? (scheme?.toLowerCase() === 'bearer' ? bearerToken : undefined);
+    if (!token) {
       return jsonError(c, '未授权，请先登录', 401);
     }
 
