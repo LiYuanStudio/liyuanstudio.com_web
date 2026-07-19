@@ -4,6 +4,8 @@ import { UserModel } from '../models/user.js';
 import { signToken, verifyToken, requireAuth, requireAdmin } from './auth.js';
 
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
+vi.mock('../models/session-migration.js');
 
 const mockUserModel = vi.mocked(UserModel);
 

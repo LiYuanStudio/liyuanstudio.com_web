@@ -37,7 +37,7 @@ cp .env.example .env
 
 # 后端
 cp server/.env.example server/.env
-# 编辑 server/.env，填入本地 MongoDB/Atlas、API_KEY、JWT_SECRET、CORS_ORIGIN、APP_URL
+# 编辑 server/.env，填入本地 MongoDB/Atlas、API_KEY、JWT_SECRET、CORS_ORIGIN、APP_URL、API_PUBLIC_URL
 ```
 
 本地开发可以不配置邮件服务：保持 `EMAIL_PROVIDER=` 为空，注册时后端会在控制台打印邮箱验证链接。不要把 `.env`、API Key、token、密码或真实数据库连接提交到仓库。
@@ -80,13 +80,13 @@ npm run dev
 - `POST /api/auth/register/send-code` — 发送注册验证码，body: `{ email, password, displayName }`
 - `POST /api/auth/register/verify` — 验证注册验证码并完成注册，body: `{ email, code }`
 - `POST /api/auth/login` — 登录，body: `{ email, password }`
-- `GET /api/auth/me` — 当前用户，需要 `Authorization: Bearer <token>`
+- `GET /api/auth/me` — 当前用户；浏览器使用 HttpOnly 会话 Cookie，受信任服务可使用 `Authorization: Bearer <opaque-session-token>`
 
-注册分为两步：先发送 6 位数字验证码到邮箱，验证通过后才会在数据库创建用户。新用户默认 `role=user` 且 `emailVerified=true`。密码只保存 bcrypt hash；验证码只以 SHA-256 hash 保存到数据库，明文验证码只通过邮件发送给用户。
+注册分为两步：先发送 6 位数字验证码到邮箱，验证通过后才会在数据库创建用户。新用户默认 `role=tourist` 且 `emailVerified=true`。密码只保存 bcrypt hash；验证码和会话令牌只以 SHA-256 hash 保存到数据库。登录会话在每次成功调用 `/auth/me` 时滚动续期 30 天。
 
 ### 管理员
 
-第一位管理员需要在 MongoDB Atlas 中手动把对应用户文档的 `role` 改为 `admin`。前端不会决定用户是否为管理员；管理员权限以后端 JWT 和 `role` 为准。
+第一位管理员需要在 MongoDB Atlas 中手动把对应用户文档的 `role` 改为 `admin`。前端不会决定用户是否为管理员；管理员权限以后端持久会话和 `role` 为准。
 
 ## 部署
 
@@ -103,7 +103,8 @@ npm run build
 然后在 Cloudflare Pages 控制台设置环境变量：
 
 ```text
-VITE_API_BASE_URL=https://<your-vercel-project>.vercel.app/api
+VITE_API_BASE_URL=https://api.liyuanstudio.com/api
+VITE_LEGACY_API_BASE_URL=https://liyuanstudio-com-web.vercel.app/api
 ```
 
 ### 后端（Vercel）
@@ -113,6 +114,7 @@ VITE_API_BASE_URL=https://<your-vercel-project>.vercel.app/api
 - `MONGODB_URI`
 - `API_KEY`
 - `JWT_SECRET`
+- `API_PUBLIC_URL=https://api.liyuanstudio.com`
 - `CORS_ORIGIN`，包含生产前端域名；如果同时使用 apex 和 www，配置为 `https://liyuanstudio.com,https://www.liyuanstudio.com`
 - `APP_URL`，生产前端地址；如果正式站以 www 访问，配置为 `https://www.liyuanstudio.com`
 - `EMAIL_PROVIDER=resend`
@@ -121,7 +123,7 @@ VITE_API_BASE_URL=https://<your-vercel-project>.vercel.app/api
 
 生产邮件使用 Resend。请在 Resend 配置发信域名，并在 Cloudflare DNS 中添加 Resend 要求的 DNS 记录，等域名验证通过后再启用生产注册邮件。
 
-部署完成后，API 入口为 `https://<your-vercel-project>.vercel.app/api/*`。
+部署完成后，固定 API 入口为 `https://api.liyuanstudio.com/api/*`。Vercel 项目必须绑定该自定义域名；Cloudflare DNS 按 Vercel 项目给出的记录配置 CNAME。`VITE_LEGACY_API_BASE_URL` 只在旧 JWT Cookie 的七天迁移窗口内保留。
 
 ## API 说明
 
@@ -141,7 +143,7 @@ VITE_API_BASE_URL=https://<your-vercel-project>.vercel.app/api
 ## 安全
 
 - 所有敏感信息均通过环境变量注入，代码中无真实默认值。
-- `JWT_SECRET` 必须来自环境变量。
+- `JWT_SECRET` 必须来自环境变量，仅用于迁移期旧 JWT 校验；新会话使用 MongoDB 中的随机令牌哈希。
 - 后端 `API_KEY` 使用恒定时间比较，防止时序攻击。
 - `npm run check:secrets` 会扫描 `.env` 文件、MongoDB URI、API Key、JWT secret、Resend key、token、密码等常见模式。
 - 不要提交 `.env`、真实 API Key、token、密码、Resend key 或 MongoDB 连接串。

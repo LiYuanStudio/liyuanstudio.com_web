@@ -23,6 +23,8 @@ vi.mock('../models/user.js');
 vi.mock('../models/pending-registration.js');
 vi.mock('../models/auth-throttle.js');
 vi.mock('../models/two-factor-challenge.js');
+vi.mock('../models/session.js');
+vi.mock('../models/session-migration.js');
 vi.mock('../lib/email.js', () => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
   sendRegistrationCodeEmail: vi.fn().mockResolvedValue(undefined),

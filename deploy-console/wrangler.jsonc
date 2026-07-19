@@ -7,7 +7,7 @@
     "enabled": true
   },
   "vars": {
-    "LA_API_BASE_URL": "https://liyuanstudio-com-web.vercel.app/api",
+    "LA_API_BASE_URL": "https://api.liyuanstudio.com/api",
     "GITHUB_OWNER": "liyuanstudio",
     "GITHUB_REPO": "liyuanstudio.com_web",
     "PROMOTE_WORKFLOW": "promote.yml",

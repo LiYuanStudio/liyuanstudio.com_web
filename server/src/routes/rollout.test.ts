@@ -5,6 +5,8 @@ import { RolloutAuditModel, RolloutModel } from '../models/rollout.js';
 
 vi.mock('../lib/db.js', () => ({ connectDB: vi.fn().mockResolvedValue({}) }));
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
+vi.mock('../models/session-migration.js');
 vi.mock('../models/rollout.js');
 
 const mockUserModel = vi.mocked(UserModel);

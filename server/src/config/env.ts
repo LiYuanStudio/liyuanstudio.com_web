@@ -47,6 +47,30 @@ function resolveAppUrl(isProduction: boolean): string {
   return raw;
 }
 
+function resolveApiPublicUrl(isProduction: boolean): string {
+  const raw = process.env.API_PUBLIC_URL?.trim();
+  if (!raw) {
+    if (isProduction) {
+      throw new Error('Missing required environment variable: API_PUBLIC_URL');
+    }
+    return 'http://localhost:3000';
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error('API_PUBLIC_URL must be a valid URL');
+  }
+  if (isProduction && parsed.protocol !== 'https:') {
+    throw new Error('API_PUBLIC_URL must use https in production');
+  }
+  if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+    throw new Error('API_PUBLIC_URL must be an origin without a path, query, or fragment');
+  }
+  return parsed.origin;
+}
+
 function resolveEmailConfig(isProduction: boolean): {
   EMAIL_PROVIDER: string | undefined;
   RESEND_API_KEY: string | undefined;
@@ -97,6 +121,7 @@ const secureSiteCookies = isProduction || Boolean(process.env.VERCEL);
 const emailConfig = resolveEmailConfig(isProduction);
 const CORS_ORIGIN = parseOrigins(requireEnv('CORS_ORIGIN'));
 const APP_URL = resolveAppUrl(isProduction);
+const API_PUBLIC_URL = resolveApiPublicUrl(isProduction);
 const additionalTrustedOrigins = process.env.TRUSTED_ORIGINS?.trim()
   ? parseOrigins(process.env.TRUSTED_ORIGINS)
   : [];
@@ -109,6 +134,7 @@ export const env = {
   API_KEY: requireEnv('API_KEY'),
   JWT_SECRET: requireJwtSecret(),
   APP_URL,
+  API_PUBLIC_URL,
   EMAIL_PROVIDER: emailConfig.EMAIL_PROVIDER,
   RESEND_API_KEY: emailConfig.RESEND_API_KEY,
   EMAIL_FROM: emailConfig.EMAIL_FROM,

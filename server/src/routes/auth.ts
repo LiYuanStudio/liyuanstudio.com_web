@@ -14,13 +14,22 @@ import {
   sendRegistrationCodeEmail,
   sendTwoFactorCodeEmail,
 } from '../lib/email.js';
-import { requireAuth, signToken } from '../middleware/auth.js';
+import { authenticateToken, requireAuth } from '../middleware/auth.js';
 import { getRequestId, jsonError } from '../middleware/request-id.js';
 import type { AuthVariables } from '../middleware/auth.js';
-import { isAdminEmail } from '../config/env.js';
+import { env, isAdminEmail } from '../config/env.js';
 import { normalizeUserRole, type LegacyUserRole } from '../lib/roles.js';
 import { validateAvatarValue } from '../lib/avatar.js';
-import { clearSession, isDeployConsoleRequest, issueSession } from '../lib/session.js';
+import {
+  clearSession,
+  createPersistentSession,
+  isDeployConsoleRequest,
+  issueSession,
+  readSessionToken,
+  renewPersistentSession,
+  revokeUserSessions,
+} from '../lib/session.js';
+import { SessionMigrationModel } from '../models/session-migration.js';
 import {
   createUniqueUsername,
   ensureUsername,
@@ -42,6 +51,7 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 10 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const TWO_FACTOR_CHALLENGE_TTL_MS = 10 * 60 * 1000;
+const SESSION_MIGRATION_TTL_MS = 2 * 60 * 1000;
 const TWO_FACTOR_MAX_ATTEMPTS = 5;
 const RECOVERY_CODE_COUNT = 10;
 const FORGOT_PASSWORD_COOLDOWN_MS = 60 * 1000;
@@ -249,6 +259,19 @@ function badRequest(c: Context, error: unknown) {
   return jsonError(c, error instanceof Error ? error.message : '请求无效', 400);
 }
 
+function trustedReturnUrl(raw: unknown): URL | null {
+  if (typeof raw !== 'string' || raw.length > 2048) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.username || parsed.password || !env.TRUSTED_ORIGINS.includes(parsed.origin)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function createRegistrationCode(): string {
   return String(randomInt(100000, 1000000));
 }
@@ -382,12 +405,10 @@ async function startTwoFactorChallenge(
 }
 
 async function issueAuthResponse(c: Context, user: UserForResponse) {
-  const token = await signToken({
-    id: user._id.toString(),
-    email: user.email,
-    role: normalizeUserRole(user.role),
-    tokenVersion: user.tokenVersion ?? 0,
-  });
+  const token = await createPersistentSession(
+    user._id.toString(),
+    user.tokenVersion ?? 0,
+  );
   issueSession(c, token);
   return isDeployConsoleRequest(c)
     ? { token, user: serializeUser(user) }
@@ -746,6 +767,9 @@ app.post('/2fa/login/verify', async (c) => {
   if (!user || !user.twoFactorEnabled) {
     return jsonError(c, '用户不存在或双重验证已关闭', 401);
   }
+  if (recoveryCode) {
+    await revokeUserSessions(user._id.toString());
+  }
   return c.json(await issueAuthResponse(c, await ensureUsernameForRequest(c, user, '2fa-login')));
 });
 
@@ -883,6 +907,7 @@ app.post('/2fa/enable/confirm', requireAuth, async (c) => {
   result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
+  await revokeUserSessions(result.user._id.toString());
   return c.json({ ...(await issueAuthResponse(c, result.user)), recoveryCodes: recovery.codes });
 });
 
@@ -903,6 +928,7 @@ app.post('/2fa/disable/confirm', requireAuth, async (c) => {
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
   await TwoFactorChallengeModel.deleteMany({ userId: result.user._id });
+  await revokeUserSessions(result.user._id.toString());
   return c.json(await issueAuthResponse(c, result.user));
 });
 
@@ -922,6 +948,7 @@ app.post('/2fa/recovery-codes/confirm', requireAuth, async (c) => {
   result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
+  await revokeUserSessions(result.user._id.toString());
   return c.json({ ...(await issueAuthResponse(c, result.user)), recoveryCodes: recovery.codes });
 });
 
@@ -929,6 +956,21 @@ app.get('/me', requireAuth, async (c) => {
   const user = await UserModel.findById(c.get('userId'));
   if (!user) {
     return jsonError(c, '用户不存在', 404);
+  }
+  const currentToken = c.get('authToken');
+  if (c.get('authSessionKind') === 'persistent') {
+    const renewed = await renewPersistentSession(currentToken);
+    if (!renewed) {
+      clearSession(c);
+      return jsonError(c, '未授权，请先登录', 401);
+    }
+    issueSession(c, currentToken);
+  } else {
+    const upgradedToken = await createPersistentSession(
+      user._id.toString(),
+      user.tokenVersion ?? 0,
+    );
+    issueSession(c, upgradedToken);
   }
   return c.json({ user: serializeUser(await ensureUsernameForRequest(c, user, 'me')) });
 });
@@ -941,8 +983,69 @@ app.post('/logout', requireAuth, async (c) => {
 
   user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
+  await revokeUserSessions(user._id.toString());
   clearSession(c);
   return c.json({ message: '已退出登录' });
+});
+
+app.get('/session-migration/start', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
+  const returnTo = trustedReturnUrl(c.req.query('returnTo'));
+  if (!returnTo) {
+    return jsonError(c, '会话迁移返回地址无效', 400);
+  }
+
+  const token = readSessionToken(c);
+  if (!token) {
+    return c.redirect(returnTo.toString(), 302);
+  }
+
+  try {
+    const { user } = await authenticateToken(token);
+    const migrationToken = randomBytes(32).toString('base64url');
+    await SessionMigrationModel.create({
+      tokenHash: hashToken(migrationToken),
+      userId: user.id,
+      tokenVersion: user.tokenVersion,
+      expiresAt: new Date(Date.now() + SESSION_MIGRATION_TTL_MS),
+    });
+    const completeUrl = new URL('/api/auth/session-migration/complete', env.API_PUBLIC_URL);
+    completeUrl.searchParams.set('code', migrationToken);
+    completeUrl.searchParams.set('returnTo', returnTo.toString());
+    return c.redirect(completeUrl.toString(), 302);
+  } catch {
+    return c.redirect(returnTo.toString(), 302);
+  }
+});
+
+app.get('/session-migration/complete', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
+  const returnTo = trustedReturnUrl(c.req.query('returnTo'));
+  if (!returnTo) {
+    return jsonError(c, '会话迁移返回地址无效', 400);
+  }
+
+  const code = c.req.query('code');
+  if (typeof code === 'string' && code.length >= 32 && code.length <= 128) {
+    const migration = await SessionMigrationModel.findOneAndDelete({
+      tokenHash: hashToken(code),
+      expiresAt: { $gt: new Date() },
+    });
+    if (migration) {
+      const user = await UserModel.findById(migration.userId);
+      if (user && (user.tokenVersion ?? 0) === migration.tokenVersion) {
+        const token = await createPersistentSession(
+          user._id.toString(),
+          user.tokenVersion ?? 0,
+        );
+        issueSession(c, token);
+      }
+    }
+  }
+
+  return c.redirect(returnTo.toString(), 302);
 });
 
 app.get('/users/:username', async (c) => {
@@ -1056,6 +1159,7 @@ app.post('/reset-password', async (c) => {
   user.passwordResetExpiresAt = undefined;
   user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
+  await revokeUserSessions(user._id.toString());
 
   return c.json({ message: '密码已重置，请使用新密码登录。' });
 });

@@ -9,6 +9,8 @@ vi.mock('../lib/db.js', () => ({
 vi.mock('../models/blog.js');
 vi.mock('../models/counter.js');
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
+vi.mock('../models/session-migration.js');
 
 const mockBlogModel = vi.mocked(BlogModel);
 const mockCounterModel = vi.mocked(CounterModel);

@@ -7,6 +7,8 @@ vi.mock('../lib/db.js', () => ({
   connectDB: vi.fn().mockResolvedValue({}),
 }));
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
+vi.mock('../models/session-migration.js');
 
 const mockUserModel = vi.mocked(UserModel);
 

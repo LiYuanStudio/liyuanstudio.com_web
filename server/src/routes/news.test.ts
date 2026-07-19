@@ -8,6 +8,8 @@ vi.mock('../lib/db.js', () => ({
 }));
 vi.mock('../models/news.js');
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
+vi.mock('../models/session-migration.js');
 
 const mockNewsModel = vi.mocked(NewsModel);
 const mockUserModel = vi.mocked(UserModel);
