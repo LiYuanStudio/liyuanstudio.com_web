@@ -5,7 +5,8 @@ import { UserModel } from '../models/user.js';
 import { PendingRegistrationModel } from '../models/pending-registration.js';
 import { AuthThrottleModel } from '../models/auth-throttle.js';
 import { TwoFactorChallengeModel } from '../models/two-factor-challenge.js';
-import { signToken, verifyToken } from '../middleware/auth.js';
+import { SessionModel } from '../models/session.js';
+import { signToken } from '../middleware/auth.js';
 import {
   sendPasswordResetEmail,
   sendRegistrationCodeEmail,
@@ -23,6 +24,7 @@ vi.mock('../models/user.js');
 vi.mock('../models/pending-registration.js');
 vi.mock('../models/auth-throttle.js');
 vi.mock('../models/two-factor-challenge.js');
+vi.mock('../models/session.js');
 vi.mock('../lib/email.js', () => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
   sendRegistrationCodeEmail: vi.fn().mockResolvedValue(undefined),
@@ -34,6 +36,7 @@ const mockUserModel = vi.mocked(UserModel);
 const mockPendingRegistrationModel = vi.mocked(PendingRegistrationModel);
 const mockAuthThrottleModel = vi.mocked(AuthThrottleModel);
 const mockTwoFactorChallengeModel = vi.mocked(TwoFactorChallengeModel);
+const mockSessionModel = vi.mocked(SessionModel);
 const mockBcrypt = vi.mocked(bcrypt);
 const mockSendPasswordResetEmail = vi.mocked(sendPasswordResetEmail);
 const mockSendRegistrationCodeEmail = vi.mocked(sendRegistrationCodeEmail);
@@ -124,6 +127,22 @@ describe('auth routes', () => {
     mockTwoFactorChallengeModel.deleteOne.mockReset();
     mockTwoFactorChallengeModel.deleteMany.mockReset();
     mockTwoFactorChallengeModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
+    mockSessionModel.findOne.mockReset();
+    mockSessionModel.findOne.mockResolvedValue({
+      userId: { toString: () => 'user-1' },
+      tokenVersion: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
+    mockSessionModel.findOneAndUpdate.mockReset();
+    mockSessionModel.findOneAndUpdate.mockResolvedValue({
+      userId: { toString: () => 'user-1' },
+      tokenVersion: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
+    mockSessionModel.create.mockReset();
+    mockSessionModel.create.mockResolvedValue({} as never);
+    mockSessionModel.deleteMany.mockReset();
+    mockSessionModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
     mockBcrypt.hash.mockReset();
     mockBcrypt.compare.mockReset();
     mockSendPasswordResetEmail.mockReset();
@@ -448,7 +467,46 @@ describe('auth routes', () => {
     expect(res.headers.get('set-cookie')).toContain('liyuan_session=');
   });
 
-  it('returns a JWT only to the configured deploy-console service', async () => {
+  it('rejects cross-site attempts to establish a login session', async () => {
+    const app = await makeApp();
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://attacker.example',
+        'X-Liyuan-Client': 'web',
+      },
+      body: JSON.stringify({
+        email: 'hello@liyuanstudio.com',
+        password: 'password123',
+      }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(mockUserModel.findOne).not.toHaveBeenCalled();
+  });
+
+  it('rejects same-origin session creation without the browser request marker', async () => {
+    const app = await makeApp();
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://liyuanstudio.com',
+      },
+      body: JSON.stringify({
+        email: 'hello@liyuanstudio.com',
+        password: 'password123',
+      }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(mockUserModel.findOne).not.toHaveBeenCalled();
+  });
+
+  it('returns an opaque persistent token only to the configured deploy-console service', async () => {
     vi.stubEnv('DEPLOY_CONSOLE_API_KEY', 'deploy-console-test-secret');
     const app = await makeApp();
     mockUserModel.findOne.mockResolvedValue(userDoc() as never);
@@ -690,7 +748,7 @@ describe('auth routes', () => {
     const json = await res.json();
     expect(json.user.role).toBe('admin');
   });
-  it('POST /api/auth/login signs tokens with tokenVersion', async () => {
+  it('POST /api/auth/login stores tokenVersion in the persistent session', async () => {
     const app = await makeApp();
     mockUserModel.findOne.mockResolvedValue(userDoc({ tokenVersion: 3 }) as never);
     mockBcrypt.compare.mockResolvedValue(true as never);
@@ -702,8 +760,11 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(200);
-    const json = await res.json();
-    await expect(verifyToken(sessionTokenFrom(res))).resolves.toMatchObject({ tokenVersion: 3 });
+    await res.json();
+    expect(sessionTokenFrom(res)).not.toContain('.');
+    expect(mockSessionModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      tokenVersion: 3,
+    }));
   });
 
   it('POST /api/auth/login backfills missing tokenVersion for legacy users', async () => {
@@ -721,8 +782,11 @@ describe('auth routes', () => {
     expect(res.status).toBe(200);
     expect(doc.tokenVersion).toBe(0);
     expect(doc.save).toHaveBeenCalled();
-    const json = await res.json();
-    await expect(verifyToken(sessionTokenFrom(res))).resolves.toMatchObject({ tokenVersion: 0 });
+    await res.json();
+    expect(sessionTokenFrom(res)).not.toContain('.');
+    expect(mockSessionModel.create).toHaveBeenCalledWith(expect.objectContaining({
+      tokenVersion: 0,
+    }));
   });
   it('POST /api/auth/login returns 429 after repeated failures', async () => {
     const app = await makeApp();
@@ -798,6 +862,16 @@ describe('auth routes', () => {
         bio: '',
       },
     });
+  });
+
+  it('GET /api/auth/session returns 200 with null for anonymous visitors', async () => {
+    const app = await makeApp();
+
+    const res = await app.request('/api/auth/session');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ user: null });
+    expect(mockSessionModel.findOne).not.toHaveBeenCalled();
   });
 
   it('GET /api/auth/me looks up the token user from the database', async () => {
@@ -1090,7 +1164,7 @@ describe('auth routes', () => {
       passwordResetTokenHash: 'old-hash',
       passwordResetExpiresAt: new Date(Date.now() + 10_000),
     });
-    mockUserModel.findOne.mockResolvedValue(doc as never);
+    mockUserModel.findOneAndUpdate.mockResolvedValue(doc as never);
     mockBcrypt.hash.mockResolvedValue('new-hashed-password' as never);
 
     const res = await app.request('/api/auth/reset-password', {
@@ -1100,16 +1174,22 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(mockUserModel.findOne).toHaveBeenCalledWith({
-      passwordResetTokenHash: expect.any(String),
-      passwordResetExpiresAt: { $gt: expect.any(Date) },
-    });
+    expect(mockUserModel.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        passwordResetTokenHash: expect.any(String),
+        passwordResetExpiresAt: { $gt: expect.any(Date) },
+      },
+      {
+        $set: { passwordHash: 'new-hashed-password' },
+        $unset: {
+          passwordResetTokenHash: 1,
+          passwordResetExpiresAt: 1,
+        },
+        $inc: { tokenVersion: 1 },
+      },
+      { new: true },
+    );
     expect(mockBcrypt.hash).toHaveBeenCalledWith('newpassword123', 10);
-    expect(doc.passwordHash).toBe('new-hashed-password');
-    expect(doc.passwordResetTokenHash).toBeUndefined();
-    expect(doc.passwordResetExpiresAt).toBeUndefined();
-    expect(doc.tokenVersion).toBe(1);
-    expect(doc.save).toHaveBeenCalled();
     expect(await res.json()).toEqual({ message: '密码已重置，请使用新密码登录。' });
   });
 

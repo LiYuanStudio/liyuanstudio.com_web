@@ -75,7 +75,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadUser = useCallback(async () => {
     try {
       const { user } = await fetchMe();
-      setState({ status: 'authenticated', user });
+      setState(user
+        ? { status: 'authenticated', user }
+        : { status: 'unauthenticated' });
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         setState({ status: 'unauthenticated' });

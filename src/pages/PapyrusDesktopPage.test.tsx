@@ -43,7 +43,10 @@ describe('PapyrusDesktopPage', () => {
 
     const { container } = renderPage();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/me', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/auth\/session$/),
+      expect.any(Object),
+    );
     expect(screen.getByRole('link', { name: '登录 / 注册' })).toHaveAttribute('href', '/login/');
     expect(screen.queryByText('正在获取下载链接…')).not.toBeInTheDocument();
     expect(screen.queryByText(/GitHub API 返回 403/)).not.toBeInTheDocument();

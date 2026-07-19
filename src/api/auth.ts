@@ -85,8 +85,8 @@ export function confirmTwoFactorAction(
   });
 }
 
-export function fetchMe(): Promise<{ user: User }> {
-  return apiFetchJson<{ user: User }>('/auth/me');
+export function fetchMe(): Promise<{ user: User | null }> {
+  return apiFetchJson<{ user: User | null }>('/auth/session');
 }
 
 export function fetchReleaseStatus(): Promise<{ rollout: ReleaseDecision }> {

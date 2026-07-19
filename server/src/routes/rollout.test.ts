@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { signToken } from '../middleware/auth.js';
+import { SessionModel } from '../models/session.js';
 import { UserModel } from '../models/user.js';
 import { RolloutAuditModel, RolloutModel } from '../models/rollout.js';
 
 vi.mock('../lib/db.js', () => ({ connectDB: vi.fn().mockResolvedValue({}) }));
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
 vi.mock('../models/rollout.js');
 
 const mockUserModel = vi.mocked(UserModel);
+const mockSessionModel = vi.mocked(SessionModel);
 const mockRolloutModel = vi.mocked(RolloutModel);
 const mockAuditModel = vi.mocked(RolloutAuditModel);
 
@@ -47,6 +50,12 @@ async function adminToken() {
 
 describe('rollout routes', () => {
   beforeEach(() => {
+    mockSessionModel.findOne.mockReset();
+    mockSessionModel.findOne.mockResolvedValue({
+      userId: { toString: () => 'admin-1' },
+      tokenVersion: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
     mockUserModel.findById.mockReset();
     mockUserModel.findOne.mockReset();
     mockRolloutModel.findOne.mockReset();

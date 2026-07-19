@@ -21,7 +21,10 @@ describe('API client', () => {
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/logout', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'X-CSRF-Token': 'csrf-token' },
+      headers: {
+        'X-CSRF-Token': 'csrf-token',
+        'X-Liyuan-Client': 'web',
+      },
     });
   });
 

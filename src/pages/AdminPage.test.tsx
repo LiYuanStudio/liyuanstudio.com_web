@@ -66,7 +66,7 @@ describe('AdminPage', () => {
   it('loads and displays news for admin by default', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
-      '/auth/me': () => ({
+      '/auth/session': () => ({
         ok: true,
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
@@ -90,7 +90,7 @@ describe('AdminPage', () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     const fetchMock = vi.fn().mockImplementation(async (url: string, options?: RequestInit) => {
       const str = url.toString();
-      if (str.endsWith('/auth/me')) {
+      if (str.endsWith('/auth/session')) {
         return { ok: true, status: 200, json: async () => ({ user: ADMIN_USER }) };
       }
       if (str.endsWith('/news') && options?.method === 'POST') {
@@ -133,7 +133,7 @@ describe('AdminPage', () => {
   it('loads and displays users for admin', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
-      '/auth/me': () => ({
+      '/auth/session': () => ({
         ok: true,
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
@@ -173,7 +173,7 @@ describe('AdminPage', () => {
   it('saves role changes', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
-      '/auth/me': () => ({
+      '/auth/session': () => ({
         ok: true,
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
@@ -224,7 +224,7 @@ describe('AdminPage', () => {
   it('deletes a user after confirmation', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
-      '/auth/me': () => ({
+      '/auth/session': () => ({
         ok: true,
         status: 200,
         json: async () => ({ user: ADMIN_USER }),
@@ -270,7 +270,7 @@ describe('AdminPage', () => {
   it('shows error when news fetch fails', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     mockFetch({
-      '/auth/me': () => ({
+      '/auth/session': () => ({
         ok: true,
         status: 200,
         json: async () => ({ user: ADMIN_USER }),

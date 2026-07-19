@@ -6,8 +6,6 @@
     "/404.html",
     "/admin",
     "/admin/*",
-    "/api",
-    "/api/*",
     "/assets/*",
     "/blog",
     "/blog/*",

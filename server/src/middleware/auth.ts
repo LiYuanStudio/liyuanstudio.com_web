@@ -4,7 +4,7 @@ import { jwtVerify, SignJWT } from 'jose';
 import { env } from '../config/env.js';
 import { UserModel } from '../models/user.js';
 import { normalizeUserRole, type UserRole } from '../lib/roles.js';
-import { readSessionToken } from '../lib/session.js';
+import { findPersistentSession, readSessionToken } from '../lib/session.js';
 import { getRequestId, jsonError } from './request-id.js';
 import type { RequestVariables } from './request-id.js';
 
@@ -22,8 +22,10 @@ export interface TokenUser {
 export type AuthVariables = RequestVariables & {
   userId: string;
   authUser: TokenUser;
+  authToken: string;
 };
 
+/** Legacy JWT helper retained for compatibility tests; runtime authentication never accepts it directly. */
 export async function signToken(user: TokenUser): Promise<string> {
   return new SignJWT({
     sub: user.id,
@@ -39,6 +41,7 @@ export async function signToken(user: TokenUser): Promise<string> {
     .sign(SECRET);
 }
 
+/** Legacy JWT helper retained for compatibility tests; runtime authentication never calls it. */
 export async function verifyToken(token: string): Promise<TokenUser> {
   const { payload } = await jwtVerify(token, SECRET, {
     issuer: ISSUER,
@@ -60,6 +63,36 @@ export async function verifyToken(token: string): Promise<TokenUser> {
     email: payload.email,
     role: normalizeUserRole(payload.role),
     tokenVersion: payload.tokenVersion ?? 0,
+  };
+}
+
+export async function authenticateToken(token: string): Promise<{
+  user: TokenUser;
+}> {
+  const persistentSession = await findPersistentSession(token);
+  if (!persistentSession) {
+    throw new Error('session_not_found');
+  }
+  const userId = persistentSession.userId.toString();
+  const tokenVersion = persistentSession.tokenVersion;
+
+  const dbUser = await UserModel.findById(userId);
+  if (!dbUser) {
+    throw new Error('user_not_found');
+  }
+
+  const dbTokenVersion = dbUser.tokenVersion ?? 0;
+  if (dbTokenVersion !== tokenVersion) {
+    throw new Error('token_version_mismatch');
+  }
+
+  return {
+    user: {
+      id: dbUser._id.toString(),
+      email: dbUser.email,
+      role: normalizeUserRole(dbUser.role),
+      tokenVersion: dbTokenVersion,
+    },
   };
 }
 
@@ -88,30 +121,17 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(
     }
 
     try {
-      const tokenUser = await verifyToken(token);
-      const dbUser = await UserModel.findById(tokenUser.id);
-      if (!dbUser) {
-        logAuthFailure(c, 'user_not_found');
-        return jsonError(c, '未授权，请先登录', 401);
-      }
-
-      const dbTokenVersion = dbUser.tokenVersion ?? 0;
-      if (dbTokenVersion !== tokenUser.tokenVersion) {
-        logAuthFailure(c, 'token_version_mismatch');
-        return jsonError(c, '未授权，请先登录', 401);
-      }
-
-      const user: TokenUser = {
-        id: dbUser._id.toString(),
-        email: dbUser.email,
-        role: normalizeUserRole(dbUser.role),
-        tokenVersion: dbTokenVersion,
-      };
+      const { user } = await authenticateToken(token);
       c.set('userId', user.id);
       c.set('authUser', user);
+      c.set('authToken', token);
       await next();
     } catch (error) {
-      logAuthFailure(c, 'token_verification_failed', error);
+      const reason = error instanceof Error &&
+        (error.message === 'user_not_found' || error.message === 'token_version_mismatch')
+        ? error.message
+        : 'token_verification_failed';
+      logAuthFailure(c, reason, error);
       return jsonError(c, '未授权，请先登录', 401);
     }
   },

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NewsModel } from '../models/news.js';
+import { SessionModel } from '../models/session.js';
 import { UserModel } from '../models/user.js';
 import { signToken } from '../middleware/auth.js';
 
@@ -8,8 +9,10 @@ vi.mock('../lib/db.js', () => ({
 }));
 vi.mock('../models/news.js');
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
 
 const mockNewsModel = vi.mocked(NewsModel);
+const mockSessionModel = vi.mocked(SessionModel);
 const mockUserModel = vi.mocked(UserModel);
 const API_KEY = 'secret-key';
 const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
@@ -31,6 +34,12 @@ describe('news routes', () => {
     mockNewsModel.create.mockReset();
     mockNewsModel.findByIdAndUpdate.mockReset();
     mockNewsModel.findByIdAndDelete.mockReset();
+    mockSessionModel.findOne.mockReset();
+    mockSessionModel.findOne.mockResolvedValue({
+      userId: { toString: () => 'admin-1' },
+      tokenVersion: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
     mockUserModel.findById.mockReset();
     mockUserModel.findById.mockResolvedValue({
       _id: { toString: () => 'admin-1' },
@@ -103,7 +112,7 @@ describe('news routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST /api/news rejects non-admin JWT', async () => {
+  it('POST /api/news rejects a non-admin persistent session', async () => {
     const app = await makeApp();
     mockUserModel.findById.mockResolvedValue({
       _id: { toString: () => 'user-1' },
@@ -167,7 +176,7 @@ describe('news routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST /api/news creates a document with admin JWT', async () => {
+  it('POST /api/news creates a document with an admin persistent session', async () => {
     const app = await makeApp();
     const created = { _id: '1', ...validNews };
     mockNewsModel.findOne.mockReturnValue({
@@ -221,7 +230,7 @@ describe('news routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST /api/news rejects a differently sized API key and invalid JWT', async () => {
+  it('POST /api/news rejects a differently sized API key and an unknown bearer token', async () => {
     const app = await makeApp();
     const withShortKey = await app.request('/api/news', {
       method: 'POST',
@@ -230,6 +239,7 @@ describe('news routes', () => {
     });
     expect(withShortKey.status).toBe(401);
 
+    mockSessionModel.findOne.mockResolvedValueOnce(null);
     const withInvalidJwt = await app.request('/api/news', {
       method: 'POST',
       headers: { Authorization: 'Bearer invalid', 'Content-Type': 'application/json' },

@@ -32,7 +32,7 @@ describe('auth api helpers', () => {
     expect(result.message).toBe('验证码已发送，请查收邮箱。');
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register/send-code', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
       body: JSON.stringify({
         email: 'hello@example.com',
@@ -64,7 +64,7 @@ describe('auth api helpers', () => {
     expect(result.user.emailVerified).toBe(true);
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register/verify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
       body: JSON.stringify({ email: 'hello@example.com', code: '123456' }),
     });
@@ -92,7 +92,7 @@ describe('auth api helpers', () => {
     expect(response).toEqual(expect.objectContaining({ user: expect.objectContaining({ email: 'login@example.com' }) }));
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
       body: JSON.stringify({ email: 'login@example.com', password: 'password123' }),
     });
@@ -114,7 +114,7 @@ describe('auth api helpers', () => {
     expect(response.user.id).toBe('2');
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/2fa/login/verify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
       body: JSON.stringify({ challengeToken: 'challenge-token', code: '123456' }),
     });
@@ -144,7 +144,7 @@ describe('auth api helpers', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://api.example.com/auth/2fa/enable', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
       body: JSON.stringify({ password: 'password123' }),
     });
@@ -173,8 +173,10 @@ describe('auth api helpers', () => {
     const { fetchMe } = await importAuthApi();
     const { user } = await fetchMe();
 
+    expect(user).not.toBeNull();
+    if (!user) throw new Error('Expected an authenticated user');
     expect(user.email).toBe('me@example.com');
-    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/me', {
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/session', {
       headers: {},
       credentials: 'include',
     });
@@ -193,7 +195,7 @@ describe('auth api helpers', () => {
     await expect(logout()).resolves.toEqual({ message: '已退出登录' });
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/logout', {
       method: 'POST',
-      headers: {},
+      headers: { 'X-Liyuan-Client': 'web' },
       credentials: 'include',
     });
   });
@@ -213,7 +215,7 @@ describe('auth api helpers', () => {
     });
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/forgot-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
       body: JSON.stringify({ email: 'hello@example.com' }),
     });
@@ -233,7 +235,7 @@ describe('auth api helpers', () => {
     });
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/reset-password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
       body: JSON.stringify({ token: 'abc 123', password: 'newpassword123' }),
     });
@@ -270,6 +272,7 @@ describe('auth api helpers', () => {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
+        'X-Liyuan-Client': 'web',
       },
       credentials: 'include',
       body: JSON.stringify({
@@ -305,6 +308,7 @@ describe('auth api helpers', () => {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
+        'X-Liyuan-Client': 'web',
       },
       credentials: 'include',
       body: JSON.stringify({ avatar: 'new.png' }),
@@ -356,7 +360,7 @@ describe('auth api helpers', () => {
     const { fetchMe } = await importAuthApi();
     await expect(fetchMe()).rejects.toThrow('服务器内部错误（调试 ID: header-req-1）');
     expect(consoleSpy).toHaveBeenCalledWith('API request failed', expect.objectContaining({
-      path: '/auth/me',
+      path: '/auth/session',
       status: 500,
       requestId: 'header-req-1',
     }));
@@ -370,7 +374,7 @@ describe('auth api helpers', () => {
     await expect(fetchMe()).rejects.toThrow('网络连接异常，请检查网络后重试');
     await expect(fetchMe()).rejects.toBeInstanceOf(ApiError);
     expect(consoleSpy).toHaveBeenCalledWith('API request failed', expect.objectContaining({
-      path: '/auth/me',
+      path: '/auth/session',
       status: 0,
     }));
     consoleSpy.mockRestore();

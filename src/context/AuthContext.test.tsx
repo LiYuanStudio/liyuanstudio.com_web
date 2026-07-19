@@ -60,8 +60,13 @@ describe('AuthProvider', () => {
     localStorage.removeItem('liyuan_auth_token');
   });
 
-  it('shows unauthenticated when no token is stored', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no token')));
+  it('shows unauthenticated when the session probe returns user null', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: null }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchMock);
 
     render(
       <AuthProvider>
@@ -72,6 +77,10 @@ describe('AuthProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('unauthenticated')).toBeInTheDocument();
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/auth\/session$/),
+      expect.objectContaining({ credentials: 'include' }),
+    );
   });
 
   it('loads the user when a token is stored', async () => {
@@ -210,7 +219,7 @@ describe('AuthProvider', () => {
       expect.objectContaining({
         method: 'POST',
         credentials: 'include',
-        headers: {},
+        headers: { 'X-Liyuan-Client': 'web' },
       }),
     );
   });

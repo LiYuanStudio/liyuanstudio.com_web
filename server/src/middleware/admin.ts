@@ -1,9 +1,7 @@
 import { createMiddleware } from 'hono/factory';
 import { timingSafeEqual } from 'node:crypto';
 import { env } from '../config/env.js';
-import { normalizeUserRole } from '../lib/roles.js';
-import { UserModel } from '../models/user.js';
-import { verifyToken, type AuthVariables, type TokenUser } from './auth.js';
+import { authenticateToken, type AuthVariables } from './auth.js';
 import { jsonError } from './request-id.js';
 
 const EXPECTED_KEY = env.API_KEY;
@@ -39,24 +37,14 @@ export const requireAdminOrApiKey = createMiddleware<{ Variables: AuthVariables 
     }
 
     try {
-      const tokenUser = await verifyToken(token);
-      const dbUser = await UserModel.findById(tokenUser.id);
-      if (!dbUser || (dbUser.tokenVersion ?? 0) !== tokenUser.tokenVersion) {
-        return jsonError(c, '未授权，请先登录', 401);
-      }
-
-      const user: TokenUser = {
-        id: dbUser._id.toString(),
-        email: dbUser.email,
-        role: normalizeUserRole(dbUser.role),
-        tokenVersion: dbUser.tokenVersion ?? 0,
-      };
+      const { user } = await authenticateToken(token);
       if (user.role !== 'admin') {
         return jsonError(c, '没有权限', 403);
       }
 
       c.set('userId', user.id);
       c.set('authUser', user);
+      c.set('authToken', token);
       await next();
     } catch {
       return jsonError(c, '未授权，请先登录', 401);

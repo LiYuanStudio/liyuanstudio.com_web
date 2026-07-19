@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
-import type { Context } from 'hono';
+import type { Context, Next } from 'hono';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
 import { PendingRegistrationModel } from '../models/pending-registration.js';
@@ -14,13 +14,21 @@ import {
   sendRegistrationCodeEmail,
   sendTwoFactorCodeEmail,
 } from '../lib/email.js';
-import { requireAuth, signToken } from '../middleware/auth.js';
+import { authenticateToken, requireAuth } from '../middleware/auth.js';
 import { getRequestId, jsonError } from '../middleware/request-id.js';
 import type { AuthVariables } from '../middleware/auth.js';
-import { isAdminEmail } from '../config/env.js';
+import { env, isAdminEmail } from '../config/env.js';
 import { normalizeUserRole, type LegacyUserRole } from '../lib/roles.js';
 import { validateAvatarValue } from '../lib/avatar.js';
-import { clearSession, isDeployConsoleRequest, issueSession } from '../lib/session.js';
+import {
+  clearSession,
+  createPersistentSession,
+  isDeployConsoleRequest,
+  issueSession,
+  readSessionToken,
+  touchPersistentSession,
+  revokeUserSessions,
+} from '../lib/session.js';
 import {
   createUniqueUsername,
   ensureUsername,
@@ -382,16 +390,31 @@ async function startTwoFactorChallenge(
 }
 
 async function issueAuthResponse(c: Context, user: UserForResponse) {
-  const token = await signToken({
-    id: user._id.toString(),
-    email: user.email,
-    role: normalizeUserRole(user.role),
-    tokenVersion: user.tokenVersion ?? 0,
-  });
+  const token = await createPersistentSession(
+    user._id.toString(),
+    user.tokenVersion ?? 0,
+  );
   issueSession(c, token);
   return isDeployConsoleRequest(c)
     ? { token, user: serializeUser(user) }
     : { user: serializeUser(user) };
+}
+
+async function requireTrustedSessionCreation(c: Context, next: Next) {
+  if (isDeployConsoleRequest(c)) {
+    return next();
+  }
+  const origin = c.req.header('Origin');
+  if (origin && (
+    !env.TRUSTED_ORIGINS.includes(origin) ||
+    c.req.header('X-Liyuan-Client') !== 'web'
+  )) {
+    return jsonError(c, '请求来源不受信任', 403);
+  }
+  if (!origin && c.req.header('Sec-Fetch-Site') === 'cross-site') {
+    return jsonError(c, '请求来源不受信任', 403);
+  }
+  return next();
 }
 
 async function verifyChallengeCode(
@@ -488,7 +511,7 @@ app.post('/register/send-code', async (c) => {
   return c.json({ message: '验证码已发送，请查收邮箱。' });
 });
 
-app.post('/register/verify', async (c) => {
+app.post('/register/verify', requireTrustedSessionCreation, async (c) => {
   let email: string;
   let code: string;
 
@@ -543,7 +566,7 @@ app.post('/register/verify', async (c) => {
   return c.json(await issueAuthResponse(c, user), 201);
 });
 
-app.post('/login', async (c) => {
+app.post('/login', requireTrustedSessionCreation, async (c) => {
   let email: string;
   let password: string;
 
@@ -679,7 +702,7 @@ app.post('/login', async (c) => {
   return c.json(await issueAuthResponse(c, user));
 });
 
-app.post('/2fa/login/verify', async (c) => {
+app.post('/2fa/login/verify', requireTrustedSessionCreation, async (c) => {
   let challengeToken: string;
   let code: string | undefined;
   let recoveryCode: string | undefined;
@@ -745,6 +768,9 @@ app.post('/2fa/login/verify', async (c) => {
 
   if (!user || !user.twoFactorEnabled) {
     return jsonError(c, '用户不存在或双重验证已关闭', 401);
+  }
+  if (recoveryCode) {
+    await revokeUserSessions(user._id.toString());
   }
   return c.json(await issueAuthResponse(c, await ensureUsernameForRequest(c, user, '2fa-login')));
 });
@@ -883,6 +909,7 @@ app.post('/2fa/enable/confirm', requireAuth, async (c) => {
   result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
+  await revokeUserSessions(result.user._id.toString());
   return c.json({ ...(await issueAuthResponse(c, result.user)), recoveryCodes: recovery.codes });
 });
 
@@ -903,6 +930,7 @@ app.post('/2fa/disable/confirm', requireAuth, async (c) => {
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
   await TwoFactorChallengeModel.deleteMany({ userId: result.user._id });
+  await revokeUserSessions(result.user._id.toString());
   return c.json(await issueAuthResponse(c, result.user));
 });
 
@@ -922,6 +950,7 @@ app.post('/2fa/recovery-codes/confirm', requireAuth, async (c) => {
   result.user.twoFactorRecoveryCodeHashes = recovery.hashes;
   result.user.tokenVersion = (result.user.tokenVersion ?? 0) + 1;
   await result.user.save();
+  await revokeUserSessions(result.user._id.toString());
   return c.json({ ...(await issueAuthResponse(c, result.user)), recoveryCodes: recovery.codes });
 });
 
@@ -930,7 +959,39 @@ app.get('/me', requireAuth, async (c) => {
   if (!user) {
     return jsonError(c, '用户不存在', 404);
   }
+  const currentToken = c.get('authToken');
+  const touched = await touchPersistentSession(currentToken);
+  if (!touched) {
+    clearSession(c);
+    return jsonError(c, '未授权，请先登录', 401);
+  }
+  issueSession(c, currentToken);
   return c.json({ user: serializeUser(await ensureUsernameForRequest(c, user, 'me')) });
+});
+
+app.get('/session', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const token = readSessionToken(c);
+  if (!token) {
+    return c.json({ user: null });
+  }
+
+  try {
+    const { user: tokenUser } = await authenticateToken(token);
+    const user = await UserModel.findById(tokenUser.id);
+    const touched = await touchPersistentSession(token);
+    if (!user || !touched) {
+      clearSession(c);
+      return c.json({ user: null });
+    }
+    issueSession(c, token);
+    return c.json({
+      user: serializeUser(await ensureUsernameForRequest(c, user, 'session')),
+    });
+  } catch {
+    clearSession(c);
+    return c.json({ user: null });
+  }
 });
 
 app.post('/logout', requireAuth, async (c) => {
@@ -941,6 +1002,7 @@ app.post('/logout', requireAuth, async (c) => {
 
   user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
+  await revokeUserSessions(user._id.toString());
   clearSession(c);
   return c.json({ message: '已退出登录' });
 });
@@ -1042,20 +1104,28 @@ app.post('/reset-password', async (c) => {
     return badRequest(c, error);
   }
 
-  const user = await UserModel.findOne({
-    passwordResetTokenHash: hashToken(token),
-    passwordResetExpiresAt: { $gt: new Date() },
-  });
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await UserModel.findOneAndUpdate(
+    {
+      passwordResetTokenHash: hashToken(token),
+      passwordResetExpiresAt: { $gt: new Date() },
+    },
+    {
+      $set: { passwordHash },
+      $unset: {
+        passwordResetTokenHash: 1,
+        passwordResetExpiresAt: 1,
+      },
+      $inc: { tokenVersion: 1 },
+    },
+    { new: true },
+  );
 
   if (!user) {
     return jsonError(c, '重置链接无效或已过期', 400);
   }
 
-  user.passwordHash = await bcrypt.hash(password, 10);
-  user.passwordResetTokenHash = undefined;
-  user.passwordResetExpiresAt = undefined;
-  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
-  await user.save();
+  await revokeUserSessions(user._id.toString());
 
   return c.json({ message: '密码已重置，请使用新密码登录。' });
 });

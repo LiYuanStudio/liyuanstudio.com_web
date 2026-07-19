@@ -6,6 +6,7 @@ import { isUserRole, normalizeUserRole, type UserRole } from '../lib/roles.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import type { AuthVariables } from '../middleware/auth.js';
 import { jsonError } from '../middleware/request-id.js';
+import { revokeUserSessions } from '../lib/session.js';
 
 const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -78,6 +79,7 @@ app.patch('/users/:id', async (c) => {
   if (!user) {
     return jsonError(c, '用户不存在', 404);
   }
+  await revokeUserSessions(id);
 
   return c.json({ user: serializeUser(user) });
 });
@@ -101,6 +103,7 @@ app.delete('/users/:id', async (c) => {
   }
 
   await UserModel.findByIdAndDelete(id);
+  await revokeUserSessions(id);
   return c.json({ ok: true });
 });
 

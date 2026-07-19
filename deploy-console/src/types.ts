@@ -7,6 +7,9 @@ export type Bindings = {
   PROMOTE_WORKFLOW: string;
   SESSION_SECRET: string;
   VERCEL_PROTECTION_BYPASS: string;
+  VERCEL_API_TOKEN: string;
+  VERCEL_PROJECT_ID: string;
+  VERCEL_TEAM_ID: string;
   CONSOLE_ORIGIN: string;
   PREVIEW_ORIGIN: string;
   COOKIE_DOMAIN?: string;

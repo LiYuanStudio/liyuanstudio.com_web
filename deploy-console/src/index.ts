@@ -306,11 +306,46 @@ async function proxyRolloutRequest(
   }
 }
 
-function validVercelPreview(deployment: GrayDeployment): URL | null {
+async function validVercelPreview(
+  env: Bindings,
+  deployment: GrayDeployment,
+): Promise<URL | null> {
   if (deployment.state !== 'success' || !deployment.upstreamUrl) return null;
+  let url: URL;
   try {
-    const url = new URL(deployment.upstreamUrl);
+    url = new URL(deployment.upstreamUrl);
     if (url.protocol !== 'https:' || !url.hostname.endsWith('.vercel.app')) return null;
+  } catch {
+    return null;
+  }
+
+  try {
+    const verificationUrl = new URL(
+      `/v13/deployments/${encodeURIComponent(url.hostname)}`,
+      'https://api.vercel.com',
+    );
+    verificationUrl.searchParams.set('teamId', env.VERCEL_TEAM_ID);
+    const response = await fetch(verificationUrl, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${env.VERCEL_API_TOKEN}`,
+      },
+    });
+    if (!response.ok) return null;
+    const verified = await response.json() as {
+      projectId?: unknown;
+      readyState?: unknown;
+      target?: unknown;
+      url?: unknown;
+    };
+    if (
+      verified.projectId !== env.VERCEL_PROJECT_ID ||
+      verified.url !== url.hostname ||
+      verified.readyState !== 'READY' ||
+      verified.target === 'production'
+    ) {
+      return null;
+    }
     return url;
   } catch {
     return null;
@@ -327,8 +362,18 @@ async function proxyPreview(c: AppContext): Promise<Response> {
     );
   }
 
+  const admin = await revalidateAdmin(c.env, session);
+  if (!admin) {
+    removeSession(c);
+    return c.html(
+      previewAccessPage(normalizedOrigin(c.env.CONSOLE_ORIGIN)),
+      403,
+      { 'Cache-Control': 'no-store' },
+    );
+  }
+
   const deployment = await getLatestGrayDeployment(c.env);
-  const upstreamOrigin = deployment && validVercelPreview(deployment);
+  const upstreamOrigin = deployment && await validVercelPreview(c.env, deployment);
   if (!deployment || !upstreamOrigin) {
     return c.text('最新灰度版本尚未部署成功。', 503, { 'Cache-Control': 'no-store' });
   }
@@ -480,8 +525,16 @@ app.post('/auth/logout', async (c) => {
 app.get('/api/deployment', async (c) => {
   const session = await readSession(c);
   if (!session) return c.json({ error: '未登录' }, 401);
+  const admin = await revalidateAdmin(c.env, session);
+  if (!admin) {
+    removeSession(c);
+    return c.json({ error: 'LA 管理员权限已失效' }, 403);
+  }
 
   const deployment = await getLatestGrayDeployment(c.env);
+  const preview = deployment
+    ? await validVercelPreview(c.env, deployment)
+    : null;
   return c.json({
     deployment: deployment
       ? {
@@ -491,7 +544,7 @@ app.get('/api/deployment', async (c) => {
           state: deployment.state,
           promotionState: deployment.promotionState,
           promoted: deployment.promoted,
-          previewUrl: validVercelPreview(deployment)
+          previewUrl: preview
             ? `${normalizedOrigin(c.env.PREVIEW_ORIGIN)}/`
             : null,
         }
@@ -582,7 +635,7 @@ app.post('/api/promote', async (c) => {
     latest.id !== body.deploymentId ||
     latest.sha !== body.sha ||
     latest.state !== 'success' ||
-    !validVercelPreview(latest)
+    !(await validVercelPreview(c.env, latest))
   ) {
     return c.json({ error: '只能发布最新且构建成功的灰度版本' }, 409);
   }

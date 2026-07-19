@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { UserModel } from '../models/user.js';
+import { SessionModel } from '../models/session.js';
 import { signToken, verifyToken, requireAuth, requireAdmin } from './auth.js';
 
 vi.mock('../models/user.js');
+vi.mock('../models/session.js');
 
 const mockUserModel = vi.mocked(UserModel);
+const mockSessionModel = vi.mocked(SessionModel);
 
 function authUserDoc(overrides: Record<string, unknown> = {}) {
   return {
@@ -22,6 +25,12 @@ describe('auth middleware', () => {
   beforeEach(async () => {
     mockUserModel.findById.mockReset();
     mockUserModel.findById.mockResolvedValue(authUserDoc() as never);
+    mockSessionModel.findOne.mockReset();
+    mockSessionModel.findOne.mockResolvedValue({
+      userId: { toString: () => 'user-123' },
+      tokenVersion: 0,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as never);
     token = await signToken({
       id: 'user-123',
       email: 'user@example.com',
@@ -139,6 +148,19 @@ describe('auth middleware', () => {
     expect(res.status).toBe(401);
   });
 
+  it('rejects a legacy JWT that has no persistent session record', async () => {
+    mockSessionModel.findOne.mockResolvedValueOnce(null);
+    const app = new Hono();
+    app.use('/me', requireAuth);
+    app.get('/me', (c) => c.json({ ok: true }));
+
+    const res = await app.request('/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(401);
+  });
+
   it('allows admin users through requireAdmin', async () => {
     const adminToken = await signToken({
       id: 'admin-1',
@@ -172,6 +194,7 @@ describe('auth middleware', () => {
 
   it('returns 401 when token verification throws', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockSessionModel.findOne.mockRejectedValueOnce(new Error('database unavailable'));
     const app = new Hono();
     app.use('/me', requireAuth);
     app.get('/me', (c) => c.json({ ok: true }));
