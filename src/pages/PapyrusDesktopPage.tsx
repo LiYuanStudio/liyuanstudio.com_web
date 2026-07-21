@@ -84,7 +84,7 @@ function PapyrusDownload() {
               <img src={PLATFORM_ICON[item.platform]} alt="" />
             </div>
             <div className="papyrus-download-info">
-              <h4>{item.label}</h4>
+              <h3>{item.label}</h3>
               {item.arch && <span className="papyrus-download-arch">{item.arch}</span>}
             </div>
             <div className="papyrus-download-links">
@@ -116,7 +116,7 @@ function PapyrusNav({
   navRef: RefObject<HTMLElement | null>;
 }) {
   return (
-    <nav ref={navRef} className="papyrus-nav" aria-label="Papyrus">
+    <nav ref={navRef} className="papyrus-nav" aria-label="Papyrus 导航">
       <div className="papyrus-nav-inner">
         <a className="papyrus-brand" href="/" aria-label="返回 LiYuan Studio 首页">
           <img src="/png/logo.png" alt="" />
@@ -187,7 +187,7 @@ export function PapyrusDesktopPage() {
         </div>
       </header>
 
-      <main className="papyrus-main">
+      <main className="papyrus-main" id="main-content" tabIndex={-1}>
         <PapyrusDownload />
 
         <section className="papyrus-section" aria-labelledby="source-title">

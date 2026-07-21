@@ -124,6 +124,8 @@ export function TwoFactorSettings({ user }: { user: User }) {
             value={code}
             onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             required
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'two-factor-error' : undefined}
           />
           <div className="profile-form-actions">
             <button type="submit" className="profile-button" disabled={loading || code.length !== 6}>
@@ -155,6 +157,8 @@ export function TwoFactorSettings({ user }: { user: User }) {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="进行安全设置前请确认密码"
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? 'two-factor-error' : undefined}
           />
           <div className="profile-form-actions">
             {user.twoFactorEnabled ? (
@@ -175,7 +179,7 @@ export function TwoFactorSettings({ user }: { user: User }) {
         </div>
       )}
 
-      {error && <p className="profile-error" role="alert">{error}</p>}
+      {error && <p id="two-factor-error" className="profile-error" role="alert">{error}</p>}
       {message && <p className="profile-success" role="status">{message}</p>}
     </section>
   );

@@ -21,13 +21,24 @@
     }
     h1 { font-size: 48px; margin-bottom: 12px; }
     p { color: #6e6e73; margin-bottom: 24px; }
-    a { color: #0071e3; text-decoration: none; }
+    main { text-align: center; }
+    a {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      color: #0066cc;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
     a:hover { text-decoration: underline; }
+    a:focus-visible { outline: 3px solid #005fcc; outline-offset: 3px; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <h1>404</h1>
-  <p>抱歉，这个页面不存在。</p>
-  <a href="/">返回首页</a>
+  <main>
+    <h1>404</h1>
+    <p>抱歉，这个页面不存在。</p>
+    <a href="/">返回 LiYuan Studio 首页</a>
+  </main>
 </body>
 </html>

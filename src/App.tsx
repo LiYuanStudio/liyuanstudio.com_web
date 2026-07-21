@@ -16,6 +16,7 @@ import { AuthNav } from './components/AuthNav.js';
 import { getPublicPostPath } from './lib/profile-path.js';
 import { HeroVisual } from './components/HeroVisual.js';
 import { MaskedHeading } from './components/MaskedHeading.js';
+import { SkipLink } from './components/SkipLink.js';
 import './styles.css';
 
 export const NAV_SCROLL_OFFSET = 120;
@@ -39,7 +40,7 @@ export function Footer() {
       <div className="footer-inner">
         <div className="footer-main">
           <div className="footer-brand">
-            <a className="footer-brand-link" href="/" aria-label="LiYuan Studio home">
+            <a className="footer-brand-link" href="/" aria-label="LiYuan Studio 首页">
               <img src="/png/logo.png" alt="" />
               <span>LiYuan Studio</span>
             </a>
@@ -56,15 +57,15 @@ export function Footer() {
             </div>
           </div>
 
-          <nav className="footer-nav" aria-label="Footer">
+          <nav className="footer-nav" aria-label="页脚导航">
             <div className="footer-group">
-              <h4>产品</h4>
+              <h2>产品</h2>
               <a href="#products">Papyrus Desktop</a>
               <a href="https://github.com/PapyrusOR/Papyrus" target="_blank" rel="noopener noreferrer">Papyrus</a>
               <a href="https://github.com/PapyrusOR/Papyrus_CLI" target="_blank" rel="noopener noreferrer">Papyrus CLI</a>
             </div>
             <div className="footer-group">
-              <h4>内容</h4>
+              <h2>内容</h2>
               <a href="#news">最新动态</a>
               <a href="#blog">博客</a>
             </div>
@@ -119,6 +120,7 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       <p className="news-lead">
         产品更新、品牌动向与团队成长的一线消息。
       </p>
+      {status === 'loading' && <p className="visually-hidden" role="status">最新动态加载中</p>}
       {status === 'error' && (
         <p className="news-status" role="status">
           {errorMessage ?? '最新动态暂时无法加载，请稍后刷新。'}
@@ -212,6 +214,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       <p className="blog-lead">
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
+      {status === 'loading' && <p className="visually-hidden" role="status">博客内容加载中</p>}
       {status === 'error' && (
         <p className="blog-status" role="status">
           {errorMessage ?? '博客内容暂时无法加载，请稍后刷新。'}
@@ -272,45 +275,29 @@ export function App() {
 
   return (
     <>
-      <main className="page-shell">
-        <nav ref={navRef} className="nav" aria-label="Primary">
-          <div className="nav-inner">
-            <a className="brand" href="/" aria-label="LiYuan Studio home">
-              <img src="/png/logo.png" alt="" />
-              <span>LiYuan Studio</span>
+      <SkipLink />
+      <nav ref={navRef} className="nav" aria-label="主导航">
+        <div className="nav-inner">
+          <a className="brand" href="/" aria-label="LiYuan Studio 首页">
+            <img src="/png/logo.png" alt="" />
+            <span>LiYuan Studio</span>
+          </a>
+          <div className="nav-links">
+            <a className="nav-item" href="#products">
+              产品
             </a>
-            <div className="nav-links">
-              <button
-                type="button"
-                className="nav-item"
-                onClick={() =>
-                  productsRef.current?.scrollIntoView({ behavior: 'smooth' })
-                }
-              >
-                产品
-              </button>
-              <button
-                type="button"
-                className="nav-item"
-                onClick={() =>
-                  newsRef.current?.scrollIntoView({ behavior: 'smooth' })
-                }
-              >
-                动态
-              </button>
-              <button
-                type="button"
-                className="nav-item"
-                onClick={() =>
-                  blogRef.current?.scrollIntoView({ behavior: 'smooth' })
-                }
-              >
-                博客
-              </button>
-            </div>
-            <AuthNav />
+            <a className="nav-item" href="#news">
+              动态
+            </a>
+            <a className="nav-item" href="#blog">
+              博客
+            </a>
           </div>
-        </nav>
+          <AuthNav />
+        </div>
+      </nav>
+
+      <main className="page-shell" id="main-content" tabIndex={-1}>
 
         <section
           ref={heroRef}
