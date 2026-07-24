@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App, Footer, News, Blog, MaskedHeading, clamp, lerp, easeInOutCubic } from './App.js';
 import { fetchNews, fetchBlogPosts } from './api.js';
 import type { BlogPost } from './types.js';
 import { AuthProvider } from './context/AuthContext.js';
+import { expectNoAccessibilityViolations } from './test/accessibility.js';
 
 vi.mock('./api.js');
 
@@ -55,22 +56,24 @@ describe('App', () => {
     expect(container.querySelector('.blog-card')).not.toBeInTheDocument();
   });
 
-  it('scrolls to sections when nav buttons are clicked', async () => {
+  it('uses native anchor links for section navigation', () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockResolvedValue([]);
 
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-
     renderApp();
-    const user = userEvent.setup();
+    const navigation = within(screen.getByRole('navigation', { name: '主导航' }));
 
-    await user.click(screen.getByRole('button', { name: '产品' }));
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
+    expect(navigation.getByRole('link', { name: '产品' })).toHaveAttribute('href', '#products');
+    expect(navigation.getByRole('link', { name: '动态' })).toHaveAttribute('href', '#news');
+    expect(navigation.getByRole('link', { name: '博客' })).toHaveAttribute('href', '#blog');
+  });
 
-    await user.click(screen.getByRole('button', { name: '动态' }));
-    await user.click(screen.getByRole('button', { name: '博客' }));
-    expect(scrollIntoView).toHaveBeenCalledTimes(3);
+  it('has no automated accessibility violations in the loaded empty state', async () => {
+    const { container } = renderApp();
+
+    await screen.findByText('敬请期待');
+    await screen.findByText('暂无博客内容。');
+    await expectNoAccessibilityViolations(container);
   });
 
   it('links authenticated users with a valid username to their public profile from the homepage', async () => {

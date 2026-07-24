@@ -5,6 +5,7 @@ import { AuthProvider } from '../context/AuthContext.js';
 import { ProfilePage } from './ProfilePage.js';
 import { getCroppedImg } from '../lib/crop-image.js';
 import type { BlogPost, User } from '../types.js';
+import { expectNoAccessibilityViolations } from '../test/accessibility.js';
 
 const CURRENT_USER: User = {
   id: '1',
@@ -175,6 +176,7 @@ describe('ProfilePage', () => {
     expect(screen.getByText('Original bio')).toBeInTheDocument();
     expect(screen.getByText('暂无公开文章。')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '编辑资料' })).not.toBeInTheDocument();
+    await expectNoAccessibilityViolations(document.body);
   });
 
   it('normalizes a public profile to the canonical username path', async () => {
@@ -646,7 +648,7 @@ describe('ProfilePage', () => {
     expect(screen.queryByRole('dialog', { name: '截取头像' })).not.toBeInTheDocument();
   });
 
-  it('closes cropper when cancel is clicked', async () => {
+  it('manages focus and closes the cropper with Escape', async () => {
     localStorage.setItem('liyuan_auth_token', 'token');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -661,19 +663,30 @@ describe('ProfilePage', () => {
       expect(screen.getByRole('heading', { name: 'LA' })).toBeInTheDocument();
     });
 
+    const avatarButton = screen.getByRole('button', { name: '更换个人头像' });
+    avatarButton.focus();
     const fileInput = screen.getByTestId('avatar-input');
     const file = new File(['dummy'], 'avatar.png', { type: 'image/png' });
     uploadFile(fileInput, file);
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: '截取头像' })).toBeInTheDocument();
-    });
+    const dialog = await screen.findByRole('dialog', { name: '截取头像' });
+    const zoomInput = screen.getByRole('slider', { name: '缩放' });
+    const cancelButton = screen.getByRole('button', { name: '取消' });
+    const confirmButton = screen.getByRole('button', { name: '确认' });
+    expect(cancelButton).toHaveFocus();
+    confirmButton.focus();
+    await user.tab();
+    expect(zoomInput).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(confirmButton).toHaveFocus();
+    await expectNoAccessibilityViolations(dialog);
 
-    await user.click(screen.getByRole('button', { name: '取消' }));
+    await user.keyboard('{Escape}');
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '截取头像' })).not.toBeInTheDocument();
     });
+    expect(avatarButton).toHaveFocus();
     expect(fetch).not.toHaveBeenCalledWith('/api/auth/me/avatar', expect.anything());
   });
 

@@ -23,6 +23,10 @@ body {
     #f5f5f7;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 
 a {
   color: inherit;
@@ -149,6 +153,12 @@ a {
   align-items: center;
   padding: 80px 30px;
   text-align: left;
+}
+
+.products,
+.news,
+.blog {
+  scroll-margin-top: 88px;
 }
 
 .hero-inner {
@@ -346,7 +356,7 @@ h1 {
 }
 
 .product-date {
-  color: #86868b;
+  color: #6e6e73;
   font-size: 13px;
   font-weight: 500;
 }
@@ -545,7 +555,7 @@ h1 {
 }
 
 .news-date {
-  color: #86868b;
+  color: #6e6e73;
   font-size: 13px;
   font-weight: 500;
 }
@@ -589,7 +599,7 @@ h1 {
 
 .blog-status {
   margin: 16px 0 0;
-  color: #86868b;
+  color: #6e6e73;
   font-size: 14px;
   line-height: 1.4;
 }
@@ -679,7 +689,7 @@ h1 {
 }
 
 .blog-date {
-  color: #86868b;
+  color: #6e6e73;
   font-size: 13px;
   font-weight: 500;
 }
@@ -836,7 +846,7 @@ h1 {
   gap: 16px;
 }
 
-.footer-group h4 {
+.footer-group h2 {
   margin: 0 0 6px;
   font-size: 14px;
   font-weight: 700;
@@ -865,7 +875,7 @@ h1 {
   gap: 16px;
   padding-top: 40px;
   border-top: 1px solid rgba(29, 29, 31, 0.08);
-  color: #86868b;
+  color: #6e6e73;
   font-size: 14px;
   font-weight: 500;
 }

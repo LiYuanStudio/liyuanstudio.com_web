@@ -52,7 +52,7 @@ function validateForm(form: BlogPostInput): string | null {
 
 function BlogNav({ action = 'release' }: { action?: 'release' | 'list' }) {
   return (
-    <nav className="blog-page-nav">
+    <nav className="blog-page-nav" aria-label="博客导航">
       <a className="blog-page-brand" href="/">
         <img src="/png/logo.png" alt="" />
         <span>LiYuan Studio</span>
@@ -73,6 +73,10 @@ function BlogIndex() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = '博客 | LiYuan Studio';
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +101,7 @@ function BlogIndex() {
   return (
     <div className="blog-page">
       <BlogNav />
-      <main className="blog-page-main">
+      <main className="blog-page-main" id="main-content" tabIndex={-1}>
         <section className="blog-page-hero" aria-labelledby="blog-page-title">
           <div>
             <h1 id="blog-page-title">博客</h1>
@@ -106,7 +110,7 @@ function BlogIndex() {
           <a className="blog-page-button" href="/blog/release/">发布</a>
         </section>
 
-        {status === 'loading' && <p className="blog-page-status">加载中...</p>}
+        {status === 'loading' && <p className="blog-page-status" role="status">加载中...</p>}
         {status === 'error' && <p className="blog-page-error" role="alert">{error}</p>}
         {status === 'ready' && posts.length === 0 && <p className="blog-page-status">暂无博客内容。</p>}
         <div className="blog-page-list" aria-busy={status === 'loading'}>
@@ -158,6 +162,10 @@ function BlogRelease() {
   const [error, setError] = useState<string | null>(null);
   const [successPath, setSuccessPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    document.title = '发布博客 | LiYuan Studio';
+  }, []);
 
   const tagText = useMemo(() => getTagsText(form.tags), [form.tags]);
 
@@ -228,7 +236,7 @@ function BlogRelease() {
   };
 
   if (state.status === 'loading') {
-    return <p className="blog-page-status">加载中...</p>;
+    return <><h1 className="visually-hidden">发布博客</h1><p className="blog-page-status" role="status">加载中...</p></>;
   }
 
   const guard = <ReleaseGuard user={user} />;
@@ -244,7 +252,7 @@ function BlogRelease() {
         <span>{user.displayName}</span>
       </div>
 
-      <form className="blog-release-form" onSubmit={handleSubmit}>
+      <form className="blog-release-form" onSubmit={handleSubmit} noValidate>
         <label htmlFor="blog-upload">导入文件</label>
         <input
           id="blog-upload"
@@ -262,6 +270,9 @@ function BlogRelease() {
           maxLength={80}
           onChange={(event) => handleTitleChange(event.target.value)}
           placeholder="写一个清晰的标题"
+          required
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'blog-form-error' : undefined}
         />
 
 
@@ -305,9 +316,12 @@ function BlogRelease() {
           value={form.content}
           onChange={(event) => updateField('content', event.target.value)}
           placeholder="从这里开始写..."
+          required
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'blog-form-error' : undefined}
         />
 
-        {error && <p className="blog-page-error" role="alert">{error}</p>}
+        {error && <p id="blog-form-error" className="blog-page-error" role="alert">{error}</p>}
         {successPath && (
           <p className="blog-page-success" role="status">
             已发布。<a href="/blog/">去博客页查看</a>，或<a href={successPath}>打开文章</a>。
@@ -334,7 +348,7 @@ export function BlogPage() {
   return (
     <div className="blog-page blog-release-page">
       <BlogNav action="list" />
-      <main className="blog-page-main">
+      <main className="blog-page-main" id="main-content" tabIndex={-1}>
         <BlogRelease />
       </main>
     </div>

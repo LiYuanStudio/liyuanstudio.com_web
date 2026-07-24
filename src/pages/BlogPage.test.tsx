@@ -5,6 +5,7 @@ import { AuthProvider } from '../context/AuthContext.js';
 import { BlogPage } from './BlogPage.js';
 import * as blogApi from '../api/blog.js';
 import type { User, BlogPost } from '../types.js';
+import { expectNoAccessibilityViolations } from '../test/accessibility.js';
 
 vi.mock('../api/auth.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/auth.js')>();
@@ -113,6 +114,14 @@ describe('BlogPage list view', () => {
       'href',
       '/member/50/',
     );
+  });
+
+  it('has no automated accessibility violations with published posts', async () => {
+    mockFetchBlogPosts.mockResolvedValue(SAMPLE_POSTS);
+    const { container } = renderBlogPage('/blog/');
+
+    await screen.findByText('First post');
+    await expectNoAccessibilityViolations(container);
   });
 
   it('shows an empty state when the API returns no posts', async () => {

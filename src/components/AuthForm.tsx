@@ -49,7 +49,7 @@ export function AuthForm({
   if (state.status === 'authenticated') {
     return (
       <div className="auth-card">
-        <h2>已登录</h2>
+        <h1>已登录</h1>
         <p className="auth-lead">{state.user.displayName || state.user.email}</p>
         <button type="button" className="auth-button" onClick={logout}>
           退出登录
@@ -176,6 +176,7 @@ export function AuthForm({
     }
   };
 
+  const errorDescription = error ? 'auth-form-error' : undefined;
   const codeInput = (
     <>
       <label htmlFor="auth-code">验证码</label>
@@ -189,13 +190,15 @@ export function AuthForm({
         required
         autoComplete="one-time-code"
         placeholder="请输入 6 位验证码"
+        aria-invalid={Boolean(error)}
+        aria-describedby={errorDescription}
       />
     </>
   );
 
   return (
     <div className="auth-card">
-      <h2>{isLogin ? '登录' : '注册'}</h2>
+      <h1>{isLogin ? '登录' : '注册'}</h1>
 
       {isLogin && loginStep === 'form' ? (
         <form className="auth-form" onSubmit={handleLogin}>
@@ -207,6 +210,8 @@ export function AuthForm({
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
+            aria-invalid={Boolean(error)}
+            aria-describedby={errorDescription}
           />
 
           <label htmlFor="auth-password">密码</label>
@@ -218,6 +223,8 @@ export function AuthForm({
             required
             minLength={8}
             autoComplete="current-password"
+            aria-invalid={Boolean(error)}
+            aria-describedby={errorDescription}
           />
 
           <a className="auth-inline-link auth-forgot-link" href="/forgot-password/">
@@ -225,7 +232,7 @@ export function AuthForm({
           </a>
 
           {error && (
-            <p className="auth-error" role="alert">
+            <p id="auth-form-error" className="auth-error" role="alert">
               {error}
             </p>
           )}
@@ -253,11 +260,13 @@ export function AuthForm({
                 required
                 autoComplete="one-time-code"
                 placeholder="XXXX-XXXX-XXXX"
+                aria-invalid={Boolean(error)}
+                aria-describedby={errorDescription}
               />
             </>
           ) : codeInput}
 
-          {error && <p className="auth-error" role="alert">{error}</p>}
+          {error && <p id="auth-form-error" className="auth-error" role="alert">{error}</p>}
 
           {!useRecoveryCode && (
             <button
@@ -306,6 +315,8 @@ export function AuthForm({
             onChange={(e) => setDisplayName(e.target.value)}
             required
             autoComplete="name"
+            aria-invalid={Boolean(error)}
+            aria-describedby={errorDescription}
           />
 
           <label htmlFor="auth-email">邮箱</label>
@@ -316,6 +327,8 @@ export function AuthForm({
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
+            aria-invalid={Boolean(error)}
+            aria-describedby={errorDescription}
           />
 
           <label htmlFor="auth-password">密码</label>
@@ -327,10 +340,12 @@ export function AuthForm({
             required
             minLength={8}
             autoComplete="new-password"
+            aria-invalid={Boolean(error)}
+            aria-describedby={errorDescription}
           />
 
           {error && (
-            <p className="auth-error" role="alert">
+            <p id="auth-form-error" className="auth-error" role="alert">
               {error}
             </p>
           )}
@@ -348,7 +363,7 @@ export function AuthForm({
           {codeInput}
 
           {error && (
-            <p className="auth-error" role="alert">
+            <p id="auth-form-error" className="auth-error" role="alert">
               {error}
             </p>
           )}
