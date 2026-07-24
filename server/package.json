@@ -12,12 +12,12 @@
     "promote-admins": "tsx src/scripts/promote-admins.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.14.1",
+    "@hono/node-server": "^2.0.11",
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.5.0",
     "hono": "^4.7.7",
     "jose": "^6.2.3",
-    "mongoose": "^8.14.0"
+    "mongoose": "^8.24.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
