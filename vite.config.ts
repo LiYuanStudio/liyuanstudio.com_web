@@ -2,7 +2,11 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { matchProfileContentPath } from './src/lib/profile-path.js';
-import { matchNewsContentPath } from './src/lib/news-path.js';
+import {
+  getReleaseContentPath,
+  matchNewsContentPath,
+  matchReleaseContentPath,
+} from './src/lib/news-path.js';
 
 const API_HEALTH_URL = 'http://localhost:3000/api/health';
 
@@ -75,22 +79,52 @@ function blogRewrite(): Plugin {
   };
 }
 
-function newsRewrite(): Plugin {
+function releaseRewrite(): Plugin {
   return {
-    name: 'news-rewrite',
+    name: 'release-rewrite',
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
         if (req.url) {
           const [path] = req.url.split('?');
-          if (matchNewsContentPath(path)) req.url = '/news/';
+          if (matchReleaseContentPath(path)) req.url = '/release/';
         }
         next();
       });
     },
   };
 }
+
+function legacyNewsRedirect(): Plugin {
+  return {
+    name: 'legacy-news-redirect',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url) {
+          next();
+          return;
+        }
+        const [path] = req.url.split('?');
+        const slug = matchNewsContentPath(path);
+        if (!slug) {
+          next();
+          return;
+        }
+        res.statusCode = 301;
+        res.setHeader('Location', getReleaseContentPath(slug));
+        res.end();
+      });
+    },
+  };
+}
 export default defineConfig({
-  plugins: [react(), backendHealthCheck(), profileRewrite(), blogRewrite(), newsRewrite()],
+  plugins: [
+    react(),
+    backendHealthCheck(),
+    profileRewrite(),
+    blogRewrite(),
+    releaseRewrite(),
+    legacyNewsRedirect(),
+  ],
   base: '/',
   build: {
     rollupOptions: {
@@ -103,6 +137,8 @@ export default defineConfig({
         resetPassword: resolve(__dirname, 'reset-password/index.html'),
         admin: resolve(__dirname, 'admin/index.html'),
         profile: resolve(__dirname, 'profile/index.html'),
+        products: resolve(__dirname, 'products/index.html'),
+        release: resolve(__dirname, 'release/index.html'),
         blog: resolve(__dirname, 'blog/index.html'),
         news: resolve(__dirname, 'news/index.html'),
       },

@@ -56,16 +56,18 @@ describe('App', () => {
     expect(container.querySelector('.blog-card')).not.toBeInTheDocument();
   });
 
-  it('uses native anchor links for section navigation', () => {
+  it('links the primary navigation and section CTAs to the content hubs', () => {
     mockFetchNews.mockResolvedValue([]);
     mockFetchBlogPosts.mockResolvedValue([]);
 
     renderApp();
     const navigation = within(screen.getByRole('navigation', { name: '主导航' }));
 
-    expect(navigation.getByRole('link', { name: '产品' })).toHaveAttribute('href', '#products');
-    expect(navigation.getByRole('link', { name: '动态' })).toHaveAttribute('href', '#news');
-    expect(navigation.getByRole('link', { name: '博客' })).toHaveAttribute('href', '#blog');
+    expect(navigation.getByRole('link', { name: '产品' })).toHaveAttribute('href', '/products/');
+    expect(navigation.getByRole('link', { name: '动态' })).toHaveAttribute('href', '/release/');
+    expect(navigation.getByRole('link', { name: '博客' })).toHaveAttribute('href', '/blog/');
+    expect(screen.getAllByRole('link', { name: /查看更多/ }).map((link) => link.getAttribute('href')))
+      .toEqual(['/products/', '/release/', '/blog/']);
   });
 
   it('has no automated accessibility violations in the loaded empty state', async () => {
@@ -191,8 +193,26 @@ describe('News component', () => {
     expect(screen.getByText('2026-06-10')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '阅读全文' })).toHaveAttribute(
       'href',
-      '/news/site-refresh/',
+      '/release/site-refresh/',
     );
+  });
+
+  it('limits the homepage news preview to the latest three items', async () => {
+    mockFetchNews.mockResolvedValue(
+      Array.from({ length: 4 }, (_, index) => ({
+        slug: `news-${index + 1}`,
+        title: `News ${index + 1}`,
+        description: `Summary ${index + 1}`,
+        tag: '产品',
+        date: `2026-06-0${index + 1}`,
+      })),
+    );
+
+    render(<News />);
+
+    expect(await screen.findByText('News 1')).toBeInTheDocument();
+    expect(screen.getByText('News 3')).toBeInTheDocument();
+    expect(screen.queryByText('News 4')).not.toBeInTheDocument();
   });
 });
 
@@ -241,6 +261,22 @@ describe('Blog component', () => {
     });
     expect(screen.getByText('API summary one')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: '阅读' })[0]).toHaveAttribute('href', '/LA/50/');
+  });
+
+  it('limits the homepage blog preview to the latest three posts', async () => {
+    const posts = Array.from({ length: 4 }, (_, index): BlogPost => ({
+      ...API_POSTS[0],
+      title: `Blog ${index + 1}`,
+      blogNumber: 60 + index,
+      slug: `blog-${index + 1}`,
+    }));
+    mockFetchBlogPosts.mockResolvedValue(posts);
+
+    render(<Blog />);
+
+    expect(await screen.findByText('Blog 1')).toBeInTheDocument();
+    expect(screen.getByText('Blog 3')).toBeInTheDocument();
+    expect(screen.queryByText('Blog 4')).not.toBeInTheDocument();
   });
 
   it('shows an error status without demo posts when the API fails', async () => {

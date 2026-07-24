@@ -4,6 +4,13 @@ import { getErrorMessage } from '../api/errors.js';
 import { useAuth } from '../context/AuthContext.js';
 import { importBlogFile } from '../lib/blog-upload.js';
 import type { BlogPost, BlogPostInput, User } from '../types.js';
+import {
+  CollageCard,
+  CollageGrid,
+  ContentHubLayout,
+  ContentHubNav,
+  type HubTone,
+} from '../components/ContentHub.js';
 import './blog.css';
 
 const EMPTY_FORM: BlogPostInput = {
@@ -16,6 +23,8 @@ const EMPTY_FORM: BlogPostInput = {
   status: 'published',
   visibility: 'public',
 };
+
+const BLOG_TONES: HubTone[] = ['sand', 'blue', 'pink', 'green', 'ink', 'orange'];
 
 function canWriteBlog(user?: User): boolean {
   return user?.role === 'member' || user?.role === 'admin';
@@ -52,20 +61,14 @@ function validateForm(form: BlogPostInput): string | null {
 
 function BlogNav({ action = 'release' }: { action?: 'release' | 'list' }) {
   return (
-    <nav className="blog-page-nav" aria-label="博客导航">
-      <a className="blog-page-brand" href="/">
-        <img src="/png/logo.png" alt="" />
-        <span>LiYuan Studio</span>
-      </a>
-      <div className="blog-page-actions">
-        <a href="/">首页</a>
-        {action === 'release' ? (
-          <a className="blog-page-button" href="/blog/release/">发布</a>
-        ) : (
-          <a className="blog-page-button blog-page-button-secondary" href="/blog/">博客</a>
-        )}
-      </div>
-    </nav>
+    <ContentHubNav
+      current="blog"
+      action={action === 'release' ? (
+        <a className="hub-action-button" href="/blog/release/">发布</a>
+      ) : (
+        <a className="hub-action-button" href="/blog/">返回博客</a>
+      )}
+    />
   );
 }
 
@@ -99,36 +102,31 @@ function BlogIndex() {
   }, []);
 
   return (
-    <div className="blog-page">
-      <BlogNav />
-      <main className="blog-page-main" id="main-content" tabIndex={-1}>
-        <section className="blog-page-hero" aria-labelledby="blog-page-title">
-          <div>
-            <h1 id="blog-page-title">博客</h1>
-            <p>产品迭代、技术探索与创作记录。</p>
-          </div>
-          <a className="blog-page-button" href="/blog/release/">发布</a>
-        </section>
-
-        {status === 'loading' && <p className="blog-page-status" role="status">加载中...</p>}
-        {status === 'error' && <p className="blog-page-error" role="alert">{error}</p>}
-        {status === 'ready' && posts.length === 0 && <p className="blog-page-status">暂无博客内容。</p>}
-        <div className="blog-page-list" aria-busy={status === 'loading'}>
-          {posts.map((post) => (
-            <article className="blog-page-post" key={`${post.authorUsername}/${post.blogNumber}`}>
-              <a href={getPublicPostPath(post)} aria-label={`阅读 ${post.title}`}>
-                <span className="blog-page-post-meta">{post.category || 'Blog'} · {formatDate(post)}</span>
-                <h2>{post.title}</h2>
-                <p>{post.excerpt || buildExcerpt(post.content) || '暂无摘要。'}</p>
-                <span className="blog-page-post-footer">
-                  {post.authorDisplayName} · {post.readTime || '1 分钟阅读'}
-                </span>
-              </a>
-            </article>
-          ))}
-        </div>
-      </main>
-    </div>
+    <ContentHubLayout
+      current="blog"
+      title="博客"
+      description="产品迭代、技术探索与创作记录。"
+      action={<a className="hub-action-button" href="/blog/release/">发布</a>}
+    >
+      {status === 'loading' && <p className="hub-status" role="status">加载中…</p>}
+      {status === 'error' && <p className="hub-status hub-status-error" role="alert">{error}</p>}
+      {status === 'ready' && posts.length === 0 && <p className="hub-status">暂无博客内容。</p>}
+      <CollageGrid busy={status === 'loading'}>
+        {posts.map((post, index) => (
+          <CollageCard
+            key={`${post.authorUsername}/${post.blogNumber}`}
+            href={getPublicPostPath(post)}
+            title={post.title}
+            eyebrow={post.category || 'Blog'}
+            description={post.excerpt || buildExcerpt(post.content) || '暂无摘要。'}
+            meta={`${post.authorDisplayName} · ${formatDate(post)} · ${post.readTime || '1 分钟阅读'}`}
+            image={post.image}
+            tone={BLOG_TONES[index % BLOG_TONES.length]}
+            ariaLabel={`阅读 ${post.title}`}
+          />
+        ))}
+      </CollageGrid>
+    </ContentHubLayout>
   );
 }
 

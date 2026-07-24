@@ -2,16 +2,24 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-describe('production news detail routing', () => {
-  it('rewrites canonical and non-canonical Vercel news paths to the news entry', () => {
+describe('production content hub routing', () => {
+  it('rewrites product and release indexes plus canonical release details', () => {
     const config = JSON.parse(
       readFileSync(resolve(process.cwd(), 'vercel.json'), 'utf8'),
-    ) as { rewrites?: Array<{ source: string; destination: string }> };
+    ) as {
+      rewrites?: Array<{ source: string; destination: string }>;
+      redirects?: Array<{ source: string; destination: string; permanent: boolean }>;
+    };
 
     expect(config.rewrites).toEqual(expect.arrayContaining([
-      { source: '/news/', destination: '/news/index.html' },
-      { source: '/news/:slug/', destination: '/news/index.html' },
-      { source: '/news/:slug', destination: '/news/index.html' },
+      { source: '/products/', destination: '/products/index.html' },
+      { source: '/release/', destination: '/release/index.html' },
+      { source: '/release/:slug/', destination: '/release/index.html' },
+      { source: '/blog/', destination: '/blog/index.html' },
+    ]));
+    expect(config.redirects).toEqual(expect.arrayContaining([
+      { source: '/news/:slug', destination: '/release/:slug/', permanent: true },
+      { source: '/news/:slug/', destination: '/release/:slug/', permanent: true },
     ]));
   });
 });

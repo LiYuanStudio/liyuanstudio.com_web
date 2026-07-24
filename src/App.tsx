@@ -60,14 +60,14 @@ export function Footer() {
           <nav className="footer-nav" aria-label="页脚导航">
             <div className="footer-group">
               <h2>产品</h2>
-              <a href="#products">Papyrus Desktop</a>
+              <a href="/products/papyrusdesktop/">Papyrus Desktop</a>
               <a href="https://github.com/PapyrusOR/Papyrus" target="_blank" rel="noopener noreferrer">Papyrus</a>
               <a href="https://github.com/PapyrusOR/Papyrus_CLI" target="_blank" rel="noopener noreferrer">Papyrus CLI</a>
             </div>
             <div className="footer-group">
               <h2>内容</h2>
-              <a href="#news">最新动态</a>
-              <a href="#blog">博客</a>
+              <a href="/release/">最新动态</a>
+              <a href="/blog/">博客</a>
             </div>
           </nav>
         </div>
@@ -114,9 +114,12 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       id="news"
       aria-labelledby="news-title"
     >
-      <MaskedHeading as="h2" id="news-title">
-        最新动态
-      </MaskedHeading>
+      <div className="section-heading-row">
+        <MaskedHeading as="h2" id="news-title">
+          最新动态
+        </MaskedHeading>
+        <a className="section-more-link" href="/release/">查看更多 <span aria-hidden="true">›</span></a>
+      </div>
       <p className="news-lead">
         产品更新、品牌动向与团队成长的一线消息。
       </p>
@@ -132,7 +135,7 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
         </p>
       )}
       <div className="news-grid" aria-busy={status === 'loading'}>
-        {items.map((item) => (
+        {items.slice(0, 3).map((item) => (
           <article className="news-card" key={item._id || item.slug}>
             <div className="news-card-hero" aria-hidden="true">
               <h4>{item.tag || 'News'}</h4>
@@ -143,7 +146,7 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
               <p>{item.description}</p>
               <div className="news-card-footer">
                 <span className="news-date">{item.date}</span>
-                <a className="product-card-button" href={`/news/${encodeURIComponent(item.slug)}/`}>
+                <a className="product-card-button" href={`/release/${encodeURIComponent(item.slug)}/`}>
                   阅读全文
                 </a>
               </div>
@@ -208,9 +211,12 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       id="blog"
       aria-labelledby="blog-title"
     >
-      <MaskedHeading as="h2" id="blog-title">
-        博客
-      </MaskedHeading>
+      <div className="section-heading-row">
+        <MaskedHeading as="h2" id="blog-title">
+          博客
+        </MaskedHeading>
+        <a className="section-more-link" href="/blog/">查看更多 <span aria-hidden="true">›</span></a>
+      </div>
       <p className="blog-lead">
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
@@ -226,7 +232,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
         </p>
       )}
       <div className="blog-grid" aria-busy={status === 'loading'}>
-        {visiblePosts.map((post) => (
+        {visiblePosts.slice(0, 3).map((post) => (
           <article className="blog-card" key={`${post.authorUsername}/${post.blogNumber}`}>
             <div className="blog-card-hero" aria-hidden="true">
               <h4>{post.category || 'Blog'}</h4>
@@ -283,13 +289,13 @@ export function App() {
             <span>LiYuan Studio</span>
           </a>
           <div className="nav-links">
-            <a className="nav-item" href="#products">
+            <a className="nav-item" href="/products/">
               产品
             </a>
-            <a className="nav-item" href="#news">
+            <a className="nav-item" href="/release/">
               动态
             </a>
-            <a className="nav-item" href="#blog">
+            <a className="nav-item" href="/blog/">
               博客
             </a>
           </div>
@@ -318,9 +324,12 @@ export function App() {
           id="products"
           aria-labelledby="products-title"
         >
-          <MaskedHeading as="h2" id="products-title">
-            我们的产品
-          </MaskedHeading>
+          <div className="section-heading-row">
+            <MaskedHeading as="h2" id="products-title">
+              我们的产品
+            </MaskedHeading>
+            <a className="section-more-link" href="/products/">查看更多 <span aria-hidden="true">›</span></a>
+          </div>
           <p className="products-lead">
             从桌面应用到开源核心与命令行工具，连接更自由的创作流程。
           </p>

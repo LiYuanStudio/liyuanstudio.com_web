@@ -12,6 +12,11 @@
       "includeFiles": "server/dist/**"
     }
   },
+  "redirects": [
+    { "source": "/news/:slug", "destination": "/release/:slug/", "permanent": true },
+    { "source": "/news/:slug/", "destination": "/release/:slug/", "permanent": true },
+    { "source": "/release/:slug", "destination": "/release/:slug/", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/", "destination": "/index.html" },
@@ -21,12 +26,12 @@
     { "source": "/reset-password/", "destination": "/reset-password/index.html" },
     { "source": "/admin/", "destination": "/admin/index.html" },
     { "source": "/profile/", "destination": "/profile/index.html" },
+    { "source": "/products/", "destination": "/products/index.html" },
     { "source": "/products/papyrusdesktop/", "destination": "/products/papyrusdesktop/index.html" },
+    { "source": "/release/", "destination": "/release/index.html" },
+    { "source": "/release/:slug/", "destination": "/release/index.html" },
     { "source": "/blog/", "destination": "/blog/index.html" },
     { "source": "/blog/release/", "destination": "/blog/index.html" },
-    { "source": "/news/", "destination": "/news/index.html" },
-    { "source": "/news/:slug/", "destination": "/news/index.html" },
-    { "source": "/news/:slug", "destination": "/news/index.html" },
     { "source": "/~/", "destination": "/profile/" },
     { "source": "/~/:username/:blogNumber([0-9]+)/", "destination": "/profile/" },
     { "source": "/~/:username/:blogNumber([0-9]+)", "destination": "/profile/" },
