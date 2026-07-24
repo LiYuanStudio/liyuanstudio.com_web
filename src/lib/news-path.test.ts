@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { getNewsContentPath, matchNewsContentPath } from './news-path.js';
+import {
+  getNewsContentPath,
+  getReleaseContentPath,
+  matchNewsContentPath,
+  matchReleaseContentPath,
+} from './news-path.js';
 
 describe('news content paths', () => {
   it('matches canonical and non-canonical news paths', () => {
     expect(matchNewsContentPath('/news/product-update/')).toBe('product-update');
     expect(matchNewsContentPath('/news/Product-Update')).toBe('product-update');
+  });
+
+  it('matches release detail paths independently from the index', () => {
+    expect(matchReleaseContentPath('/release/product-update/')).toBe('product-update');
+    expect(matchReleaseContentPath('/release/Product-Update')).toBe('product-update');
+    expect(matchReleaseContentPath('/release/')).toBeNull();
+    expect(matchReleaseContentPath('/news/product-update/')).toBeNull();
   });
 
   it('rejects the news index and unsupported paths', () => {
@@ -16,5 +28,6 @@ describe('news content paths', () => {
 
   it('builds a trailing-slash canonical path', () => {
     expect(getNewsContentPath('Product-Update')).toBe('/news/product-update/');
+    expect(getReleaseContentPath('Product-Update')).toBe('/release/product-update/');
   });
 });

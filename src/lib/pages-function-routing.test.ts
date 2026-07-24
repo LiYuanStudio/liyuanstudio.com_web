@@ -110,8 +110,8 @@ describe('Cloudflare Pages profile routing', () => {
     expect(assetRequest.method).toBe('HEAD');
   });
 
-  it('serves the news entry for canonical news detail paths', async () => {
-    const { assetFetch, context } = createContext('/news/product-update/', {
+  it('serves the release entry for canonical release detail paths', async () => {
+    const { assetFetch, context } = createContext('/release/product-update/', {
       profileResponse: new Response('<title>最新动态 | LiYuan Studio</title>'),
     });
 
@@ -120,17 +120,29 @@ describe('Cloudflare Pages profile routing', () => {
     expect(await response.text()).toContain('最新动态');
     const [assetRequest] = assetFetch.mock.calls[0];
     if (!(assetRequest instanceof Request)) throw new Error('Expected an asset Request');
-    expect(new URL(assetRequest.url).pathname).toBe('/news/');
+    expect(new URL(assetRequest.url).pathname).toBe('/release/');
   });
 
-  it('canonicalizes news detail paths with a trailing slash', async () => {
+  it('canonicalizes release detail paths with lowercase slugs and a trailing slash', async () => {
+    const { assetFetch, context } = createContext('/release/Product-Update?from=home');
+
+    const response = await onRequest(context);
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get('location')).toBe(
+      'https://liyuanstudio.com/release/product-update/?from=home',
+    );
+    expect(assetFetch).not.toHaveBeenCalled();
+  });
+
+  it('redirects legacy news detail paths to their release canonical URL', async () => {
     const { assetFetch, context } = createContext('/news/Product-Update?from=home');
 
     const response = await onRequest(context);
 
     expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe(
-      'https://liyuanstudio.com/news/product-update/?from=home',
+      'https://liyuanstudio.com/release/product-update/?from=home',
     );
     expect(assetFetch).not.toHaveBeenCalled();
   });

@@ -82,6 +82,7 @@ describe('NewsDetailPage', () => {
 
   it('parses only valid news detail paths', () => {
     expect(getNewsSlugFromPath('/news/Product-Update/')).toBe('product-update');
+    expect(getNewsSlugFromPath('/release/Product-Update/')).toBe('product-update');
     expect(getNewsSlugFromPath('/news/')).toBeNull();
     expect(getNewsSlugFromPath('/news/bad_slug/')).toBeNull();
   });

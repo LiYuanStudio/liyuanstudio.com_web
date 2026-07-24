@@ -4,8 +4,9 @@ import {
 } from '../src/lib/profile-path.js';
 import { proxyApiRequest } from '../src/lib/api-proxy.js';
 import {
-  getNewsContentPath,
+  getReleaseContentPath,
   matchNewsContentPath,
+  matchReleaseContentPath,
 } from '../src/lib/news-path.js';
 
 type AssetFetcher = {
@@ -40,20 +41,26 @@ export async function onRequest(context: PagesRoutingContext): Promise<Response>
     return assetResponse;
   }
 
-  const newsSlug = matchNewsContentPath(requestUrl.pathname);
-  if (newsSlug) {
-    const canonicalPath = getNewsContentPath(newsSlug);
+  const releaseSlug = matchReleaseContentPath(requestUrl.pathname);
+  if (releaseSlug) {
+    const canonicalPath = getReleaseContentPath(releaseSlug);
     if (requestUrl.pathname !== canonicalPath) {
       requestUrl.pathname = canonicalPath;
       return Response.redirect(requestUrl.toString(), 301);
     }
 
-    const newsUrl = new URL('/news/', requestUrl);
-    newsUrl.search = '';
-    return context.env.ASSETS.fetch(new Request(newsUrl, {
+    const releaseUrl = new URL('/release/', requestUrl);
+    releaseUrl.search = '';
+    return context.env.ASSETS.fetch(new Request(releaseUrl, {
       method: context.request.method,
       headers: context.request.headers,
     }));
+  }
+
+  const legacyNewsSlug = matchNewsContentPath(requestUrl.pathname);
+  if (legacyNewsSlug) {
+    requestUrl.pathname = getReleaseContentPath(legacyNewsSlug);
+    return Response.redirect(requestUrl.toString(), 301);
   }
 
   const route = matchProfileContentPath(requestUrl.pathname);

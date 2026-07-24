@@ -145,13 +145,13 @@ describe('BlogPage list view', () => {
     });
   });
 
-  it('links to the release page from the hero and nav', async () => {
+  it('links to the release page from the shared navigation', async () => {
     mockFetchBlogPosts.mockResolvedValue([]);
 
     renderBlogPage('/blog/');
 
     await waitFor(() => {
-      expect(screen.getAllByRole('link', { name: '发布' })).toHaveLength(2);
+      expect(screen.getAllByRole('link', { name: '发布' })).toHaveLength(1);
     });
     const releaseLinks = screen.getAllByRole('link', { name: '发布' });
     expect(releaseLinks.every((link) => link.getAttribute('href') === '/blog/release/')).toBe(true);

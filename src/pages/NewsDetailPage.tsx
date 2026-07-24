@@ -4,7 +4,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import { fetchNewsItem } from '../api/news.js';
 import { getErrorMessage } from '../api/errors.js';
-import { matchNewsContentPath } from '../lib/news-path.js';
+import { matchNewsContentPath, matchReleaseContentPath } from '../lib/news-path.js';
 import type { NewsUpdate } from '../types.js';
 import './news-detail.css';
 
@@ -24,7 +24,7 @@ const MARKDOWN_SANITIZE_SCHEMA = {
 };
 
 export function getNewsSlugFromPath(pathname: string): string | null {
-  return matchNewsContentPath(pathname);
+  return matchReleaseContentPath(pathname) ?? matchNewsContentPath(pathname);
 }
 
 function NewsMarkdown({ content }: { content: string }) {
@@ -88,7 +88,7 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
           <img src="/png/logo.png" alt="" />
           <span>LiYuan Studio</span>
         </a>
-        <a className="news-detail-back" href="/#news">返回最新动态</a>
+        <a className="news-detail-back" href="/release/">返回最新动态</a>
       </nav>
 
       <main className="news-detail-main" id="main-content" tabIndex={-1}>
@@ -97,7 +97,7 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
           <div className="news-detail-empty" role="alert">
             <h1>无法加载动态</h1>
             <p>{error}</p>
-            <a href="/#news">返回最新动态</a>
+            <a href="/release/">返回最新动态</a>
           </div>
         )}
         {status === 'ready' && item && (

@@ -12,6 +12,7 @@ const RESERVED_PROFILE_SEGMENTS = new Set([
   'products',
   'profile',
   'register',
+  'release',
   'reset-password',
 ]);
 
