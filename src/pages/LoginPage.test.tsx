@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAuth } from '../context/AuthContext.js';
 import { LoginPage } from './LoginPage.js';
+import { expectNoAccessibilityViolations } from '../test/accessibility.js';
 
 vi.mock('../context/AuthContext.js');
 
@@ -28,6 +29,12 @@ describe('LoginPage', () => {
     expect(screen.getByText('LiYuan Studio')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /LiYuan Studio/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument();
+  });
+
+  it('has no automated accessibility violations', async () => {
+    const { container } = render(<LoginPage />);
+
+    await expectNoAccessibilityViolations(container);
   });
 
   it('redirects authenticated visitors home without rendering the authenticated card', async () => {

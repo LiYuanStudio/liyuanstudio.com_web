@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { fetchNewsItem } from '../api/news.js';
 import { getNewsSlugFromPath, NewsDetailPage } from './NewsDetailPage.js';
+import { expectNoAccessibilityViolations } from '../test/accessibility.js';
 
 vi.mock('../api/news.js');
 
@@ -54,6 +55,21 @@ describe('NewsDetailPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Legacy summary')).toHaveLength(2);
     });
+  });
+
+  it('has no automated accessibility violations after loading', async () => {
+    mockFetchNewsItem.mockResolvedValue({
+      title: '无障碍动态',
+      description: '动态摘要',
+      content: '## 更新内容\n\n支持键盘浏览。',
+      tag: '网站',
+      date: '2026-07-21',
+      slug: 'accessible-news',
+    });
+    const { container } = render(<NewsDetailPage slug="accessible-news" />);
+
+    await screen.findByRole('heading', { name: '无障碍动态' });
+    await expectNoAccessibilityViolations(container);
   });
 
   it('shows a friendly error when the item cannot be loaded', async () => {

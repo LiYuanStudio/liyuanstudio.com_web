@@ -83,7 +83,7 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
 
   return (
     <div className="news-detail-page">
-      <nav className="news-detail-nav">
+      <nav className="news-detail-nav" aria-label="动态导航">
         <a className="news-detail-brand" href="/">
           <img src="/png/logo.png" alt="" />
           <span>LiYuan Studio</span>
@@ -91,8 +91,8 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
         <a className="news-detail-back" href="/#news">返回最新动态</a>
       </nav>
 
-      <main className="news-detail-main">
-        {status === 'loading' && <p className="news-detail-status">加载中…</p>}
+      <main className="news-detail-main" id="main-content" tabIndex={-1}>
+        {status === 'loading' && <><h1 className="visually-hidden">最新动态</h1><p className="news-detail-status" role="status">加载中…</p></>}
         {status === 'error' && (
           <div className="news-detail-empty" role="alert">
             <h1>无法加载动态</h1>

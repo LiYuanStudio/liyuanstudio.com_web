@@ -95,7 +95,7 @@ function textToTags(value: string): string[] {
 
 function Nav({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<void> }) {
   return (
-    <nav className="profile-nav">
+    <nav className="profile-nav" aria-label="账号导航">
       <a className="profile-brand" href="/">
         <img src="/png/logo.png" alt="" />
         <span>LiYuan Studio</span>
@@ -114,7 +114,7 @@ function LoginPrompt({ title = '请先登录' }: { title?: string }) {
   return (
     <div className="profile-page">
       <Nav />
-      <main className="profile-main">
+      <main className="profile-main" id="main-content" tabIndex={-1}>
         <section className="profile-card profile-card-narrow">
           <h1>{title}</h1>
           <p className="profile-muted">登录后可以管理账号资料和个人主页。</p>
@@ -129,7 +129,7 @@ function MemberRequiredPrompt({ user, onLogout }: { user?: User; onLogout?: () =
   return (
     <div className="profile-page">
       <Nav user={user} onLogout={onLogout} />
-      <main className="profile-main">
+      <main className="profile-main" id="main-content" tabIndex={-1}>
         <section className="profile-card profile-card-narrow">
           <h1>需要成员权限</h1>
           <p className="profile-muted">游客账号不能发布博客，请联系管理员升级为成员。</p>
@@ -167,14 +167,14 @@ function MyPostsPage() {
   };
 
   return (
-    <main className="profile-main">
+    <main className="profile-main" id="main-content" tabIndex={-1}>
       <section className="profile-card">
         <div className="profile-card-header">
           <h1>我的文章</h1>
           <a className="profile-button" href="/me/posts/new/">新建文章</a>
         </div>
         {message && <p className="profile-success" role="status">{message}</p>}
-        {status === 'loading' && <p className="profile-empty">加载中...</p>}
+        {status === 'loading' && <p className="profile-empty" role="status">加载中...</p>}
         {status === 'error' && <p className="profile-error" role="alert">文章加载失败。</p>}
         {status === 'ready' && posts.length === 0 && <p className="profile-empty">还没有文章。</p>}
         {posts.length > 0 && (
@@ -265,11 +265,11 @@ function BlogEditorPage({ id }: { id?: string }) {
   };
 
   if (loading) {
-    return <main className="profile-main"><p className="profile-empty">加载中...</p></main>;
+    return <main className="profile-main" id="main-content" tabIndex={-1}><h1 className="visually-hidden">文章编辑器</h1><p className="profile-empty" role="status">加载中...</p></main>;
   }
 
   return (
-    <main className="profile-main">
+    <main className="profile-main" id="main-content" tabIndex={-1}>
       <section className="profile-card">
         <div className="profile-card-header">
           <h1>{isEditing ? '编辑文章' : '写文章'}</h1>
@@ -277,7 +277,7 @@ function BlogEditorPage({ id }: { id?: string }) {
         </div>
         <form className="profile-form" onSubmit={(event) => event.preventDefault()}>
           <label htmlFor="post-title">标题</label>
-          <input id="post-title" value={form.title} maxLength={80} onChange={(event) => updateField('title', event.target.value)} required />
+          <input id="post-title" value={form.title} maxLength={80} onChange={(event) => updateField('title', event.target.value)} required aria-invalid={Boolean(error)} aria-describedby={error ? 'post-form-error' : undefined} />
 
 
           <label htmlFor="post-excerpt">摘要</label>
@@ -293,9 +293,9 @@ function BlogEditorPage({ id }: { id?: string }) {
           <input id="post-image" value={form.image} onChange={(event) => updateField('image', event.target.value)} placeholder="https://..." />
 
           <label htmlFor="post-content">正文</label>
-          <textarea id="post-content" className="profile-content-editor" rows={16} value={form.content} onChange={(event) => updateField('content', event.target.value)} required />
+          <textarea id="post-content" className="profile-content-editor" rows={16} value={form.content} onChange={(event) => updateField('content', event.target.value)} required aria-invalid={Boolean(error)} aria-describedby={error ? 'post-form-error' : undefined} />
 
-          {error && <p className="profile-error" role="alert">{error}</p>}
+          {error && <p id="post-form-error" className="profile-error" role="alert">{error}</p>}
           {message && <p className="profile-success" role="status">{message}</p>}
 
           <div className="profile-form-actions">
@@ -338,6 +338,7 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
         setProfile(publicProfile);
         setPosts(postList);
         setStatus('ready');
+        document.title = `${publicProfile.displayName} | LiYuan Studio`;
       })
       .catch((err) => {
         if (cancelled) return;
@@ -353,11 +354,12 @@ function PublicProfilePage({ username, currentUser }: { username: string; curren
   const isOwnProfile = currentUser?.username === profileUsername;
 
   return (
-    <main className="profile-main">
-      {status === 'loading' && <p className="profile-empty">加载中...</p>}
+    <main className="profile-main" id="main-content" tabIndex={-1}>
+      {status === 'loading' && <><h1 className="visually-hidden">个人主页</h1><p className="profile-empty" role="status">加载中...</p></>}
       {status === 'error' && (
         <section className="profile-card">
-          <p className="profile-error">
+          <h1>无法加载个人主页</h1>
+          <p className="profile-error" role="alert">
             {error?.includes('调试 ID')
               ? `个人主页不存在或还未初始化。 ${error}`
               : '个人主页不存在或还未初始化。'}
@@ -460,6 +462,7 @@ function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber
         if (cancelled) return;
         setPost(item);
         setStatus('ready');
+        document.title = `${item.title} | LiYuan Studio`;
       })
       .catch(() => setStatus('error'));
     return () => {
@@ -468,9 +471,9 @@ function BlogDetailPage({ username, blogNumber }: { username: string; blogNumber
   }, [blogNumber]);
 
   return (
-    <main className="profile-main profile-article-main">
-      {status === 'loading' && <p className="profile-empty">加载中...</p>}
-      {status === 'error' && <section className="profile-card"><p className="profile-error">文章不存在或暂不可访问。</p></section>}
+    <main className="profile-main profile-article-main" id="main-content" tabIndex={-1}>
+      {status === 'loading' && <><h1 className="visually-hidden">博客文章</h1><p className="profile-empty" role="status">加载中...</p></>}
+      {status === 'error' && <section className="profile-card"><h1>无法加载文章</h1><p className="profile-error" role="alert">文章不存在或暂不可访问。</p></section>}
       {status === 'ready' && post && (
         <article className="profile-article">
           <header className="profile-article-header">
@@ -495,6 +498,11 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   updateProfile: (profile: ProfileUpdateInput) => Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+  const cropperDialogRef = useRef<HTMLDivElement>(null);
+  const cropperCancelRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const uploadingRef = useRef(false);
   const [form, setForm] = useState<ProfileUpdateInput>({
     displayName: user.displayName,
     bio: user.bio ?? '',
@@ -508,6 +516,10 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    uploadingRef.current = isUploading;
+  }, [isUploading]);
 
   const handleCropComplete = useCallback((_: Area, pixels: Area) => {
     setCroppedAreaPixels(pixels);
@@ -546,12 +558,50 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleCropCancel = () => {
+  const handleCropCancel = useCallback(() => {
     if (cropImage) URL.revokeObjectURL(cropImage);
     setIsCropperOpen(false);
     setCropImage(null);
     setCroppedAreaPixels(null);
-  };
+  }, [cropImage]);
+
+  useEffect(() => {
+    if (!isCropperOpen) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : avatarButtonRef.current;
+    cropperCancelRef.current?.focus();
+
+    const handleDialogKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && !uploadingRef.current) {
+        event.preventDefault();
+        handleCropCancel();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(
+        cropperDialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      (previousFocusRef.current ?? avatarButtonRef.current)?.focus();
+    };
+  }, [handleCropCancel, isCropperOpen]);
 
   const handleCropConfirm = async () => {
     if (!cropImage || !croppedAreaPixels) return;
@@ -595,15 +645,21 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
   return (
     <>
       <Nav user={user} onLogout={logout} />
-      <main className="profile-main">
+      <main className="profile-main" id="main-content" tabIndex={-1}>
         <section className="profile-hero" aria-labelledby="profile-title">
-          <label className="profile-avatar-upload" htmlFor="profile-avatar-input">
+          <button
+            ref={avatarButtonRef}
+            className="profile-avatar-upload"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="更换个人头像"
+          >
             <div className="profile-avatar-frame">
               <UserAvatar src={user.avatar} displayName={user.displayName} alt="个人头像预览" />
               <div className="profile-avatar-overlay" aria-hidden="true"><span>更换头像</span></div>
               <ProfileRoleBadge role={user.role} />
             </div>
-          </label>
+          </button>
           <input ref={fileInputRef} id="profile-avatar-input" data-testid="avatar-input" type="file" accept="image/*" onChange={handleFileChange} hidden />
           <div>
             <h1 id="profile-title">{form.displayName || user.displayName}</h1>
@@ -622,10 +678,10 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
           </div>
           <form className="profile-form" onSubmit={handleSubmit}>
             <label htmlFor="profile-display-name">显示名称</label>
-            <input id="profile-display-name" type="text" value={form.displayName} onChange={(event) => handleChange('displayName', event.target.value)} required autoComplete="name" />
+            <input id="profile-display-name" type="text" value={form.displayName} onChange={(event) => handleChange('displayName', event.target.value)} required autoComplete="name" aria-invalid={Boolean(error)} aria-describedby={error ? 'profile-form-error' : undefined} />
             <div className="profile-label-row"><label htmlFor="profile-bio">一句话介绍</label><span>{form.bio.length}/{BIO_MAX_LENGTH}</span></div>
             <textarea id="profile-bio" value={form.bio} onChange={(event) => handleChange('bio', event.target.value.slice(0, BIO_MAX_LENGTH))} maxLength={BIO_MAX_LENGTH} rows={4} placeholder="用一句话介绍自己" />
-            {error && <p className="profile-error" role="alert" data-testid="profile-error">{error}</p>}
+            {error && <p id="profile-form-error" className="profile-error" role="alert" data-testid="profile-error">{error}</p>}
             {message && <p className="profile-success" role="status" data-testid="profile-message">{message}</p>}
             <button type="submit" className="profile-button" disabled={saving}>{saving ? '保存中...' : '保存更改'}</button>
           </form>
@@ -636,12 +692,19 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
       </main>
 
       {isCropperOpen && cropImage && (
-        <div className="profile-cropper-modal" role="dialog" aria-modal="true" aria-label="截取头像">
+        <div
+          ref={cropperDialogRef}
+          className="profile-cropper-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cropper-dialog-title"
+        >
           <div className="profile-cropper-content">
+            <h2 id="cropper-dialog-title" className="visually-hidden">截取头像</h2>
             <div className="profile-cropper-area"><Cropper image={cropImage} crop={crop} zoom={zoom} aspect={1} cropShape="round" showGrid={false} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={handleCropComplete} /></div>
             <div className="profile-cropper-controls">
               <input type="range" min={1} max={3} step={0.1} value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label="缩放" />
-              <div className="profile-cropper-actions"><button type="button" className="profile-button profile-button-secondary" onClick={handleCropCancel} disabled={isUploading}>取消</button><button type="button" className="profile-button" onClick={() => void handleCropConfirm()} disabled={isUploading || !croppedAreaPixels}>{isUploading ? '保存中...' : '确认'}</button></div>
+              <div className="profile-cropper-actions"><button ref={cropperCancelRef} type="button" className="profile-button profile-button-secondary" onClick={handleCropCancel} disabled={isUploading}>取消</button><button type="button" className="profile-button" onClick={() => void handleCropConfirm()} disabled={isUploading || !croppedAreaPixels}>{isUploading ? '保存中...' : '确认'}</button></div>
             </div>
           </div>
         </div>
@@ -654,8 +717,19 @@ export function ProfilePage() {
   const { state, logout, updateAvatar, updateProfile } = useAuth();
   const route = useMemo(() => parseRoute(), []);
 
+  useEffect(() => {
+    const titles: Partial<Record<Route['kind'], string>> = {
+      settings: '账号设置',
+      'my-posts': '我的文章',
+      'new-post': '写文章',
+      'edit-post': '编辑文章',
+    };
+    const title = titles[route.kind];
+    if (title) document.title = `${title} | LiYuan Studio`;
+  }, [route.kind]);
+
   if (state.status === 'loading') {
-    return <div className="profile-page"><main className="profile-main"><p className="profile-empty">加载中...</p></main></div>;
+    return <div className="profile-page"><main className="profile-main" id="main-content" tabIndex={-1}><h1 className="visually-hidden">个人主页</h1><p className="profile-empty" role="status">加载中...</p></main></div>;
   }
 
   const user = state.status === 'authenticated' ? state.user : undefined;

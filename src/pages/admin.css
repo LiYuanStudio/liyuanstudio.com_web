@@ -96,6 +96,12 @@
   font-size: 14px;
 }
 
+.admin-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 12px;
+}
+
 .admin-table th,
 .admin-table td {
   padding: 14px 12px;
@@ -120,7 +126,6 @@
   background: #ffffff;
   color: #1d1d1f;
   font-size: 14px;
-  outline: none;
 }
 
 .admin-input:focus,
@@ -258,7 +263,6 @@
   color: #1d1d1f;
   font-size: 14px;
   font-family: inherit;
-  outline: none;
   resize: vertical;
 }
 

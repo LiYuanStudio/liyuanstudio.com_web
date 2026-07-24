@@ -42,16 +42,16 @@ export function ResetPasswordPage() {
 
   return (
     <div className="login-page">
-      <nav className="login-nav">
+      <nav className="login-nav" aria-label="账号导航">
         <a className="login-brand" href="/">
           <img src="/png/logo.png" alt="" />
           <span>LiYuan Studio</span>
         </a>
       </nav>
 
-      <main className="login-main">
+      <main className="login-main" id="main-content" tabIndex={-1}>
         <div className="auth-card">
-          <h2>{state.status === 'success' ? '密码已重置' : '重置密码'}</h2>
+          <h1>{state.status === 'success' ? '密码已重置' : '重置密码'}</h1>
 
           {!token ? (
             <>
@@ -82,10 +82,12 @@ export function ResetPasswordPage() {
                 required
                 minLength={8}
                 autoComplete="new-password"
+                aria-invalid={state.status === 'error'}
+                aria-describedby={state.status === 'error' ? 'reset-password-error' : undefined}
               />
 
               {state.status === 'error' && (
-                <p className="auth-error" role="alert">
+                <p id="reset-password-error" className="auth-error" role="alert">
                   {state.message}
                 </p>
               )}

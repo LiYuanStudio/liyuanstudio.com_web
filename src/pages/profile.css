@@ -99,6 +99,13 @@ body {
   width: fit-content;
 }
 
+button.profile-avatar-upload {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
 .profile-avatar-frame {
   position: relative;
   width: 180px;
@@ -317,7 +324,6 @@ body {
   color: #1d1d1f;
   font: inherit;
   font-size: 15px;
-  outline: none;
   resize: vertical;
 }
 

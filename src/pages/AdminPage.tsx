@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
 import { useAuth } from '../context/AuthContext.js';
 import { deleteUser, fetchUsers, updateUser } from '../api/admin.js';
 import { createNews, deleteNews, fetchNews, updateNews } from '../api/news.js';
@@ -107,18 +114,20 @@ function UsersPanel() {
       )}
 
       {loading ? (
-        <p className="admin-empty">加载中…</p>
+        <p className="admin-empty" role="status">加载中…</p>
       ) : users.length === 0 ? (
         <p className="admin-empty">暂无用户</p>
       ) : (
+        <div className="admin-table-scroll" role="region" aria-label="账号列表" tabIndex={0}>
         <table className="admin-table">
+          <caption className="visually-hidden">账号、角色和验证状态</caption>
           <thead>
             <tr>
-              <th>邮箱</th>
-              <th>显示名称</th>
-              <th>角色</th>
-              <th>邮箱验证</th>
-              <th>操作</th>
+              <th scope="col">邮箱</th>
+              <th scope="col">显示名称</th>
+              <th scope="col">角色</th>
+              <th scope="col">邮箱验证</th>
+              <th scope="col">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -131,6 +140,7 @@ function UsersPanel() {
                     value={roles[user.id] ?? user.role}
                     onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
                     className="admin-select"
+                    aria-label={`更改 ${user.displayName || user.email} 的角色`}
                   >
                     {ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>{ROLE_LABELS[role]} ({role})</option>
@@ -144,6 +154,7 @@ function UsersPanel() {
                     className="admin-button"
                     onClick={() => void handleSave(user.id)}
                     disabled={saving[user.id]}
+                    aria-label={`保存 ${user.displayName || user.email} 的角色`}
                   >
                     {saving[user.id] ? '保存中…' : '保存'}
                   </button>
@@ -151,6 +162,7 @@ function UsersPanel() {
                     type="button"
                     className="admin-button-danger"
                     onClick={() => void handleDelete(user.id)}
+                    aria-label={`删除用户 ${user.displayName || user.email}`}
                   >
                     删除
                   </button>
@@ -159,6 +171,7 @@ function UsersPanel() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
@@ -249,6 +262,8 @@ function NewsEditor({
           maxLength={80}
           onChange={(event) => updateField('title', event.target.value)}
           required
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'news-form-error' : undefined}
         />
 
         <label htmlFor="news-description">摘要</label>
@@ -260,6 +275,8 @@ function NewsEditor({
           value={form.description}
           onChange={(event) => updateField('description', event.target.value)}
           required
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'news-form-error' : undefined}
         />
 
         <label htmlFor="news-content">正文（Markdown，可选）</label>
@@ -282,6 +299,8 @@ function NewsEditor({
           onChange={(event) => updateField('tag', event.target.value)}
           placeholder="产品动态"
           required
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'news-form-error' : undefined}
         />
 
         <label htmlFor="news-date">日期</label>
@@ -292,6 +311,8 @@ function NewsEditor({
           value={form.date}
           onChange={(event) => updateField('date', event.target.value)}
           required
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'news-form-error' : undefined}
         />
 
         <label htmlFor="news-slug">Slug（可选，留空自动生成）</label>
@@ -314,7 +335,7 @@ function NewsEditor({
         />
 
         {error && (
-          <p className="admin-error" role="alert">
+          <p id="news-form-error" className="admin-error" role="alert">
             {error}
           </p>
         )}
@@ -489,12 +510,36 @@ function NewsPanel() {
 export function AdminPage() {
   const { state, logout } = useAuth();
   const [tab, setTab] = useState<AdminTab>('news');
+  const newsTabRef = useRef<HTMLButtonElement>(null);
+  const usersTabRef = useRef<HTMLButtonElement>(null);
+
+  const selectTab = (nextTab: AdminTab) => {
+    setTab(nextTab);
+    (nextTab === 'news' ? newsTabRef : usersTabRef).current?.focus();
+  };
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    let nextTab: AdminTab | null = null;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextTab = tab === 'news' ? 'users' : 'news';
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextTab = tab === 'news' ? 'users' : 'news';
+    } else if (event.key === 'Home') {
+      nextTab = 'news';
+    } else if (event.key === 'End') {
+      nextTab = 'users';
+    }
+    if (!nextTab) return;
+    event.preventDefault();
+    selectTab(nextTab);
+  };
 
   if (state.status === 'loading') {
     return (
       <div className="admin-page">
-        <main className="admin-main">
-          <p className="admin-empty">加载中…</p>
+        <main className="admin-main" id="main-content" tabIndex={-1}>
+          <h1 className="visually-hidden">账号后台</h1>
+          <p className="admin-empty" role="status">加载中…</p>
         </main>
       </div>
     );
@@ -503,7 +548,7 @@ export function AdminPage() {
   if (state.status !== 'authenticated' || state.user.role !== 'admin') {
     return (
       <div className="admin-page">
-        <main className="admin-main">
+        <main className="admin-main" id="main-content" tabIndex={-1}>
           <div className="admin-card">
             <h1>账号后台</h1>
             <p className="admin-empty">请先使用管理员账号登录。</p>
@@ -516,7 +561,7 @@ export function AdminPage() {
 
   return (
     <div className="admin-page">
-      <nav className="admin-nav">
+      <nav className="admin-nav" aria-label="后台导航">
         <div className="admin-nav-inner">
           <a className="admin-brand" href="/">
             <img src="/png/logo.png" alt="" />
@@ -531,21 +576,34 @@ export function AdminPage() {
         </div>
       </nav>
 
-      <main className="admin-main">
-        <div className="admin-tabs" role="tablist" aria-label="后台分区">
+      <main className="admin-main" id="main-content" tabIndex={-1}>
+        <div
+          className="admin-tabs"
+          role="tablist"
+          aria-label="后台分区"
+          onKeyDown={handleTabKeyDown}
+        >
           <button
+            ref={newsTabRef}
+            id="admin-tab-news"
             type="button"
             role="tab"
             aria-selected={tab === 'news'}
+            aria-controls="admin-panel-news"
+            tabIndex={tab === 'news' ? 0 : -1}
             className={tab === 'news' ? 'admin-tab admin-tab-active' : 'admin-tab'}
             onClick={() => setTab('news')}
           >
             最新动态
           </button>
           <button
+            ref={usersTabRef}
+            id="admin-tab-users"
             type="button"
             role="tab"
             aria-selected={tab === 'users'}
+            aria-controls="admin-panel-users"
+            tabIndex={tab === 'users' ? 0 : -1}
             className={tab === 'users' ? 'admin-tab admin-tab-active' : 'admin-tab'}
             onClick={() => setTab('users')}
           >
@@ -553,7 +611,14 @@ export function AdminPage() {
           </button>
         </div>
 
-        {tab === 'news' ? <NewsPanel /> : <UsersPanel />}
+        <div
+          id={`admin-panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`admin-tab-${tab}`}
+          tabIndex={0}
+        >
+          {tab === 'news' ? <NewsPanel /> : <UsersPanel />}
+        </div>
       </main>
     </div>
   );

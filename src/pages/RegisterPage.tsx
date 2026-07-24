@@ -24,14 +24,14 @@ export function RegisterPage() {
 
   return (
     <div className="login-page">
-      <nav className="login-nav">
+      <nav className="login-nav" aria-label="账号导航">
         <a className="login-brand" href="/">
           <img src="/png/logo.png" alt="" />
           <span>LiYuan Studio</span>
         </a>
       </nav>
 
-      <main className="login-main">
+      <main className="login-main" id="main-content" tabIndex={-1}>
         <AuthForm
           initialMode="register"
           allowModeSwitch={false}

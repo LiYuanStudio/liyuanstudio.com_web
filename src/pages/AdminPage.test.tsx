@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AdminPage } from './AdminPage.js';
 import { AuthProvider } from '../context/AuthContext.js';
+import { expectNoAccessibilityViolations } from '../test/accessibility.js';
 
 const ADMIN_USER = {
   id: 'admin-1',
@@ -219,7 +220,7 @@ describe('AdminPage', () => {
     const roleSelect = screen.getByRole('combobox');
     await user.selectOptions(roleSelect, 'admin');
 
-    await user.click(screen.getByRole('button', { name: '保存' }));
+    await user.click(screen.getByRole('button', { name: '保存 Alice 的角色' }));
 
     await waitFor(() => {
       expect(screen.getByRole('combobox')).toHaveValue('admin');
@@ -265,7 +266,7 @@ describe('AdminPage', () => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: '删除' }));
+    await user.click(screen.getByRole('button', { name: '删除用户 Alice' }));
 
     await waitFor(() => {
       expect(screen.queryByText('Alice')).not.toBeInTheDocument();
@@ -292,6 +293,41 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(screen.getByText('加载失败（调试 ID: admin-page-req-1）')).toBeInTheDocument();
     });
+  });
+
+  it('supports keyboard tab navigation and passes axe checks', async () => {
+    localStorage.setItem('liyuan_auth_token', 'admin-token');
+    mockFetch({
+      '/auth/session': () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: ADMIN_USER }),
+      }),
+      '/news': () => ({
+        ok: true,
+        status: 200,
+        json: async () => [],
+      }),
+      '/admin/users': () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ users: [] }),
+      }),
+    });
+
+    const { container } = renderPage();
+    const user = userEvent.setup();
+    const newsTab = await screen.findByRole('tab', { name: '最新动态' });
+    newsTab.focus();
+
+    await user.keyboard('{ArrowRight}');
+
+    const usersTab = screen.getByRole('tab', { name: '账号管理' });
+    expect(usersTab).toHaveFocus();
+    expect(usersTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: '账号管理' })).toBeInTheDocument();
+    await screen.findByText('暂无用户');
+    await expectNoAccessibilityViolations(container);
   });
 });
 

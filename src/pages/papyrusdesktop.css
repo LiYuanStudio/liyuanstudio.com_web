@@ -145,7 +145,7 @@
 
 .papyrus-version {
   font-size: 16px;
-  color: #86868b;
+  color: #6e6e73;
   margin-bottom: 24px;
 }
 
@@ -195,7 +195,7 @@
 
 .papyrus-note {
   font-size: 13px;
-  color: #86868b;
+  color: #6e6e73;
 }
 
 .papyrus-main {
@@ -337,6 +337,11 @@
   margin: 0 0 16px;
 }
 
+.papyrus-download-version {
+  margin: -16px 0 24px;
+  text-align: center;
+}
+
 .papyrus-download-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -374,7 +379,7 @@
   object-fit: contain;
 }
 
-.papyrus-download-info h4 {
+.papyrus-download-info h3 {
   font-size: 18px;
   font-weight: 600;
   margin: 0 0 6px;
@@ -383,7 +388,7 @@
 
 .papyrus-download-arch {
   font-size: 13px;
-  color: #86868b;
+  color: #6e6e73;
 }
 
 .papyrus-download-links {
@@ -434,11 +439,11 @@
   padding: 32px 0;
   border-top: 1px solid rgba(29, 29, 31, 0.06);
   font-size: 13px;
-  color: #86868b;
+  color: #6e6e73;
 }
 
 .papyrus-footer-bottom a {
-  color: #86868b;
+  color: #6e6e73;
   text-decoration: none;
 }
 
