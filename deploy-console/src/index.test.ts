@@ -69,6 +69,26 @@ async function loginBody(
   }).toString();
 }
 
+function hiddenValue(body: string, name: string): string {
+  const match = body.match(new RegExp(`name="${name}"[^>]*value="([^"]*)"`, 'u'));
+  if (!match?.[1]) throw new Error(`Missing hidden field: ${name}`);
+  return match[1];
+}
+
+function twoFactorBody(
+  page: string,
+  credentialType: 'code' | 'recoveryCode',
+  credential: string,
+): string {
+  return new URLSearchParams({
+    formToken: hiddenValue(page, 'formToken'),
+    challengeToken: hiddenValue(page, 'challengeToken'),
+    emailHint: hiddenValue(page, 'emailHint'),
+    credentialType,
+    credential,
+  }).toString();
+}
+
 function githubResponses(options?: {
   grayId?: number;
   graySha?: string;
@@ -132,6 +152,15 @@ function installFetch(options?: {
   loginStatus?: number;
   loginBody?: unknown;
   loginContentType?: string;
+  twoFactorChallenge?: boolean;
+  verifyStatus?: number;
+  verifyBody?: unknown;
+  verifyContentType?: string;
+  verifyThrows?: boolean;
+  resendStatus?: number;
+  resendBody?: unknown;
+  resendContentType?: string;
+  resendThrows?: boolean;
   meStatus?: number;
   meBody?: unknown;
   meContentType?: string;
@@ -164,7 +193,52 @@ function installFetch(options?: {
           headers: { 'Content-Type': options.loginContentType ?? 'application/json' },
         });
       }
+      if (options?.twoFactorChallenge) {
+        return json({
+          twoFactorRequired: true,
+          challengeToken: 'challenge-token',
+          emailHint: 'ad***@example.com',
+        });
+      }
       return json({ token: 'la-token', user: { ...admin, role: options?.role ?? 'admin' } });
+    }
+    if (url.href === 'https://api.example.com/api/auth/2fa/login/verify') {
+      if (options?.verifyThrows) throw new TypeError('network down');
+      if (options?.verifyStatus !== undefined) {
+        const body = options.verifyBody === undefined
+          ? { error: '验证码无效或已过期' }
+          : options.verifyBody;
+        if (typeof body === 'string') {
+          return new Response(body, {
+            status: options.verifyStatus,
+            headers: { 'Content-Type': options.verifyContentType ?? 'text/html' },
+          });
+        }
+        return new Response(JSON.stringify(body), {
+          status: options.verifyStatus,
+          headers: { 'Content-Type': options.verifyContentType ?? 'application/json' },
+        });
+      }
+      return json({ token: 'two-factor-token', user: admin });
+    }
+    if (url.href === 'https://api.example.com/api/auth/2fa/login/resend') {
+      if (options?.resendThrows) throw new TypeError('network down');
+      if (options?.resendStatus !== undefined) {
+        const body = options.resendBody === undefined
+          ? { error: '验证码发送过于频繁，请稍后再试' }
+          : options.resendBody;
+        if (typeof body === 'string') {
+          return new Response(body, {
+            status: options.resendStatus,
+            headers: { 'Content-Type': options.resendContentType ?? 'text/html' },
+          });
+        }
+        return new Response(JSON.stringify(body), {
+          status: options.resendStatus,
+          headers: { 'Content-Type': options.resendContentType ?? 'application/json' },
+        });
+      }
+      return json({ message: '验证码已重新发送。' });
     }
     if (url.href === 'https://api.example.com/api/auth/me') {
       if (options?.meThrows) throw new TypeError('network down');
@@ -430,6 +504,300 @@ describe('deploy console', () => {
     expect(response.status).toBe(401);
     expect(response.headers.get('set-cookie')).toBeNull();
     expect(await response.text()).toContain('邮箱或密码错误');
+  });
+
+  it('renders a two-factor challenge without creating a console session', async () => {
+    const { requests } = installFetch({ twoFactorChallenge: true });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+          'X-Request-Id': 'two-factor-login-1',
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    const body = await response.text();
+    expect(body).toContain('双重验证');
+    expect(body).toContain('ad***@example.com');
+    expect(body).toContain('action="/auth/2fa/verify"');
+    expect(body).toContain('action="/auth/2fa/resend"');
+    expect(hiddenValue(body, 'challengeToken')).toBe('challenge-token');
+    expect(requests.some(({ url }) => url.pathname === '/api/auth/me')).toBe(false);
+    const loginRequest = requests.find(({ url }) => url.pathname === '/api/auth/login');
+    const headers = new Headers(loginRequest?.init?.headers);
+    expect(headers.get('X-Deploy-Console-Key')).toBe(env.LA_DEPLOY_CONSOLE_API_KEY);
+    expect(headers.get('X-Request-Id')).toBe('two-factor-login-1');
+  });
+
+  it('does not write login or two-factor secrets to structured logs', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    installFetch({ twoFactorChallenge: true });
+    const challengeResponse = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody('private-admin@example.com', 'private-password'),
+      },
+      env,
+    );
+    const challengePage = await challengeResponse.text();
+
+    const response = await app.request(
+      'https://console.example.com/auth/2fa/verify',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: twoFactorBody(challengePage, 'code', '654321'),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(302);
+    const logs = [...log.mock.calls, ...error.mock.calls]
+      .map(([message]) => String(message))
+      .join('\n');
+    expect(logs).toContain('"event":"deploy_console.auth_proxy"');
+    expect(logs).not.toContain('private-admin@example.com');
+    expect(logs).not.toContain('private-password');
+    expect(logs).not.toContain('654321');
+    expect(logs).not.toContain('challenge-token');
+    expect(logs).not.toContain(env.LA_DEPLOY_CONSOLE_API_KEY);
+    log.mockRestore();
+    error.mockRestore();
+  });
+
+  it.each([
+    ['code', '123456', { challengeToken: 'challenge-token', code: '123456' }],
+    ['recoveryCode', 'RECOVERY-CODE', {
+      challengeToken: 'challenge-token',
+      recoveryCode: 'RECOVERY-CODE',
+    }],
+  ] as const)('completes two-factor login with %s', async (
+    credentialType,
+    credential,
+    expectedBody,
+  ) => {
+    const { requests } = installFetch({ twoFactorChallenge: true });
+    const challengeResponse = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+    const challengePage = await challengeResponse.text();
+
+    const response = await app.request(
+      'https://console.example.com/auth/2fa/verify',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+          'X-Request-Id': `verify-${credentialType}`,
+        },
+        body: twoFactorBody(challengePage, credentialType, credential),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('/');
+    expect(response.headers.get('set-cookie')).toContain('liyuan_deploy=');
+    const verifyRequest = requests.find(
+      ({ url }) => url.pathname === '/api/auth/2fa/login/verify',
+    );
+    expect(JSON.parse(String(verifyRequest?.init?.body))).toEqual(expectedBody);
+    const verifyHeaders = new Headers(verifyRequest?.init?.headers);
+    expect(verifyHeaders.get('X-Deploy-Console-Key')).toBe(env.LA_DEPLOY_CONSOLE_API_KEY);
+    expect(verifyHeaders.get('X-Request-Id')).toBe(`verify-${credentialType}`);
+    const meRequest = requests.find(({ url }) => url.pathname === '/api/auth/me');
+    expect(new Headers(meRequest?.init?.headers).get('Authorization')).toBe(
+      'Bearer two-factor-token',
+    );
+  });
+
+  it('keeps the challenge active when a verification code is invalid', async () => {
+    installFetch({
+      twoFactorChallenge: true,
+      verifyStatus: 400,
+      verifyBody: { error: '验证码无效或已过期', requestId: 'upstream-code-1' },
+    });
+    const challengeResponse = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+    const challengePage = await challengeResponse.text();
+
+    const response = await app.request(
+      'https://console.example.com/auth/2fa/verify',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: twoFactorBody(challengePage, 'code', '000000'),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    const body = await response.text();
+    expect(body).toContain('验证码无效或已过期');
+    expect(hiddenValue(body, 'challengeToken')).toBe('challenge-token');
+  });
+
+  it('resends a two-factor code and preserves an upstream rate limit', async () => {
+    installFetch({ twoFactorChallenge: true });
+    const challengeResponse = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+    const challengePage = await challengeResponse.text();
+    const resendBody = new URLSearchParams({
+      formToken: hiddenValue(challengePage, 'formToken'),
+      challengeToken: hiddenValue(challengePage, 'challengeToken'),
+      emailHint: hiddenValue(challengePage, 'emailHint'),
+    }).toString();
+
+    const success = await app.request(
+      'https://console.example.com/auth/2fa/resend',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: resendBody,
+      },
+      env,
+    );
+    expect(success.status).toBe(200);
+    expect(await success.text()).toContain('验证码已重新发送');
+
+    installFetch({
+      resendStatus: 429,
+      resendBody: { error: '验证码发送过于频繁，请稍后再试' },
+    });
+    const limited = await app.request(
+      'https://console.example.com/auth/2fa/resend',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: resendBody,
+      },
+      env,
+    );
+    expect(limited.status).toBe(429);
+    expect(await limited.text()).toContain('验证码发送过于频繁，请稍后再试');
+  });
+
+  it('preserves an upstream login rate limit instead of reporting an outage', async () => {
+    installFetch({
+      loginStatus: 429,
+      loginBody: { error: '验证码发送过于频繁，请稍后再试' },
+    });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.text()).toContain('验证码发送过于频繁，请稍后再试');
+  });
+
+  it('fails closed when the deploy-console API key is missing', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { mock } = installFetch();
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody(),
+      },
+      { ...env, LA_DEPLOY_CONSOLE_API_KEY: '' },
+    );
+
+    expect(response.status).toBe(502);
+    expect(mock).not.toHaveBeenCalled();
+    const logs = error.mock.calls.map(([message]) => String(message));
+    expect(logs.join('\n')).toContain('"outcome":"configuration_error"');
+  });
+
+  it('reports a successful login response without a token as a configuration failure', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    installFetch({ loginStatus: 200, loginBody: { user: admin } });
+    const response = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('服务暂时不可用');
+    const logs = error.mock.calls.map(([message]) => String(message));
+    expect(logs.join('\n')).toContain('"outcome":"invalid_response"');
   });
 
   it('treats upstream login outages as unavailable instead of bad credentials', async () => {
@@ -877,7 +1245,9 @@ describe('deploy console', () => {
     expect(meHeaders.get('x-vercel-protection-bypass')).toBe('bypass-secret');
 
     expect(warning).not.toHaveBeenCalled();
-    const logs = info.mock.calls.map(([message]) => JSON.parse(String(message)) as Record<string, unknown>);
+    const logs = info.mock.calls
+      .map(([message]) => JSON.parse(String(message)) as Record<string, unknown>)
+      .filter((entry) => entry.event === 'gray.preview_cookie_proxy');
     expect(logs).toEqual([
       expect.objectContaining({
         level: 'info',
@@ -961,7 +1331,10 @@ describe('deploy console', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(info).not.toHaveBeenCalled();
+    const infoLogs = info.mock.calls
+      .map(([message]) => JSON.parse(String(message)) as Record<string, unknown>)
+      .filter((entry) => entry.event === 'gray.preview_cookie_proxy');
+    expect(infoLogs).toHaveLength(0);
     expect(warning).toHaveBeenCalledTimes(1);
     const logged = JSON.parse(String(warning.mock.calls[0]?.[0])) as Record<string, unknown>;
     expect(logged).toMatchObject({
@@ -1030,8 +1403,11 @@ describe('deploy console', () => {
     expect(headers.get('authorization')).toBeNull();
     expect(headers.get('x-vercel-protection-bypass')).toBe('bypass-secret');
 
-    expect(info).toHaveBeenCalledTimes(1);
-    const logged = JSON.parse(String(info.mock.calls[0]?.[0])) as Record<string, unknown>;
+    const infoLogs = info.mock.calls
+      .map(([message]) => JSON.parse(String(message)) as Record<string, unknown>)
+      .filter((entry) => entry.event === 'gray.preview_cookie_proxy');
+    expect(infoLogs).toHaveLength(1);
+    const logged = infoLogs[0] ?? {};
     expect(logged).toMatchObject({
       level: 'info',
       event: 'gray.preview_cookie_proxy',
