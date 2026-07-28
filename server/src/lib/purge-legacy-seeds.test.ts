@@ -25,6 +25,7 @@ const mockBlogDeleteMany = vi.mocked(BlogModel.deleteMany);
 
 describe('purgeLegacySeedContent', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     mockNewsDeleteMany.mockReset();
     mockBlogDeleteMany.mockReset();
     vi.spyOn(console, 'log').mockImplementation(() => undefined);

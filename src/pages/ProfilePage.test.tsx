@@ -578,6 +578,209 @@ describe('ProfilePage', () => {
     expect(screen.getByRole('link', { name: '写文章' })).toHaveAttribute('href', '/me/posts/new/');
     expect(screen.getByRole('link', { name: '管理文章' })).toHaveAttribute('href', '/me/posts/');
   });
+
+  it('lists and deletes the current member blog posts', async () => {
+    const posts: BlogPost[] = [
+      {
+        ...MARKDOWN_POST,
+        _id: 'published-post',
+        title: 'Published post',
+        updatedAt: '2026-07-20T00:00:00.000Z',
+      },
+      {
+        ...MARKDOWN_POST,
+        _id: undefined,
+        blogNumber: 2,
+        title: 'Draft without id',
+        status: 'draft',
+        updatedAt: undefined,
+      },
+    ];
+    let listCalls = 0;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      const href = url.toString();
+      if (href.includes('/auth/session')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog/me')) {
+        listCalls += 1;
+        return { ok: true, status: 200, json: async () => (listCalls === 1 ? posts : []) } as Response;
+      }
+      if (href.endsWith('/blog/published-post') && init?.method === 'DELETE') {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) } as Response;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/');
+    const user = userEvent.setup();
+
+    expect(await screen.findByText('Published post')).toBeInTheDocument();
+    expect(screen.getByText('Draft without id')).toBeInTheDocument();
+    expect(screen.getByText(/已发布 · 更新于/)).toBeInTheDocument();
+    expect(screen.getByText('草稿 · 更新于 未发布')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: '编辑' })).toHaveLength(1);
+
+    await user.click(screen.getAllByRole('button', { name: '删除' })[0]);
+
+    expect(await screen.findByRole('status')).toHaveTextContent('文章已删除。');
+    expect(screen.getByText('还没有文章。')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/blog/published-post'),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('shows a safe error when the member blog list cannot be loaded', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.toString().includes('/auth/session')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      throw new Error('private upstream detail');
+    }));
+
+    renderPage('/me/posts/');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('文章加载失败。');
+    expect(screen.queryByText('private upstream detail')).not.toBeInTheDocument();
+  });
+
+  it('creates a draft from normalized editor fields and switches to its edit route', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      const href = url.toString();
+      if (href.includes('/auth/session')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ ...MARKDOWN_POST, _id: 'created-post', status: 'draft' }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/new/');
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole('heading', { name: '写文章' })).toBeInTheDocument();
+    await user.type(screen.getByLabelText('标题'), 'Secure draft');
+    await user.type(screen.getByLabelText('摘要'), 'Summary');
+    await user.type(screen.getByLabelText('分类'), 'Security');
+    fireEvent.change(screen.getByLabelText('tags'), { target: { value: ' auth, auth, 2FA, ' } });
+    await user.type(screen.getByLabelText('封面图 URL'), 'https://example.com/cover.png');
+    await user.type(screen.getByLabelText('正文'), 'Draft body');
+    await user.click(screen.getByRole('button', { name: '保存草稿' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('草稿已保存。');
+    expect(window.location.pathname).toBe('/me/posts/created-post/edit/');
+    const createCall = vi.mocked(fetch).mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      title: 'Secure draft',
+      excerpt: 'Summary',
+      category: 'Security',
+      tags: ['auth', '2FA'],
+      image: 'https://example.com/cover.png',
+      content: 'Draft body',
+      status: 'draft',
+      visibility: 'public',
+    });
+  });
+
+  it.each([
+    new Error('保存被拒绝'),
+    'non-error rejection',
+  ])('does not expose raw editor save failures for %p', async (failure) => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      const href = url.toString();
+      if (href.includes('/auth/session')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog') && init?.method === 'POST') {
+        throw failure;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/new/');
+    const user = userEvent.setup();
+
+    await screen.findByRole('heading', { name: '写文章' });
+    await user.click(screen.getByRole('button', { name: '发布' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('网络连接异常，请检查网络后重试');
+    expect(screen.queryByText('保存被拒绝')).not.toBeInTheDocument();
+    expect(screen.queryByText('non-error rejection')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('标题')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('正文')).toHaveAttribute('aria-describedby', 'post-form-error');
+  });
+
+  it('loads an existing post with optional defaults and publishes an update', async () => {
+    const editablePost = {
+      ...MARKDOWN_POST,
+      _id: 'editable-post',
+      excerpt: undefined,
+      category: undefined,
+      tags: undefined,
+      image: undefined,
+      content: undefined,
+      readTime: undefined,
+      status: 'draft',
+    } as unknown as BlogPost;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      const href = url.toString();
+      if (href.includes('/auth/session')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog/me')) {
+        return { ok: true, status: 200, json: async () => [editablePost] } as Response;
+      }
+      if (href.endsWith('/blog/editable-post') && init?.method === 'PATCH') {
+        return { ok: true, status: 200, json: async () => ({ ...editablePost, status: 'published' }) } as Response;
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/editable-post/edit/');
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole('heading', { name: '编辑文章' })).toBeInTheDocument();
+    expect(screen.getByLabelText('标题')).toHaveValue('Markdown post');
+    expect(screen.getByLabelText('摘要')).toHaveValue('');
+    expect(screen.getByLabelText('tags')).toHaveValue('');
+    await user.clear(screen.getByLabelText('正文'));
+    await user.type(screen.getByLabelText('正文'), 'Published body');
+    await user.click(screen.getByRole('button', { name: '发布' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('文章已发布。');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/blog/editable-post'),
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+  });
+
+  it.each([
+    ['missing', { ok: true, status: 200, json: async () => [] }, '文章不存在。'],
+    ['failure', null, '文章加载失败。'],
+  ])('handles an existing post %s state', async (_case, response, expected) => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      const href = url.toString();
+      if (href.includes('/auth/session')) {
+        return { ok: true, status: 200, json: async () => ({ user: MEMBER_USER }) } as Response;
+      }
+      if (href.endsWith('/blog/me')) {
+        if (response) return response as Response;
+        throw new Error('private editor load failure');
+      }
+      throw new Error(`Unexpected request: ${href}`);
+    }));
+
+    renderPage('/me/posts/unknown/edit/');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(expected);
+  });
+
   it('shows the admin backend entry on an admin user profile', async () => {
     localStorage.setItem('liyuan_auth_token', 'admin-token');
     vi.stubGlobal('fetch', mockFetch(ADMIN_USER));
