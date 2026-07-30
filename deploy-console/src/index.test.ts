@@ -678,6 +678,44 @@ describe('deploy console', () => {
     expect(hiddenValue(body, 'challengeToken')).toBe('challenge-token');
   });
 
+  it('redirects a replayed two-factor verification to the console root', async () => {
+    installFetch({
+      twoFactorChallenge: true,
+      verifyStatus: 409,
+      verifyBody: { error: '该双重验证请求已处理', requestId: 'upstream-replay-1' },
+    });
+    const challengeResponse = await app.request(
+      'https://console.example.com/auth/login',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: await loginBody(),
+      },
+      env,
+    );
+    const challengePage = await challengeResponse.text();
+
+    const response = await app.request(
+      'https://console.example.com/auth/2fa/verify',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: env.CONSOLE_ORIGIN,
+        },
+        body: twoFactorBody(challengePage, 'code', '123456'),
+      },
+      env,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('/');
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
   it('resends a two-factor code and preserves an upstream rate limit', async () => {
     installFetch({ twoFactorChallenge: true });
     const challengeResponse = await app.request(
@@ -1044,6 +1082,14 @@ describe('deploy console', () => {
     expect(policy).toContain("script-src 'self' https://static.cloudflareinsights.com");
     expect(policy).toContain("connect-src 'self' https://cloudflareinsights.com");
     expect(policy).toContain("object-src 'none'");
+  });
+
+  it('serves the same-origin authentication submission guard', async () => {
+    const response = await app.request('https://console.example.com/auth.js', undefined, env);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/javascript');
+    expect(await response.text()).toContain('authSubmissionStarted');
   });
 
   it('expires the short-lived console session', async () => {

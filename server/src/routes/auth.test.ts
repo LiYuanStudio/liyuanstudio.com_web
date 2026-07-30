@@ -122,6 +122,8 @@ describe('auth routes', () => {
     mockAuthThrottleModel.deleteMany.mockReset();
     mockAuthThrottleModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
     mockTwoFactorChallengeModel.findOne.mockReset();
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockReset();
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(null as never);
     mockTwoFactorChallengeModel.findOneAndDelete.mockReset();
     mockTwoFactorChallengeModel.create.mockReset();
     mockTwoFactorChallengeModel.deleteOne.mockReset();
@@ -560,7 +562,7 @@ describe('auth routes', () => {
     const challenge = challengeDoc();
     const user = userDoc({ twoFactorEnabled: true });
     mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
-    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(challenge as never);
     mockUserModel.findById.mockResolvedValue(user as never);
 
     const res = await app.request('/api/auth/2fa/login/verify', {
@@ -577,13 +579,76 @@ describe('auth routes', () => {
       email: user.email,
       twoFactorEnabled: true,
     }));
-    expect(mockTwoFactorChallengeModel.findOneAndDelete).toHaveBeenCalledTimes(1);
+    expect(mockTwoFactorChallengeModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: challenge._id,
+        consumedAt: { $exists: false },
+      }),
+      { $set: { consumedAt: expect.any(Date) } },
+      { new: true },
+    );
+    expect(mockTwoFactorChallengeModel.findOneAndDelete).not.toHaveBeenCalled();
+  });
+
+  it('returns one success and one 409 when the same 2FA code is submitted concurrently', async () => {
+    const app = await makeApp();
+    const challenge = challengeDoc();
+    const consumed = challengeDoc({ consumedAt: new Date() });
+    const user = userDoc({ twoFactorEnabled: true });
+    mockTwoFactorChallengeModel.findOne
+      .mockResolvedValueOnce(challenge as never)
+      .mockResolvedValueOnce(challenge as never)
+      .mockResolvedValueOnce(consumed as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate
+      .mockResolvedValueOnce(consumed as never)
+      .mockResolvedValueOnce(null as never);
+    mockUserModel.findById.mockResolvedValue(user as never);
+
+    const request = () => app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32), code: '123456' }),
+    });
+    const responses = await Promise.all([request(), request()]);
+    const statuses = responses.map((response) => response.status).sort();
+
+    expect(statuses).toEqual([200, 409]);
+    const replay = responses.find((response) => response.status === 409);
+    await expect(replay?.json()).resolves.toEqual(expect.objectContaining({
+      error: '该双重验证请求已处理',
+    }));
+    expect(mockSessionModel.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [{ code: '123456' }],
+    [{ recoveryCode: 'ABCD-EF12-3456' }],
+  ])('returns 409 without issuing a session for an already consumed login challenge', async (
+    credential,
+  ) => {
+    const app = await makeApp();
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(
+      challengeDoc({ consumedAt: new Date() }) as never,
+    );
+
+    const response = await app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32), ...credential }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: '该双重验证请求已处理',
+    }));
+    expect(mockSessionModel.create).not.toHaveBeenCalled();
   });
 
   it('rejects a wrong 2FA code, records the attempt, and leaves the challenge unconsumed', async () => {
     const app = await makeApp();
     const challenge = challengeDoc();
     mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(challenge as never);
 
     const res = await app.request('/api/auth/2fa/login/verify', {
       method: 'POST',
@@ -592,9 +657,67 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(400);
-    expect(challenge.failedAttempts).toBe(1);
-    expect(challenge.save).toHaveBeenCalled();
+    expect(mockTwoFactorChallengeModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: challenge._id,
+        consumedAt: { $exists: false },
+      }),
+      { $inc: { failedAttempts: 1 } },
+      { new: true },
+    );
     expect(mockTwoFactorChallengeModel.findOneAndDelete).not.toHaveBeenCalled();
+  });
+
+  it('rejects a login challenge that has reached the maximum verification attempts', async () => {
+    const app = await makeApp();
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(
+      challengeDoc({ failedAttempts: 5 }) as never,
+    );
+
+    const response = await app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32), code: '123456' }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(mockTwoFactorChallengeModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when a wrong-code attempt loses a race to a consumed challenge', async () => {
+    const app = await makeApp();
+    const challenge = challengeDoc();
+    mockTwoFactorChallengeModel.findOne
+      .mockResolvedValueOnce(challenge as never)
+      .mockResolvedValueOnce(challengeDoc({ consumedAt: new Date() }) as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(null as never);
+
+    const response = await app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32), code: '999999' }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(mockSessionModel.create).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when a correct-code claim loses a race to the attempt limit', async () => {
+    const app = await makeApp();
+    const challenge = challengeDoc();
+    mockTwoFactorChallengeModel.findOne
+      .mockResolvedValueOnce(challenge as never)
+      .mockResolvedValueOnce(challengeDoc({ failedAttempts: 5 }) as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(null as never);
+
+    const response = await app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32), code: '123456' }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(mockSessionModel.create).not.toHaveBeenCalled();
   });
 
   it('rejects verification when the 2FA challenge is missing or the account is disabled', async () => {
@@ -608,10 +731,8 @@ describe('auth routes', () => {
     mockTwoFactorChallengeModel.findOne.mockResolvedValueOnce(null as never);
     expect((await request()).status).toBe(400);
 
-    mockTwoFactorChallengeModel.findOne
-      .mockResolvedValueOnce(challengeDoc() as never)
-      .mockResolvedValueOnce(challengeDoc() as never);
-    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValueOnce(challengeDoc() as never);
+    mockTwoFactorChallengeModel.findOne.mockResolvedValueOnce(challengeDoc() as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValueOnce(challengeDoc() as never);
     mockUserModel.findById.mockResolvedValueOnce(userDoc({ twoFactorEnabled: false }) as never);
     expect((await request()).status).toBe(401);
   });
@@ -629,6 +750,43 @@ describe('auth routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('allows only one email when the same login challenge is resent concurrently', async () => {
+    const app = await makeApp();
+    const challenge = challengeDoc();
+    const user = userDoc({ twoFactorEnabled: true });
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate
+      .mockResolvedValueOnce(challenge as never)
+      .mockResolvedValueOnce(null as never);
+    mockUserModel.findById.mockResolvedValue(user as never);
+
+    const request = () => app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32) }),
+    });
+    const responses = await Promise.all([request(), request()]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 429]);
+    expect(mockSendTwoFactorCodeEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 409 when resending an already consumed login challenge', async () => {
+    const app = await makeApp();
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(
+      challengeDoc({ consumedAt: new Date() }) as never,
+    );
+
+    const response = await app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32) }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(mockSendTwoFactorCodeEmail).not.toHaveBeenCalled();
+  });
+
   it('POST /api/auth/2fa/login/verify consumes a recovery code only once', async () => {
     const app = await makeApp();
     const challenge = challengeDoc();
@@ -638,7 +796,7 @@ describe('auth routes', () => {
       twoFactorRecoveryCodeHashes: [recoveryHash],
     });
     mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
-    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(challenge as never);
     mockUserModel.findById.mockResolvedValue(user as never);
     mockUserModel.findOneAndUpdate.mockResolvedValue(user as never);
 
@@ -673,7 +831,7 @@ describe('auth routes', () => {
     mockBcrypt.compare.mockResolvedValue(true as never);
     mockTwoFactorChallengeModel.create.mockResolvedValue(challenge as never);
     mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
-    mockTwoFactorChallengeModel.findOneAndDelete.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(challenge as never);
     const authToken = await signToken({
       id: 'user-1',
       email: user.email,

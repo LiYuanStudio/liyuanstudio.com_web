@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthForm } from './AuthForm.js';
 import { useAuth } from '../context/AuthContext.js';
+import { ApiError } from '../api/errors.js';
 
 vi.mock('../context/AuthContext.js');
 
@@ -67,6 +68,26 @@ describe('AuthForm', () => {
     });
   });
 
+  it('synchronously ignores duplicate login submissions before React rerenders', async () => {
+    let resolveLogin: (value: null) => void = () => {};
+    const login = vi.fn(() => new Promise<null>((resolve) => {
+      resolveLogin = resolve;
+    }));
+    mockUseAuth.mockReturnValue(unauthMock({ login }) as ReturnType<typeof useAuth>);
+    render(<AuthForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('邮箱'), 'hello@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    const form = screen.getByRole('button', { name: '登录' }).closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+    fireEvent.submit(form!);
+
+    expect(login).toHaveBeenCalledTimes(1);
+    resolveLogin(null);
+  });
+
   it('completes an email two-factor login challenge', async () => {
     const login = vi.fn().mockResolvedValue({
       twoFactorRequired: true,
@@ -97,6 +118,62 @@ describe('AuthForm', () => {
     });
   });
 
+  it('synchronously ignores duplicate two-factor verification submissions', async () => {
+    const login = vi.fn().mockResolvedValue({
+      twoFactorRequired: true,
+      challengeToken: 'challenge-token',
+      emailHint: 'he***@example.com',
+    });
+    let resolveVerification: () => void = () => {};
+    const completeLoginTwoFactor = vi.fn(() => new Promise<void>((resolve) => {
+      resolveVerification = resolve;
+    }));
+    mockUseAuth.mockReturnValue(
+      unauthMock({ login, completeLoginTwoFactor }) as ReturnType<typeof useAuth>,
+    );
+    render(<AuthForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('邮箱'), 'hello@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    await user.click(screen.getByRole('button', { name: '登录' }));
+    await user.type(await screen.findByLabelText('验证码'), '123456');
+    const form = screen.getByRole('button', { name: '验证并登录' }).closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+    fireEvent.submit(form!);
+
+    expect(completeLoginTwoFactor).toHaveBeenCalledTimes(1);
+    resolveVerification();
+  });
+
+  it('returns to the login form when a replay cannot recover a cookie session', async () => {
+    const login = vi.fn().mockResolvedValue({
+      twoFactorRequired: true,
+      challengeToken: 'challenge-token',
+      emailHint: 'he***@example.com',
+    });
+    const completeLoginTwoFactor = vi.fn().mockRejectedValue(
+      new ApiError('该双重验证请求已处理（调试 ID: replay-1）', 409, 'replay-1'),
+    );
+    mockUseAuth.mockReturnValue(
+      unauthMock({ login, completeLoginTwoFactor }) as ReturnType<typeof useAuth>,
+    );
+    render(<AuthForm />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText('邮箱'), 'hello@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    await user.click(screen.getByRole('button', { name: '登录' }));
+    await user.type(await screen.findByLabelText('验证码'), '123456');
+    await user.click(screen.getByRole('button', { name: '验证并登录' }));
+
+    expect(await screen.findByRole('heading', { name: '登录' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '该双重验证请求已处理（调试 ID: replay-1）',
+    );
+  });
+
   it('submits register code form and shows code verification step', async () => {
     const sendRegistrationCode = vi.fn().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue(
@@ -116,6 +193,30 @@ describe('AuthForm', () => {
       expect(screen.getByLabelText('验证码')).toBeInTheDocument();
       expect(screen.getByText(/验证码已发送至 new@example.com/)).toBeInTheDocument();
     });
+  });
+
+  it('synchronously ignores duplicate registration-code requests', async () => {
+    let resolveRequest: () => void = () => {};
+    const sendRegistrationCode = vi.fn(() => new Promise<void>((resolve) => {
+      resolveRequest = resolve;
+    }));
+    mockUseAuth.mockReturnValue(
+      unauthMock({ sendRegistrationCode }) as ReturnType<typeof useAuth>,
+    );
+    render(<AuthForm />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '去注册' }));
+    await user.type(screen.getByLabelText('显示名称'), 'New User');
+    await user.type(screen.getByLabelText('邮箱'), 'new@example.com');
+    await user.type(screen.getByLabelText('密码'), 'password123');
+    const form = screen.getByRole('button', { name: '获取验证码' }).closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+    fireEvent.submit(form!);
+
+    expect(sendRegistrationCode).toHaveBeenCalledTimes(1);
+    resolveRequest();
   });
 
   it('submits verification code and calls onSuccess', async () => {

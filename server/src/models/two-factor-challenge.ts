@@ -8,6 +8,7 @@ export interface TwoFactorChallenge {
   codeHash: string;
   purpose: TwoFactorChallengePurpose;
   failedAttempts: number;
+  consumedAt?: Date;
   expiresAt: Date;
   lastSentAt: Date;
   createdAt?: Date;
@@ -30,6 +31,7 @@ const TwoFactorChallengeSchema = new mongoose.Schema<TwoFactorChallenge>(
       required: true,
     },
     failedAttempts: { type: Number, required: true, default: 0 },
+    consumedAt: { type: Date },
     expiresAt: { type: Date, required: true, index: { expires: 0 } },
     lastSentAt: { type: Date, required: true },
   },

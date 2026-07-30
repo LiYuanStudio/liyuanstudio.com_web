@@ -109,8 +109,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     challengeToken: string,
     credential: { code: string } | { recoveryCode: string },
   ) => {
-    const { user } = await apiVerifyLoginTwoFactor(challengeToken, credential);
-    setState({ status: 'authenticated', user });
+    try {
+      const { user } = await apiVerifyLoginTwoFactor(challengeToken, credential);
+      setState({ status: 'authenticated', user });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        try {
+          const { user } = await fetchMe();
+          if (user) {
+            setState({ status: 'authenticated', user });
+            return;
+          }
+        } catch {
+          // Preserve the original replay response when the session cannot be recovered.
+        }
+        setState({ status: 'unauthenticated' });
+      }
+      throw error;
+    }
   }, []);
 
   const resendLoginTwoFactor = useCallback(async (challengeToken: string) => {

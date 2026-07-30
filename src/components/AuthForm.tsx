@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.js';
+import { ApiError } from '../api/errors.js';
 import './AuthForm.css';
 
 interface AuthFormProps {
@@ -39,6 +40,7 @@ export function AuthForm({
   const [recoveryCode, setRecoveryCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const requestInFlight = useRef(false);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -77,6 +79,8 @@ export function AuthForm({
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     resetForm();
     setLoading(true);
 
@@ -88,12 +92,15 @@ export function AuthForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };
 
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     resetForm();
     setLoading(true);
 
@@ -103,12 +110,15 @@ export function AuthForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     resetForm();
     setLoading(true);
 
@@ -126,12 +136,15 @@ export function AuthForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };
 
   const handleVerifyLoginTwoFactor = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     resetForm();
     setLoading(true);
     try {
@@ -141,14 +154,22 @@ export function AuthForm({
       );
       onSuccess?.();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setLoginStep('form');
+        setChallengeToken('');
+        setCode('');
+        setRecoveryCode('');
+      }
       setError(err instanceof Error ? err.message : '验证失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };
 
   const handleResendLoginCode = async () => {
-    if (countdown > 0) return;
+    if (countdown > 0 || requestInFlight.current) return;
+    requestInFlight.current = true;
     resetForm();
     setLoading(true);
     try {
@@ -157,12 +178,14 @@ export function AuthForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : '发送失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };
 
   const handleResendCode = async () => {
-    if (countdown > 0) return;
+    if (countdown > 0 || requestInFlight.current) return;
+    requestInFlight.current = true;
     resetForm();
     setLoading(true);
 
@@ -172,6 +195,7 @@ export function AuthForm({
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };

@@ -31,10 +31,15 @@ function TestConsumer() {
 function TwoFactorLoginConsumer() {
   const { state, login, completeLoginTwoFactor } = useAuth();
   const [challengeToken, setChallengeToken] = useState('');
+  const [verificationFailed, setVerificationFailed] = useState(false);
   if (state.status === 'loading') return <span>Loading</span>;
   if (state.status === 'authenticated') return <span>{state.user.email}</span>;
+  if (verificationFailed) return <span>Verification failed</span>;
   return challengeToken ? (
-    <button onClick={() => completeLoginTwoFactor(challengeToken, { code: '123456' })}>
+    <button onClick={() => {
+      void completeLoginTwoFactor(challengeToken, { code: '123456' })
+        .catch(() => setVerificationFailed(true));
+    }}>
       Verify 2FA
     </button>
   ) : (
@@ -339,6 +344,104 @@ describe('AuthProvider', () => {
       expect(screen.getByText('hello@example.com')).toBeInTheDocument();
       expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
     });
+  });
+
+  it('recovers an authenticated cookie session after a replayed two-factor response', async () => {
+    const signedInUser = {
+      id: '1',
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      role: 'tourist',
+      emailVerified: true,
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: null }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          twoFactorRequired: true,
+          challengeToken: 'challenge-token',
+          emailHint: 'he***@example.com',
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        headers: new Headers({ 'X-Request-Id': 'replay-1' }),
+        json: async () => ({
+          error: '该双重验证请求已处理',
+          requestId: 'replay-1',
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: signedInUser }),
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AuthProvider>
+        <TwoFactorLoginConsumer />
+      </AuthProvider>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Login with 2FA' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify 2FA' }));
+
+    expect(await screen.findByText('hello@example.com')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/auth\/session$/),
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('stays unauthenticated when a replayed response has no recoverable cookie session', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: null }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          twoFactorRequired: true,
+          challengeToken: 'challenge-token',
+          emailHint: 'he***@example.com',
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        headers: new Headers({ 'X-Request-Id': 'replay-2' }),
+        json: async () => ({
+          error: '该双重验证请求已处理',
+          requestId: 'replay-2',
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: null }),
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AuthProvider>
+        <TwoFactorLoginConsumer />
+      </AuthProvider>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Login with 2FA' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify 2FA' }));
+
+    expect(await screen.findByText('Verification failed')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('keeps the direct login flow for accounts without two-factor authentication', async () => {

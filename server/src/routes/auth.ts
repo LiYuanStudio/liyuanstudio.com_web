@@ -51,6 +51,7 @@ const LOGIN_LOCK_MS = 10 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const TWO_FACTOR_CHALLENGE_TTL_MS = 10 * 60 * 1000;
 const TWO_FACTOR_MAX_ATTEMPTS = 5;
+const TWO_FACTOR_ALREADY_PROCESSED_MESSAGE = '该双重验证请求已处理';
 const RECOVERY_CODE_COUNT = 10;
 const FORGOT_PASSWORD_COOLDOWN_MS = 60 * 1000;
 const FORGOT_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
@@ -423,24 +424,98 @@ async function verifyChallengeCode(
   code: string,
   userId?: string,
 ) {
+  const now = new Date();
   const challenge = await TwoFactorChallengeModel.findOne({
     tokenHash: hashToken(challengeToken),
     purpose,
-    expiresAt: { $gt: new Date() },
+    expiresAt: { $gt: now },
     ...(userId ? { userId } : {}),
   });
-  if (!challenge || challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
-    return null;
+  if (!challenge) {
+    return { ok: false as const, reason: 'expired_or_missing' as const };
+  }
+  if (challenge.consumedAt) {
+    return { ok: false as const, reason: 'already_consumed' as const };
+  }
+  if (challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
+    return { ok: false as const, reason: 'max_attempts' as const };
   }
   if (!hashesMatch(challenge.codeHash, hashToken(code))) {
-    challenge.failedAttempts += 1;
-    await challenge.save();
-    return null;
+    const failed = await TwoFactorChallengeModel.findOneAndUpdate(
+      {
+        _id: challenge._id,
+        tokenHash: challenge.tokenHash,
+        consumedAt: { $exists: false },
+        expiresAt: { $gt: now },
+        failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
+      },
+      { $inc: { failedAttempts: 1 } },
+      { new: true },
+    );
+    if (failed) {
+      return { ok: false as const, reason: 'invalid_code' as const };
+    }
+    const latest = await TwoFactorChallengeModel.findOne({
+      _id: challenge._id,
+      tokenHash: challenge.tokenHash,
+      expiresAt: { $gt: now },
+    });
+    if (latest?.consumedAt) {
+      return { ok: false as const, reason: 'already_consumed' as const };
+    }
+    return {
+      ok: false as const,
+      reason: latest && latest.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS
+        ? 'max_attempts' as const
+        : 'expired_or_missing' as const,
+    };
   }
-  return TwoFactorChallengeModel.findOneAndDelete({
+  const claimed = await TwoFactorChallengeModel.findOneAndUpdate(
+    {
+      _id: challenge._id,
+      tokenHash: challenge.tokenHash,
+      consumedAt: { $exists: false },
+      expiresAt: { $gt: now },
+      failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
+    },
+    { $set: { consumedAt: now } },
+    { new: true },
+  );
+  if (claimed) {
+    return { ok: true as const, challenge: claimed };
+  }
+  const latest = await TwoFactorChallengeModel.findOne({
     _id: challenge._id,
     tokenHash: challenge.tokenHash,
+    expiresAt: { $gt: now },
   });
+  if (latest?.consumedAt) {
+    return { ok: false as const, reason: 'already_consumed' as const };
+  }
+  return {
+    ok: false as const,
+    reason: latest && latest.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS
+      ? 'max_attempts' as const
+      : 'expired_or_missing' as const,
+  };
+}
+
+type TwoFactorRejectionReason =
+  | 'invalid_code'
+  | 'expired_or_missing'
+  | 'max_attempts'
+  | 'already_consumed';
+
+function rejectTwoFactorChallenge(
+  c: Context,
+  purpose: TwoFactorChallengePurpose,
+  reason: TwoFactorRejectionReason,
+  invalidMessage = '验证码无效或已过期',
+) {
+  logAuthEvent(c, 'warn', 'auth.two_factor_challenge_rejected', { purpose, reason });
+  return reason === 'already_consumed'
+    ? jsonError(c, TWO_FACTOR_ALREADY_PROCESSED_MESSAGE, 409)
+    : jsonError(c, invalidMessage, 400);
 }
 
 function validateChallengeToken(token: unknown): string {
@@ -718,23 +793,71 @@ app.post('/2fa/login/verify', requireTrustedSessionCreation, async (c) => {
     return badRequest(c, error);
   }
 
-  const challenge = await TwoFactorChallengeModel.findOne({
-    tokenHash: hashToken(challengeToken),
-    purpose: 'login',
-    expiresAt: { $gt: new Date() },
-  });
-  if (!challenge || challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
-    return jsonError(c, '验证码无效或已过期', 400);
-  }
-
   let user: UserForResponse | null = null;
   if (recoveryCode) {
+    const now = new Date();
+    const challenge = await TwoFactorChallengeModel.findOne({
+      tokenHash: hashToken(challengeToken),
+      purpose: 'login',
+      expiresAt: { $gt: now },
+    });
+    if (!challenge) {
+      return rejectTwoFactorChallenge(c, 'login', 'expired_or_missing');
+    }
+    if (challenge.consumedAt) {
+      return rejectTwoFactorChallenge(c, 'login', 'already_consumed');
+    }
+    if (challenge.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
+      return rejectTwoFactorChallenge(c, 'login', 'max_attempts');
+    }
     const recoveryHash = hashToken(recoveryCode);
     const recoveryUser = await UserModel.findById(challenge.userId);
     const matchedHash = recoveryUser?.twoFactorRecoveryCodeHashes?.find(
       (storedHash) => hashesMatch(storedHash, recoveryHash),
     );
-    user = matchedHash ? await UserModel.findOneAndUpdate(
+    if (!matchedHash) {
+      const failed = await TwoFactorChallengeModel.findOneAndUpdate(
+        {
+          _id: challenge._id,
+          tokenHash: challenge.tokenHash,
+          consumedAt: { $exists: false },
+          expiresAt: { $gt: now },
+          failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
+        },
+        { $inc: { failedAttempts: 1 } },
+        { new: true },
+      );
+      if (!failed) {
+        const latest = await TwoFactorChallengeModel.findOne({
+          _id: challenge._id,
+          tokenHash: challenge.tokenHash,
+          expiresAt: { $gt: now },
+        });
+        if (latest?.consumedAt) {
+          return rejectTwoFactorChallenge(c, 'login', 'already_consumed');
+        }
+        if (latest && latest.failedAttempts >= TWO_FACTOR_MAX_ATTEMPTS) {
+          return rejectTwoFactorChallenge(c, 'login', 'max_attempts');
+        }
+        return rejectTwoFactorChallenge(c, 'login', 'expired_or_missing');
+      }
+      return rejectTwoFactorChallenge(c, 'login', 'invalid_code', '恢复码无效');
+    }
+    const claimed = await TwoFactorChallengeModel.findOneAndUpdate(
+      {
+        _id: challenge._id,
+        tokenHash: challenge.tokenHash,
+        consumedAt: { $exists: false },
+        expiresAt: { $gt: now },
+        failedAttempts: { $lt: TWO_FACTOR_MAX_ATTEMPTS },
+      },
+      { $set: { consumedAt: now } },
+      { new: true },
+    );
+    if (!claimed) {
+      return rejectTwoFactorChallenge(c, 'login', 'already_consumed');
+    }
+    user = await UserModel.findOneAndUpdate(
       {
         _id: challenge.userId,
         twoFactorEnabled: true,
@@ -745,25 +868,16 @@ app.post('/2fa/login/verify', requireTrustedSessionCreation, async (c) => {
         $inc: { tokenVersion: 1 },
       },
       { new: true },
-    ) : null;
+    );
     if (!user) {
-      challenge.failedAttempts += 1;
-      await challenge.save();
-      return jsonError(c, '恢复码无效', 400);
-    }
-    const consumed = await TwoFactorChallengeModel.findOneAndDelete({
-      _id: challenge._id,
-      tokenHash: challenge.tokenHash,
-    });
-    if (!consumed) {
-      return jsonError(c, '双重验证请求已使用', 409);
+      return rejectTwoFactorChallenge(c, 'login', 'invalid_code', '恢复码无效');
     }
   } else {
-    const consumed = await verifyChallengeCode(challengeToken, 'login', code ?? '');
-    if (!consumed) {
-      return jsonError(c, '验证码无效或已过期', 400);
+    const verification = await verifyChallengeCode(challengeToken, 'login', code ?? '');
+    if (!verification.ok) {
+      return rejectTwoFactorChallenge(c, 'login', verification.reason);
     }
-    user = await UserModel.findById(consumed.userId);
+    user = await UserModel.findById(verification.challenge.userId);
   }
 
   if (!user || !user.twoFactorEnabled) {
@@ -784,19 +898,22 @@ app.post('/2fa/login/resend', async (c) => {
     return badRequest(c, error);
   }
 
+  const now = new Date();
   const challenge = await TwoFactorChallengeModel.findOne({
     tokenHash: hashToken(challengeToken),
     purpose: 'login',
-    expiresAt: { $gt: new Date() },
+    expiresAt: { $gt: now },
   });
   if (!challenge) {
-    return jsonError(c, '双重验证请求无效或已过期', 400);
+    return rejectTwoFactorChallenge(c, 'login', 'expired_or_missing');
+  }
+  if (challenge.consumedAt) {
+    return rejectTwoFactorChallenge(c, 'login', 'already_consumed');
   }
   const user = await UserModel.findById(challenge.userId);
   if (!user || !user.twoFactorEnabled) {
     return jsonError(c, '双重验证请求无效或已过期', 400);
   }
-  const now = new Date();
   const sendKeys = [`2fa-send:email:${user.email}`, `2fa-send:ip:${getClientIp(c)}`];
   if (
     now.getTime() - challenge.lastSentAt.getTime() < REGISTRATION_RATE_LIMIT_MS ||
@@ -806,11 +923,34 @@ app.post('/2fa/login/resend', async (c) => {
   }
 
   const code = createRegistrationCode();
-  challenge.codeHash = hashToken(code);
-  challenge.failedAttempts = 0;
-  challenge.lastSentAt = now;
-  challenge.expiresAt = new Date(now.getTime() + TWO_FACTOR_CHALLENGE_TTL_MS);
-  await challenge.save();
+  const updated = await TwoFactorChallengeModel.findOneAndUpdate(
+    {
+      _id: challenge._id,
+      tokenHash: challenge.tokenHash,
+      consumedAt: { $exists: false },
+      expiresAt: { $gt: now },
+      lastSentAt: { $lte: new Date(now.getTime() - REGISTRATION_RATE_LIMIT_MS) },
+    },
+    {
+      $set: {
+        codeHash: hashToken(code),
+        failedAttempts: 0,
+        lastSentAt: now,
+        expiresAt: new Date(now.getTime() + TWO_FACTOR_CHALLENGE_TTL_MS),
+      },
+    },
+    { new: true },
+  );
+  if (!updated) {
+    const latest = await TwoFactorChallengeModel.findOne({
+      _id: challenge._id,
+      tokenHash: challenge.tokenHash,
+      expiresAt: { $gt: now },
+    });
+    return latest?.consumedAt
+      ? rejectTwoFactorChallenge(c, 'login', 'already_consumed')
+      : jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
+  }
   await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
   try {
     await sendTwoFactorCodeEmail({
@@ -875,9 +1015,9 @@ async function confirmAccountChallenge(
   } catch (error) {
     return { response: badRequest(c, error) };
   }
-  const challenge = await verifyChallengeCode(challengeToken, purpose, code, c.get('userId'));
-  if (!challenge) {
-    return { response: jsonError(c, '验证码无效或已过期', 400) };
+  const verification = await verifyChallengeCode(challengeToken, purpose, code, c.get('userId'));
+  if (!verification.ok) {
+    return { response: rejectTwoFactorChallenge(c, purpose, verification.reason) };
   }
   const user = await UserModel.findById(c.get('userId'));
   if (!user) {
