@@ -366,7 +366,6 @@ async function startTwoFactorChallenge(
 ) {
   const credentials = createChallengeCredentials();
   const now = new Date();
-  await TwoFactorChallengeModel.deleteMany({ userId: user._id, purpose });
   const challenge = await TwoFactorChallengeModel.create({
     userId: user._id,
     tokenHash: credentials.tokenHash,
@@ -510,12 +509,19 @@ function rejectTwoFactorChallenge(
   c: Context,
   purpose: TwoFactorChallengePurpose,
   reason: TwoFactorRejectionReason,
-  invalidMessage = '验证码无效或已过期',
+  invalidMessage = '验证码错误',
 ) {
   logAuthEvent(c, 'warn', 'auth.two_factor_challenge_rejected', { purpose, reason });
-  return reason === 'already_consumed'
-    ? jsonError(c, TWO_FACTOR_ALREADY_PROCESSED_MESSAGE, 409)
-    : jsonError(c, invalidMessage, 400);
+  switch (reason) {
+    case 'already_consumed':
+      return jsonError(c, TWO_FACTOR_ALREADY_PROCESSED_MESSAGE, 409);
+    case 'max_attempts':
+      return jsonError(c, '验证码错误次数过多，请重新发起验证', 429);
+    case 'expired_or_missing':
+      return jsonError(c, '双重验证请求无效或已过期，请重新发起验证', 400);
+    case 'invalid_code':
+      return jsonError(c, invalidMessage, 400);
+  }
 }
 
 function validateChallengeToken(token: unknown): string {
@@ -923,6 +929,13 @@ app.post('/2fa/login/resend', async (c) => {
   }
 
   const code = createRegistrationCode();
+  const codeHash = hashToken(code);
+  const previousChallenge = {
+    codeHash: challenge.codeHash,
+    failedAttempts: challenge.failedAttempts,
+    lastSentAt: challenge.lastSentAt,
+    expiresAt: challenge.expiresAt,
+  };
   const updated = await TwoFactorChallengeModel.findOneAndUpdate(
     {
       _id: challenge._id,
@@ -933,7 +946,7 @@ app.post('/2fa/login/resend', async (c) => {
     },
     {
       $set: {
-        codeHash: hashToken(code),
+        codeHash,
         failedAttempts: 0,
         lastSentAt: now,
         expiresAt: new Date(now.getTime() + TWO_FACTOR_CHALLENGE_TTL_MS),
@@ -959,7 +972,32 @@ app.post('/2fa/login/resend', async (c) => {
       code,
       purpose: 'login',
     });
-  } catch (error) {
+  } catch {
+    let rolledBack = false;
+    let rollbackReason = 'conditional_miss';
+    try {
+      rolledBack = Boolean(await TwoFactorChallengeModel.findOneAndUpdate(
+        {
+          _id: updated._id,
+          tokenHash: updated.tokenHash,
+          codeHash,
+          consumedAt: { $exists: false },
+          lastSentAt: now,
+        },
+        {
+          $set: previousChallenge,
+        },
+        { new: true },
+      ));
+    } catch {
+      rollbackReason = 'database_error';
+    }
+    if (!rolledBack) {
+      logAuthEvent(c, 'error', 'auth.two_factor_resend_rollback_failed', {
+        purpose: 'login',
+        reason: rollbackReason,
+      });
+    }
     return jsonError(c, '双重验证邮件发送失败', 502);
   }
   return c.json({ message: '验证码已重新发送。' });
