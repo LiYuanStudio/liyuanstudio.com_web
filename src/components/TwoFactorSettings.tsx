@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.js';
 import type { TwoFactorAction, User } from '../types.js';
 
@@ -18,8 +18,11 @@ export function TwoFactorSettings({ user }: { user: User }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const requestInFlight = useRef(false);
 
   const start = async (nextAction: TwoFactorAction) => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -32,13 +35,15 @@ export function TwoFactorSettings({ user }: { user: User }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : '请求失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };
 
   const confirm = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!action) return;
+    if (!action || requestInFlight.current) return;
+    requestInFlight.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -58,6 +63,7 @@ export function TwoFactorSettings({ user }: { user: User }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : '验证失败');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };

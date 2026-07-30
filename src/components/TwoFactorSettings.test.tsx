@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAuth } from '../context/AuthContext.js';
 import { TwoFactorSettings } from './TwoFactorSettings.js';
@@ -89,6 +89,43 @@ describe('TwoFactorSettings', () => {
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(click).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:codes');
+  });
+
+  it('synchronously ignores duplicate account-security confirmations', async () => {
+    const beginTwoFactorAction = vi.fn().mockResolvedValue({
+      challengeToken: 'challenge-token',
+      message: '验证码已发送',
+    });
+    let resolveConfirmation: () => void = () => {};
+    const confirmTwoFactorAction = vi.fn(() => new Promise<null>((resolve) => {
+      resolveConfirmation = () => resolve(null);
+    }));
+    mockUseAuth.mockReturnValue({
+      state: { status: 'authenticated', user },
+      login: vi.fn(),
+      completeLoginTwoFactor: vi.fn(),
+      resendLoginTwoFactor: vi.fn(),
+      beginTwoFactorAction,
+      confirmTwoFactorAction,
+      sendRegistrationCode: vi.fn(),
+      verifyRegistrationCode: vi.fn(),
+      logout: vi.fn(),
+      updateAvatar: vi.fn(),
+      updateProfile: vi.fn(),
+    });
+    render(<TwoFactorSettings user={user} />);
+    const browser = userEvent.setup();
+
+    await browser.type(screen.getByLabelText('当前密码'), 'password123');
+    await browser.click(screen.getByRole('button', { name: '启用双重验证' }));
+    await browser.type(await screen.findByLabelText('邮件验证码'), '123456');
+    const form = screen.getByRole('button', { name: '确认' }).closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+    fireEvent.submit(form!);
+
+    expect(confirmTwoFactorAction).toHaveBeenCalledTimes(1);
+    resolveConfirmation();
   });
 
   it.each([

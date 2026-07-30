@@ -18,6 +18,7 @@ import {
 } from './cookies.js';
 import type { AdminUser, AppEnv, Bindings, GrayDeployment, Session } from './types.js';
 import {
+  authScript,
   applicationScript,
   dashboardPage,
   loginPage,
@@ -674,6 +675,7 @@ app.use('*', async (c, next) => {
 });
 
 app.get('/styles.css', (c) => c.body(styles, 200, { 'Content-Type': 'text/css; charset=UTF-8' }));
+app.get('/auth.js', (c) => c.body(authScript, 200, { 'Content-Type': 'text/javascript; charset=UTF-8' }));
 app.get('/app.js', (c) => c.body(applicationScript, 200, { 'Content-Type': 'text/javascript; charset=UTF-8' }));
 
 app.get('/', async (c) => {
@@ -757,6 +759,9 @@ app.post('/auth/2fa/verify', async (c) => {
     credential.trim(),
   );
   if (!authenticated.ok) {
+    if (authenticated.status === 409) {
+      return c.redirect('/');
+    }
     return twoFactorResponsePage(c, challengeToken, emailHint, authenticated.status, {
       error: authenticated.message,
     });

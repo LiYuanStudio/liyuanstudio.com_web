@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applicationScript, dashboardPage } from './ui.js';
+import {
+  applicationScript,
+  authScript,
+  dashboardPage,
+  loginPage,
+  twoFactorPage,
+} from './ui.js';
 
 const admin = {
   id: 'admin-id',
@@ -30,6 +36,49 @@ afterEach(() => {
 });
 
 describe('deploy console UI', () => {
+  it('locks all authentication actions after the first synchronous submission', () => {
+    document.open();
+    document.write(twoFactorPage({
+      challengeToken: 'challenge-token',
+      emailHint: 'ad***@example.com',
+      formToken: 'form-token',
+    }));
+    document.close();
+    window.eval(authScript);
+
+    const verifyForm = document.querySelector<HTMLFormElement>('form[action="/auth/2fa/verify"]');
+    const resendForm = document.querySelector<HTMLFormElement>('form[action="/auth/2fa/resend"]');
+    const verifyButton = verifyForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const resendButton = resendForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const first = new SubmitEvent('submit', {
+      bubbles: true,
+      cancelable: true,
+      submitter: verifyButton,
+    });
+    const duplicate = new SubmitEvent('submit', {
+      bubbles: true,
+      cancelable: true,
+      submitter: resendButton,
+    });
+
+    expect(verifyForm?.dispatchEvent(first)).toBe(true);
+    expect(resendForm?.dispatchEvent(duplicate)).toBe(false);
+    expect(verifyForm?.getAttribute('aria-busy')).toBe('true');
+    expect(resendForm?.getAttribute('aria-busy')).toBe('true');
+    expect(verifyButton?.disabled).toBe(true);
+    expect(resendButton?.disabled).toBe(true);
+    expect(verifyButton?.textContent).toBe('验证中...');
+  });
+
+  it('loads the same-origin authentication script on login and challenge pages', () => {
+    expect(loginPage()).toContain('<script src="/auth.js" defer></script>');
+    expect(twoFactorPage({
+      challengeToken: 'challenge-token',
+      emailHint: 'ad***@example.com',
+      formToken: 'form-token',
+    })).toContain('<script src="/auth.js" defer></script>');
+  });
+
   it('keeps a submitted promotion visible and renders a polled failure', async () => {
     let promotionState: string | null = null;
     const intervalCallbacks: Array<() => void | Promise<void>> = [];

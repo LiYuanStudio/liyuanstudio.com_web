@@ -49,14 +49,15 @@ export function loginPage(error?: string, options?: LoginAlertOptions): string {
         <h1>灰度发布控制台</h1>
         <p class="muted">使用 LA 管理员账号登录。普通账号无法访问灰度版本。</p>
         ${error ? loginAlert(error, options) : ''}
-        <form action="/auth/login" method="post" class="form">
+        <form action="/auth/login" method="post" class="form" data-single-submit data-submitting-label="登录中...">
           <input name="formToken" type="hidden" value="${escapeHtml(options?.formToken ?? '')}" />
           <label>邮箱<input name="email" type="email" autocomplete="username" required /></label>
           <label>密码<input name="password" type="password" autocomplete="current-password" minlength="8" required /></label>
           <button type="submit">管理员登录</button>
         </form>
       </section>
-    </main>`,
+    </main>
+    <script src="/auth.js" defer></script>`,
   );
 }
 
@@ -84,7 +85,7 @@ export function twoFactorPage(options: TwoFactorPageOptions): string {
         <p class="muted">验证码已发送至 ${escapeHtml(options.emailHint)}。也可以使用一个尚未使用的恢复码。</p>
         ${options.error ? loginAlert(options.error, { requestId: options.requestId }) : ''}
         ${options.notice ? `<div class="notice" role="status">${escapeHtml(options.notice)}</div>` : ''}
-        <form action="/auth/2fa/verify" method="post" class="form">
+        <form action="/auth/2fa/verify" method="post" class="form" data-single-submit data-submitting-label="验证中...">
           ${hiddenFields}
           <label>验证方式
             <select name="credentialType">
@@ -98,14 +99,15 @@ export function twoFactorPage(options: TwoFactorPageOptions): string {
           <button type="submit">验证并登录</button>
         </form>
         <div class="auth-actions">
-          <form action="/auth/2fa/resend" method="post">
+          <form action="/auth/2fa/resend" method="post" data-single-submit data-submitting-label="发送中...">
             ${hiddenFields}
             <button class="button--secondary" type="submit">重新发送验证码</button>
           </form>
           <a class="button button--quiet" href="/">返回账号登录</a>
         </div>
       </section>
-    </main>`,
+    </main>
+    <script src="/auth.js" defer></script>`,
   );
 }
 
@@ -246,6 +248,33 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .control-label input { margin-top: 8px; }
 .form--compact { grid-template-columns: minmax(220px, 1fr) minmax(140px, .6fr) auto; align-items: end; }
 @media (max-width: 620px) { .shell { padding: 28px 0; } .topbar, .row { align-items: flex-start; } .details, .form--compact { grid-template-columns: 1fr; } .actions, .auth-actions { align-items: stretch; flex-direction: column; } }
+`;
+
+export const authScript = `
+const authForms = Array.from(document.querySelectorAll('form[data-single-submit]'));
+let authSubmissionStarted = false;
+
+for (const form of authForms) {
+  form.addEventListener('submit', (event) => {
+    if (authSubmissionStarted) {
+      event.preventDefault();
+      return;
+    }
+
+    authSubmissionStarted = true;
+    for (const candidate of authForms) {
+      candidate.setAttribute('aria-busy', 'true');
+      for (const button of candidate.querySelectorAll('button')) {
+        button.disabled = true;
+      }
+    }
+
+    const submitter = event.submitter;
+    if (submitter instanceof HTMLButtonElement) {
+      submitter.textContent = form.dataset.submittingLabel || '处理中...';
+    }
+  });
+}
 `;
 
 export const applicationScript = `
