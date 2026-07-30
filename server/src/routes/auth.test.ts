@@ -555,6 +555,68 @@ describe('auth routes', () => {
       purpose: 'login',
       code: expect.stringMatching(/^\d{6}$/),
     }));
+    expect(mockTwoFactorChallengeModel.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps separately issued login challenges valid for the same account', async () => {
+    const app = await makeApp();
+    const user = userDoc({ twoFactorEnabled: true });
+    const createdChallenges: ReturnType<typeof challengeDoc>[] = [];
+    mockUserModel.findOne.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockTwoFactorChallengeModel.create.mockImplementation(async (input) => {
+      const challenge = challengeDoc({
+        ...(input as unknown as Record<string, unknown>),
+        _id: `challenge-${createdChallenges.length + 1}`,
+      });
+      createdChallenges.push(challenge);
+      return challenge as never;
+    });
+
+    const login = () => app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: user.email, password: 'password123' }),
+    });
+    const firstLogin = await login();
+    const secondLogin = await login();
+    const firstBody = await firstLogin.json();
+    const secondBody = await secondLogin.json();
+    const firstCode = mockSendTwoFactorCodeEmail.mock.calls[0]?.[0].code;
+    const secondCode = mockSendTwoFactorCodeEmail.mock.calls[1]?.[0].code;
+
+    expect(firstBody.challengeToken).not.toBe(secondBody.challengeToken);
+    expect(createdChallenges).toHaveLength(2);
+    expect(mockTwoFactorChallengeModel.deleteMany).not.toHaveBeenCalled();
+    if (!firstCode || !secondCode) {
+      throw new Error('Expected both two-factor emails to be sent');
+    }
+
+    mockTwoFactorChallengeModel.findOne.mockImplementation((query) => {
+      const tokenHash = (query as unknown as { tokenHash?: string }).tokenHash;
+      return Promise.resolve(
+        createdChallenges.find((challenge) => challenge.tokenHash === tokenHash) ?? null,
+      ) as never;
+    });
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockImplementation((query) => {
+      const id = (query as unknown as { _id?: string })._id;
+      return Promise.resolve(
+        createdChallenges.find((challenge) => challenge._id === id) ?? null,
+      ) as never;
+    });
+    mockUserModel.findById.mockResolvedValue(user as never);
+
+    const verify = (challengeToken: string, code: string) =>
+      app.request('/api/auth/2fa/login/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challengeToken, code }),
+      });
+    const firstVerify = await verify(firstBody.challengeToken, firstCode);
+    const secondVerify = await verify(secondBody.challengeToken, secondCode);
+
+    expect(firstVerify.status).toBe(200);
+    expect(secondVerify.status).toBe(200);
   });
 
   it('POST /api/auth/2fa/login/verify consumes a valid email code and signs in', async () => {
@@ -657,6 +719,9 @@ describe('auth routes', () => {
     });
 
     expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual(expect.objectContaining({
+      error: '验证码错误',
+    }));
     expect(mockTwoFactorChallengeModel.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         _id: challenge._id,
@@ -680,7 +745,10 @@ describe('auth routes', () => {
       body: JSON.stringify({ challengeToken: 'a'.repeat(32), code: '123456' }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: '验证码错误次数过多，请重新发起验证',
+    }));
     expect(mockTwoFactorChallengeModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
@@ -716,7 +784,7 @@ describe('auth routes', () => {
       body: JSON.stringify({ challengeToken: 'a'.repeat(32), code: '123456' }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(429);
     expect(mockSessionModel.create).not.toHaveBeenCalled();
   });
 
@@ -729,7 +797,11 @@ describe('auth routes', () => {
     });
 
     mockTwoFactorChallengeModel.findOne.mockResolvedValueOnce(null as never);
-    expect((await request()).status).toBe(400);
+    const missing = await request();
+    expect(missing.status).toBe(400);
+    await expect(missing.json()).resolves.toEqual(expect.objectContaining({
+      error: '双重验证请求无效或已过期，请重新发起验证',
+    }));
 
     mockTwoFactorChallengeModel.findOne.mockResolvedValueOnce(challengeDoc() as never);
     mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValueOnce(challengeDoc() as never);
@@ -769,6 +841,82 @@ describe('auth routes', () => {
 
     expect(responses.map((response) => response.status).sort()).toEqual([200, 429]);
     expect(mockSendTwoFactorCodeEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the previous login code when a resend email fails', async () => {
+    const app = await makeApp();
+    const challenge = challengeDoc();
+    const user = userDoc({ twoFactorEnabled: true });
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate
+      .mockResolvedValueOnce(challenge as never)
+      .mockResolvedValueOnce(challenge as never);
+    mockUserModel.findById.mockResolvedValue(user as never);
+    mockSendTwoFactorCodeEmail.mockRejectedValue(new Error('resend unavailable'));
+
+    const response = await app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeToken: 'a'.repeat(32) }),
+    });
+
+    expect(response.status).toBe(502);
+    expect(mockTwoFactorChallengeModel.findOneAndUpdate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        _id: challenge._id,
+        tokenHash: challenge.tokenHash,
+        codeHash: expect.any(String),
+        consumedAt: { $exists: false },
+        lastSentAt: expect.any(Date),
+      }),
+      {
+        $set: {
+          codeHash: challenge.codeHash,
+          failedAttempts: challenge.failedAttempts,
+          lastSentAt: challenge.lastSentAt,
+          expiresAt: challenge.expiresAt,
+        },
+      },
+      { new: true },
+    );
+  });
+
+  it('logs a correlated, secret-free event when resend rollback fails', async () => {
+    const app = await makeApp();
+    const challengeToken = 'a'.repeat(32);
+    const challenge = challengeDoc();
+    const user = userDoc({ twoFactorEnabled: true });
+    const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate
+      .mockResolvedValueOnce(challenge as never)
+      .mockRejectedValueOnce(new Error('rollback database failure'));
+    mockUserModel.findById.mockResolvedValue(user as never);
+    mockSendTwoFactorCodeEmail.mockRejectedValue(new Error('resend unavailable'));
+
+    const response = await app.request('/api/auth/2fa/login/resend', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-Id': 'two-factor-rollback-1',
+      },
+      body: JSON.stringify({ challengeToken }),
+    });
+
+    expect(response.status).toBe(502);
+    const entry = failure.mock.calls
+      .map(([value]) => String(value))
+      .find((value) => value.includes('auth.two_factor_resend_rollback_failed'));
+    failure.mockRestore();
+
+    expect(entry).toContain('"requestId":"two-factor-rollback-1"');
+    expect(entry).toContain('"purpose":"login"');
+    expect(entry).toContain('"reason":"database_error"');
+    expect(entry).not.toContain(challengeToken);
+    expect(entry).not.toContain('resend unavailable');
+    expect(entry).not.toContain('rollback database failure');
+    expect(entry).not.toContain(user.email);
   });
 
   it('returns 409 when resending an already consumed login challenge', async () => {
@@ -871,6 +1019,216 @@ describe('auth routes', () => {
     expect(confirmJson.recoveryCodes).toHaveLength(10);
     expect(confirmJson.recoveryCodes[0]).toMatch(/^[A-F0-9]{4}(?:-[A-F0-9]{4}){2}$/);
     expect(confirmJson.user).not.toHaveProperty('twoFactorRecoveryCodeHashes');
+  });
+
+  it('disables 2FA only after password and email-code confirmation', async () => {
+    const app = await makeApp();
+    const user = userDoc({
+      twoFactorEnabled: true,
+      twoFactorRecoveryCodeHashes: [hashToken('ABCDEF123456')],
+    });
+    const challenge = challengeDoc({ purpose: 'disable' });
+    mockUserModel.findById.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockTwoFactorChallengeModel.create.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(challenge as never);
+    const authToken = await signToken({
+      id: 'user-1',
+      email: user.email,
+      role: 'tourist',
+      tokenVersion: 0,
+    });
+
+    const startResponse = await app.request('/api/auth/2fa/disable', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ password: 'password123' }),
+    });
+    const startBody = await startResponse.json();
+    const confirmResponse = await app.request('/api/auth/2fa/disable/confirm', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        challengeToken: startBody.challengeToken,
+        code: '123456',
+      }),
+    });
+
+    expect(startResponse.status).toBe(200);
+    expect(confirmResponse.status).toBe(200);
+    expect(user.twoFactorEnabled).toBe(false);
+    expect(user.twoFactorRecoveryCodeHashes).toEqual([]);
+    expect(mockTwoFactorChallengeModel.deleteMany).toHaveBeenCalledWith({ userId: user._id });
+    expect(user.save).toHaveBeenCalled();
+  });
+
+  it('regenerates recovery codes only after password and email-code confirmation', async () => {
+    const app = await makeApp();
+    const previousRecoveryHash = hashToken('ABCDEF123456');
+    const user = userDoc({
+      twoFactorEnabled: true,
+      twoFactorRecoveryCodeHashes: [previousRecoveryHash],
+    });
+    const challenge = challengeDoc({ purpose: 'regenerate' });
+    mockUserModel.findById.mockResolvedValue(user as never);
+    mockBcrypt.compare.mockResolvedValue(true as never);
+    mockTwoFactorChallengeModel.create.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challenge as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(challenge as never);
+    const authToken = await signToken({
+      id: 'user-1',
+      email: user.email,
+      role: 'tourist',
+      tokenVersion: 0,
+    });
+
+    const startResponse = await app.request('/api/auth/2fa/recovery-codes', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ password: 'password123' }),
+    });
+    const startBody = await startResponse.json();
+    const confirmResponse = await app.request('/api/auth/2fa/recovery-codes/confirm', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        challengeToken: startBody.challengeToken,
+        code: '123456',
+      }),
+    });
+    const confirmBody = await confirmResponse.json();
+
+    expect(startResponse.status).toBe(200);
+    expect(confirmResponse.status).toBe(200);
+    expect(confirmBody.recoveryCodes).toHaveLength(10);
+    expect(user.twoFactorRecoveryCodeHashes).toHaveLength(10);
+    expect(user.twoFactorRecoveryCodeHashes).not.toContain(previousRecoveryHash);
+    expect(user.save).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['enable', 'enable', false],
+    ['disable', 'disable', true],
+    ['recovery-codes', 'regenerate', true],
+  ] as const)(
+    'returns precise rejection statuses for the %s confirmation flow',
+    async (pathAction, purpose, twoFactorEnabled) => {
+      const authToken = await signToken({
+        id: 'user-1',
+        email: 'hello@liyuanstudio.com',
+        role: 'tourist',
+        tokenVersion: 0,
+      });
+      const scenarios = [
+        {
+          challenge: challengeDoc({ purpose, codeHash: hashToken('999999') }),
+          updated: challengeDoc({ purpose, codeHash: hashToken('999999') }),
+          expectedStatus: 400,
+          expectedError: '验证码错误',
+        },
+        {
+          challenge: null,
+          updated: null,
+          expectedStatus: 400,
+          expectedError: '双重验证请求无效或已过期，请重新发起验证',
+        },
+        {
+          challenge: challengeDoc({ purpose, failedAttempts: 5 }),
+          updated: null,
+          expectedStatus: 429,
+          expectedError: '验证码错误次数过多，请重新发起验证',
+        },
+        {
+          challenge: challengeDoc({ purpose, consumedAt: new Date() }),
+          updated: null,
+          expectedStatus: 409,
+          expectedError: '该双重验证请求已处理',
+        },
+      ];
+
+      for (const scenario of scenarios) {
+        vi.clearAllMocks();
+        mockSessionModel.findOne.mockResolvedValue({
+          userId: { toString: () => 'user-1' },
+          tokenVersion: 0,
+          expiresAt: new Date(Date.now() + 60_000),
+        } as never);
+        mockUserModel.findById.mockResolvedValue(
+          userDoc({ twoFactorEnabled }) as never,
+        );
+        mockTwoFactorChallengeModel.findOne.mockResolvedValue(
+          scenario.challenge as never,
+        );
+        mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(
+          scenario.updated as never,
+        );
+
+        const app = await makeApp();
+        const response = await app.request(`/api/auth/2fa/${pathAction}/confirm`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            challengeToken: 'a'.repeat(32),
+            code: '123456',
+          }),
+        });
+
+        expect(response.status).toBe(scenario.expectedStatus);
+        await expect(response.json()).resolves.toEqual(expect.objectContaining({
+          error: scenario.expectedError,
+        }));
+      }
+    },
+  );
+
+  it('logs a correlated 2FA rejection reason without authentication secrets', async () => {
+    const app = await makeApp();
+    const challengeToken = 'a'.repeat(32);
+    const code = '999999';
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockTwoFactorChallengeModel.findOne.mockResolvedValue(challengeDoc() as never);
+    mockTwoFactorChallengeModel.findOneAndUpdate.mockResolvedValue(
+      challengeDoc() as never,
+    );
+
+    const response = await app.request('/api/auth/2fa/login/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-Id': 'two-factor-debug-1',
+      },
+      body: JSON.stringify({ challengeToken, code }),
+    });
+
+    expect(response.status).toBe(400);
+    const entry = warning.mock.calls
+      .map(([value]) => String(value))
+      .find((value) => value.includes('auth.two_factor_challenge_rejected'));
+    warning.mockRestore();
+
+    expect(entry).toBeTruthy();
+    expect(entry).toContain('"requestId":"two-factor-debug-1"');
+    expect(entry).toContain('"purpose":"login"');
+    expect(entry).toContain('"reason":"invalid_code"');
+    expect(entry).not.toContain(challengeToken);
+    expect(entry).not.toContain(code);
+    expect(entry).not.toContain('hello@liyuanstudio.com');
   });
 
   it('POST /api/auth/login rejects invalid credentials without revealing which field failed', async () => {
