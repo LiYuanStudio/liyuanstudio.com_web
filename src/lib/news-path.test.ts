@@ -24,6 +24,15 @@ describe('news content paths', () => {
     expect(matchNewsContentPath('/news/bad_slug/')).toBeNull();
     expect(matchNewsContentPath('/news/a/')).toBeNull();
     expect(matchNewsContentPath('/news/good/extra/')).toBeNull();
+    expect(matchNewsContentPath('/news/%E0%A4%A/')).toBeNull();
+    expect(matchNewsContentPath('/news/good%2Fextra/')).toBeNull();
+  });
+
+  it('enforces slug length boundaries', () => {
+    expect(matchReleaseContentPath('/release/ab/')).toBe('ab');
+    expect(matchReleaseContentPath(`/release/${'a'.repeat(64)}/`)).toBe('a'.repeat(64));
+    expect(matchReleaseContentPath('/release/a/')).toBeNull();
+    expect(matchReleaseContentPath(`/release/${'a'.repeat(65)}/`)).toBeNull();
   });
 
   it('builds a trailing-slash canonical path', () => {

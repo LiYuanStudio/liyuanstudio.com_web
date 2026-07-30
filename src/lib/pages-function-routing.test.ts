@@ -38,6 +38,7 @@ describe('Cloudflare Pages profile routing', () => {
   it.each([
     ['/login/', '<title>登录 / 注册 | LiYuan Studio</title>'],
     ['/register/', '<title>注册账号 | LiYuan Studio</title>'],
+    ['/release/', '<title>动态 | LiYuan Studio</title>'],
   ])('returns the existing static response for %s', async (path, html) => {
     const staticResponse = new Response(html);
     const { assetFetch, context } = createContext(path, { assetResponse: staticResponse });
@@ -73,7 +74,16 @@ describe('Cloudflare Pages profile routing', () => {
     expect(assetFetch).not.toHaveBeenCalled();
   });
 
-  it.each(['/~/LA/', '/LA/not-a-number/', '/login/extra/', '/unknown/path/extra/'])
+  it.each([
+    '/~/LA/',
+    '/LA/not-a-number/',
+    '/login/extra/',
+    '/unknown/path/extra/',
+    '/release/a/',
+    '/release/bad_slug/',
+    '/release/good/extra/',
+    '/news/bad_slug/',
+  ])
     ('keeps the static 404 for unsupported path %s', async (path) => {
       const notFound = new Response('custom 404', { status: 404 });
       const { assetFetch, context } = createContext(path, { assetResponse: notFound });
@@ -120,6 +130,20 @@ describe('Cloudflare Pages profile routing', () => {
     expect(await response.text()).toContain('最新动态');
     const [assetRequest] = assetFetch.mock.calls[0];
     if (!(assetRequest instanceof Request)) throw new Error('Expected an asset Request');
+    expect(new URL(assetRequest.url).pathname).toBe('/release/');
+  });
+
+  it('preserves HEAD when serving the release entry', async () => {
+    const { assetFetch, context } = createContext('/release/product-update/', {
+      method: 'HEAD',
+    });
+
+    await onRequest(context);
+
+    const [assetRequest] = assetFetch.mock.calls[0];
+    expect(assetRequest).toBeInstanceOf(Request);
+    if (!(assetRequest instanceof Request)) throw new Error('Expected an asset Request');
+    expect(assetRequest.method).toBe('HEAD');
     expect(new URL(assetRequest.url).pathname).toBe('/release/');
   });
 
