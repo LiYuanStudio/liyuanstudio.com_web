@@ -162,6 +162,13 @@
   grid-column: span 3;
 }
 
+@media (min-width: 901px) {
+  .collage-grid-five-up .collage-card:nth-child(n + 2):nth-child(-n + 5) {
+    grid-column: span 3;
+    grid-row: span 2;
+  }
+}
+
 .collage-card a {
   position: relative;
   z-index: 1;

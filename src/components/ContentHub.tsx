@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
 import './ContentHub.css';
 
 export type HubSection = 'products' | 'release' | 'blog';
@@ -63,8 +63,13 @@ export function CollageGrid({
   children: ReactNode;
   busy?: boolean;
 }) {
+  const supportsFiveItemLayout = Children.count(children) >= 5;
+
   return (
-    <div className="collage-grid" aria-busy={busy}>
+    <div
+      className={`collage-grid${supportsFiveItemLayout ? ' collage-grid-five-up' : ''}`}
+      aria-busy={busy}
+    >
       {children}
     </div>
   );
