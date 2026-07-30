@@ -39,4 +39,18 @@ describe('UserAvatar', () => {
     expect(container.querySelector('img')).not.toBeInTheDocument();
     expect(screen.getByText('L')).toBeInTheDocument();
   });
+
+  it('keeps custom styling and accessible text on the fallback avatar', () => {
+    render(
+      <UserAvatar
+        displayName="LiYuan"
+        className="profile-avatar"
+        alt="LiYuan 的头像"
+      />,
+    );
+
+    const fallback = screen.getByText('L');
+    expect(fallback).toHaveClass('profile-avatar', 'user-avatar-fallback');
+    expect(fallback).not.toHaveAttribute('aria-hidden');
+  });
 });

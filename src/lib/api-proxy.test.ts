@@ -71,4 +71,96 @@ describe('same-origin API proxy', () => {
     expect(response.status).toBe(503);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it.each([
+    'ftp://api.example.com',
+    'https://user@api.example.com',
+    'https://user:password@api.example.com',
+    'https://api.example.com/base',
+    'https://api.example.com/?environment=production',
+    'https://api.example.com/#fragment',
+  ])('rejects an unsafe upstream origin: %s', async (upstream) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await proxyApiRequest(
+      new Request('https://www.liyuanstudio.com/api/news'),
+      upstream,
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe('API proxy is not configured');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects paths outside the API namespace before contacting upstream', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await proxyApiRequest(
+      new Request('https://www.liyuanstudio.com/admin'),
+      'https://api.example.com',
+    );
+
+    expect(response.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns a generic gateway error without leaking an upstream network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('private DNS detail')));
+
+    const response = await proxyApiRequest(
+      new Request('https://www.liyuanstudio.com/api/news'),
+      'https://api.example.com',
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe('API upstream unavailable');
+  });
+
+  it('rewrites same-origin redirects and strips transport-only headers', async () => {
+    let capturedInit: RequestInit | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Connection: 'keep-alive',
+          Location: '/auth/callback?ok=1#done',
+          'X-Upstream': 'preserved',
+        },
+      });
+    }));
+
+    const response = await proxyApiRequest(
+      new Request('https://deploy.liyuanstudio.com/api/auth/start', { method: 'HEAD' }),
+      'https://api.example.com',
+    );
+
+    expect(capturedInit?.body).toBeUndefined();
+    expect(new Headers(capturedInit?.headers).get('x-forwarded-for')).toBeNull();
+    expect(response.headers.get('connection')).toBeNull();
+    expect(response.headers.get('x-upstream')).toBe('preserved');
+    expect(response.headers.get('location')).toBe(
+      'https://deploy.liyuanstudio.com/auth/callback?ok=1#done',
+    );
+  });
+
+  it.each([
+    'https://attacker.example/steal',
+    'http://[invalid',
+  ])('drops an unsafe upstream redirect location: %s', async (location) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, {
+      status: 302,
+      headers: { Location: location },
+    })));
+
+    const response = await proxyApiRequest(
+      new Request('https://www.liyuanstudio.com/api/news'),
+      'https://api.example.com',
+    );
+
+    expect(response.headers.get('location')).toBeNull();
+    expect(response.headers.get('cache-control')).toBeNull();
+  });
 });

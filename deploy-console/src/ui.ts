@@ -60,6 +60,55 @@ export function loginPage(error?: string, options?: LoginAlertOptions): string {
   );
 }
 
+export type TwoFactorPageOptions = {
+  challengeToken: string;
+  emailHint: string;
+  formToken: string;
+  error?: string;
+  notice?: string;
+  requestId?: string;
+};
+
+export function twoFactorPage(options: TwoFactorPageOptions): string {
+  const hiddenFields = `
+    <input name="formToken" type="hidden" value="${escapeHtml(options.formToken)}" />
+    <input name="challengeToken" type="hidden" value="${escapeHtml(options.challengeToken)}" />
+    <input name="emailHint" type="hidden" value="${escapeHtml(options.emailHint)}" />`;
+
+  return document(
+    'LA 灰度发布 · 双重验证',
+    `<main class="shell shell--narrow">
+      <section class="card">
+        <p class="eyebrow">LIYUAN STUDIO · INTERNAL</p>
+        <h1>双重验证</h1>
+        <p class="muted">验证码已发送至 ${escapeHtml(options.emailHint)}。也可以使用一个尚未使用的恢复码。</p>
+        ${options.error ? loginAlert(options.error, { requestId: options.requestId }) : ''}
+        ${options.notice ? `<div class="notice" role="status">${escapeHtml(options.notice)}</div>` : ''}
+        <form action="/auth/2fa/verify" method="post" class="form">
+          ${hiddenFields}
+          <label>验证方式
+            <select name="credentialType">
+              <option value="code">邮箱验证码</option>
+              <option value="recoveryCode">恢复码</option>
+            </select>
+          </label>
+          <label>验证码或恢复码
+            <input name="credential" autocomplete="one-time-code" required />
+          </label>
+          <button type="submit">验证并登录</button>
+        </form>
+        <div class="auth-actions">
+          <form action="/auth/2fa/resend" method="post">
+            ${hiddenFields}
+            <button class="button--secondary" type="submit">重新发送验证码</button>
+          </form>
+          <a class="button button--quiet" href="/">返回账号登录</a>
+        </div>
+      </section>
+    </main>`,
+  );
+}
+
 export function previewAccessPage(consoleOrigin: string): string {
   return document(
     'LA 灰度发布',
@@ -173,9 +222,13 @@ h2 { margin-bottom: 0; font-size: 1.35rem; overflow-wrap: anywhere; }
 .eyebrow, .label, dt { color: #a5a5a5; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .muted { color: #aaa; line-height: 1.6; }
 .alert { display: grid; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #4b2020; color: #ffd5d5; line-height: 1.5; }
+.notice { padding: 12px 14px; border-radius: 12px; background: #173b2c; color: #d7ffe9; line-height: 1.5; }
 .diagnostic { color: #f2bcbc; font-size: .78rem; overflow-wrap: anywhere; }
 .alert-action { justify-self: start; border-color: #a65c5c; color: #fff; }
 .form { display: grid; gap: 18px; margin-top: 28px; }
+.auth-actions { display: flex; align-items: stretch; gap: 12px; margin-top: 18px; }
+.auth-actions form { flex: 1; margin: 0; }
+.auth-actions button, .auth-actions .button { width: 100%; }
 label { display: grid; gap: 8px; color: #ccc; font-size: .9rem; }
 input, select { width: 100%; padding: 13px 14px; border: 1px solid #494949; border-radius: 12px; background: #161616; color: #fff; font: inherit; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #f5f5f5; color: #111; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
@@ -192,7 +245,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .control-label { width: min(180px, 100%); }
 .control-label input { margin-top: 8px; }
 .form--compact { grid-template-columns: minmax(220px, 1fr) minmax(140px, .6fr) auto; align-items: end; }
-@media (max-width: 620px) { .shell { padding: 28px 0; } .topbar, .row { align-items: flex-start; } .details, .form--compact { grid-template-columns: 1fr; } .actions { align-items: stretch; flex-direction: column; } }
+@media (max-width: 620px) { .shell { padding: 28px 0; } .topbar, .row { align-items: flex-start; } .details, .form--compact { grid-template-columns: 1fr; } .actions, .auth-actions { align-items: stretch; flex-direction: column; } }
 `;
 
 export const applicationScript = `

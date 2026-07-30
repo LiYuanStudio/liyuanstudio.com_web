@@ -47,6 +47,17 @@ function TwoFactorLoginConsumer() {
   );
 }
 
+function DirectLoginConsumer() {
+  const { state, login } = useAuth();
+  if (state.status === 'loading') return <span>Loading</span>;
+  if (state.status === 'authenticated') return <span>{state.user.email}</span>;
+  return (
+    <button onClick={() => login('hello@example.com', 'password123')}>
+      Login directly
+    </button>
+  );
+}
+
 describe('AuthProvider', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -81,6 +92,28 @@ describe('AuthProvider', () => {
       expect.stringMatching(/\/auth\/session$/),
       expect.objectContaining({ credentials: 'include' }),
     );
+  });
+
+  it('fails closed when the session probe explicitly returns unauthorized', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: new Headers(),
+      json: async () => ({ error: 'Unauthorized' }),
+    } as Response));
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByTestId('unauthenticated')).toBeInTheDocument();
+  });
+
+  it('throws when authentication state is consumed outside its provider', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(() => render(<TestConsumer />)).toThrow('useAuth must be used within an AuthProvider');
   });
 
   it('loads the user when a token is stored', async () => {
@@ -306,5 +339,41 @@ describe('AuthProvider', () => {
       expect(screen.getByText('hello@example.com')).toBeInTheDocument();
       expect(localStorage.getItem('liyuan_auth_token')).toBeNull();
     });
+  });
+
+  it('keeps the direct login flow for accounts without two-factor authentication', async () => {
+    const signedInUser = {
+      id: '1',
+      email: 'hello@example.com',
+      displayName: 'Hello',
+      role: 'tourist',
+      emailVerified: true,
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: null }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ user: signedInUser }),
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AuthProvider>
+        <DirectLoginConsumer />
+      </AuthProvider>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Login directly' }));
+
+    expect(await screen.findByText('hello@example.com')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/auth\/login$/),
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+    );
   });
 });

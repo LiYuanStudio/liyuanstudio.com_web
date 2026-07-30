@@ -20,6 +20,7 @@ Repository secrets：
 - `VERCEL_TOKEN`
 - `CLOUDFLARE_API_TOKEN` — must allow **Cloudflare Pages** deploy (for `promote.yml`) and **Workers Scripts Edit** (for `deploy-console`)
 - `CLOUDFLARE_ACCOUNT_ID`
+- `DEPLOY_CONSOLE_API_KEY` — 仅供 Worker 与生产 API 之间认证；必须与 Vercel Production 同名环境变量完全一致
 
 Repository variables（已有默认值，但建议显式配置）：
 
@@ -45,6 +46,10 @@ Repository variables（已有默认值，但建议显式配置）：
 
 必须为 Preview 开启 Vercel Deployment Protection，并创建 Protection Bypass for Automation secret。该 secret 只保存为 Cloudflare Worker secret。没有平台保护时，知道原始 `*.vercel.app` 地址的人可以绕过 LA 登录，因此不满足“仅管理员访问”。
 
+### Vercel Production
+
+生产环境必须配置 `DEPLOY_CONSOLE_API_KEY`。它与 GitHub Repository Secret `DEPLOY_CONSOLE_API_KEY` 使用同一个至少 32 字符的随机值，使 Worker 能安全获得仅供控制台使用的登录令牌。修改该值后必须重新部署 Production API；不要把真实值写入仓库、构建日志或普通环境变量。
+
 ### 独立 Cloudflare Worker
 
 先根据实际域名修改 `deploy-console/wrangler.jsonc`：
@@ -64,19 +69,20 @@ npx wrangler secret put SESSION_SECRET --config deploy-console/wrangler.jsonc
 npx wrangler secret put GITHUB_TOKEN --config deploy-console/wrangler.jsonc
 npx wrangler secret put VERCEL_PROTECTION_BYPASS --config deploy-console/wrangler.jsonc
 npx wrangler secret put VERCEL_API_TOKEN --config deploy-console/wrangler.jsonc
+npx wrangler secret put LA_DEPLOY_CONSOLE_API_KEY --config deploy-console/wrangler.jsonc
 npm run deploy --workspace=deploy-console
 ```
 
-合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。该日常发布只更新 Worker 脚本和变量，需要 **Workers Scripts → Edit**；不要把 custom domains 重新加入 `wrangler.jsonc`，否则 Wrangler 会在每次发布时调用 Zone routes API。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
+合入 `deploy-console/**` 或手动触发 GitHub Actions **Deploy deploy-console Worker** 也会执行 `wrangler deploy`。工作流会把 Repository Secret `DEPLOY_CONSOLE_API_KEY` 同步为 Worker Secret `LA_DEPLOY_CONSOLE_API_KEY`，并在密钥缺失时拒绝部署。该日常发布只更新 Worker 脚本和变量，需要 **Workers Scripts → Edit**；不要把 custom domains 重新加入 `wrangler.jsonc`，否则 Wrangler 会在每次发布时调用 Zone routes API。站点灰度候选（`deploy.yml`）不依赖这次 Worker 发布；但 `deploy.liyuanstudio.com` / `gray.liyuanstudio.com` 上的控制台修复只有 Worker 更新后才会生效。
 
-`SESSION_SECRET` 至少 32 个随机字符。`VERCEL_API_TOKEN` 只需要读取部署信息，用于在发送 protection bypass 和站点 Cookie 前核验上游确实属于配置的 Vercel 项目。`GITHUB_TOKEN` 使用 fine-grained token，并配置为 **Only select repositories → `liyuanstudio.com_web`**，仓库权限只开放 **Actions: Read and write**、**Deployments: Read-only**、**Contents: Read-only**。如果 LiYuanStudio 组织要求审批，必须先确认 token 已获批准，再写入 Worker secret；否则 GitHub 会拒绝 `workflow_dispatch`。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
+`SESSION_SECRET` 和 `DEPLOY_CONSOLE_API_KEY` 均至少 32 个随机字符。轮换 `DEPLOY_CONSOLE_API_KEY` 时，先更新 Vercel Production 并重新部署 API，再更新 GitHub Repository Secret 并运行 **Deploy deploy-console Worker**，避免控制台和 API 长时间使用不同值。`VERCEL_API_TOKEN` 只需要读取部署信息，用于在发送 protection bypass 和站点 Cookie 前核验上游确实属于配置的 Vercel 项目。`GITHUB_TOKEN` 使用 fine-grained token，并配置为 **Only select repositories → `liyuanstudio.com_web`**，仓库权限只开放 **Actions: Read and write**、**Deployments: Read-only**、**Contents: Read-only**。如果 LiYuanStudio 组织要求审批，必须先确认 token 已获批准，再写入 Worker secret；否则 GitHub 会拒绝 `workflow_dispatch`。不要把任何真实值写入 `.dev.vars`、Wrangler 配置或 Git。
 
 ## 权限和请求流程
 
-- 控制台把邮箱和密码直接转发给生产 LA `/auth/login`，随后调用 `/auth/me`。
+- 控制台把邮箱和密码直接转发给生产 LA `/auth/login`；启用双重验证时继续代理 `/auth/2fa/login/verify` 和 `/auth/2fa/login/resend`，最终取得令牌后调用 `/auth/me`。
 - 只有 API 返回 `role=admin` 才会建立 15 分钟的加密、`HttpOnly`、`Secure`、`SameSite=Strict` 会话。
 - 生产 LA API（`LA_API_BASE_URL`）应公开可达；控制台登录不使用 `VERCEL_PROTECTION_BYPASS`。该 bypass 只用于灰度 Preview 网关代理。官网能登录但控制台不能，通常是账号不是 `admin`（检查 Vercel Production 的 `admin_emails`），而不是 Production Deployment Protection。
-- 登录失败会区分提示：邮箱/密码错误、需要 LA 管理员账号、或上游服务不可用；不再混成同一条文案。
+- 登录失败会区分提示：邮箱/密码错误、验证码或恢复码错误、请求过于频繁、需要 LA 管理员账号或上游服务不可用；只有网络和上游 5xx 会显示服务不可用。
 - 必须打开规范控制台地址登录（例如 `https://deploy.liyuanstudio.com`）。灰度域名 `gray.liyuanstudio.com` 不承载登录表单；未登录访问只会引导回控制台。
 - 登录页面签发 10 分钟有效的 HMAC 表单令牌，登录 POST 必须携带有效令牌；因此隐私浏览器省略或改写 `Origin` 时不会误伤合法登录。浏览器明确标记为 `Sec-Fetch-Site: cross-site` 的请求仍会被拒绝，校验失败会返回调试 ID 和可重新提交的新表单。
 - 灰度网关每次只解析 GitHub 中最新的 `gray` deployment，并通过 Vercel API 核对部署主机、项目 ID、团队 ID 与 READY 状态。任一核验失败都不会发送 protection bypass、Cookie 或请求正文。
