@@ -163,14 +163,14 @@ a {
 
 .section-heading-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
 }
 
 .section-more-link {
   flex: 0 0 auto;
-  margin-top: 12px;
+  margin-top: 0;
   color: #0066cc;
   font-size: 15px;
   font-weight: 700;
