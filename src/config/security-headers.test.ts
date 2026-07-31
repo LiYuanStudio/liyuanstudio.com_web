@@ -27,6 +27,11 @@ describe('production security headers', () => {
     const directives = readContentSecurityPolicy();
 
     expect(directives.get('img-src')).toEqual(["'self'", 'data:', 'blob:', 'https:']);
+    expect(directives.get('connect-src')).toEqual([
+      "'self'",
+      'https://cloudflareinsights.com',
+      'https://api.github.com',
+    ]);
     expect(directives.get('default-src')).toEqual(["'self'"]);
     expect(directives.get('base-uri')).toEqual(["'none'"]);
     expect(directives.get('object-src')).toEqual(["'none'"]);
