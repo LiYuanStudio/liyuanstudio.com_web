@@ -564,8 +564,7 @@ export function AdminPage() {
       <nav className="admin-nav" aria-label="后台导航">
         <div className="admin-nav-inner">
           <a className="admin-brand" href="/">
-            <img src="/png/logo.png" alt="" />
-            <span>LiYuan Studio</span>
+            <img src="/brand/liyuan-wordmark.svg" alt="LiYuan Studio" />
           </a>
           <div className="admin-nav-actions">
             <span className="admin-user">{state.user.displayName}</span>

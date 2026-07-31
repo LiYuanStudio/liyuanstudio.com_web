@@ -35,8 +35,9 @@ body {
 }
 
 .news-detail-brand img {
-  width: 28px;
-  height: 28px;
+  width: 140px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .news-detail-back {

@@ -97,8 +97,10 @@ function Nav({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<
   return (
     <nav className="profile-nav" aria-label="账号导航">
       <a className="profile-brand" href="/">
-        <img src="/png/logo.png" alt="" />
-        <span>LiYuan Studio</span>
+        <picture>
+          <source media="(max-width: 520px)" srcSet="/brand/liyuan-mark.svg" />
+          <img src="/brand/liyuan-wordmark.svg" alt="LiYuan Studio" />
+        </picture>
       </a>
       <div className="profile-nav-actions">
         {user && <a href={getOwnProfilePath(user.username)}>个人主页</a>}

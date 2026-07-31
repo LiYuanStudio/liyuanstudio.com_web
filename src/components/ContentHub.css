@@ -36,8 +36,9 @@
 }
 
 .hub-brand img {
-  width: 30px;
-  height: 30px;
+  width: 140px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .hub-nav-links {

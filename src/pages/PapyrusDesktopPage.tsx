@@ -290,8 +290,7 @@ function PapyrusNav({
     <nav ref={navRef} className="papyrus-nav" aria-label="Papyrus 导航">
       <div className="papyrus-nav-inner">
         <a className="papyrus-brand" href="/" aria-label="返回 LiYuan Studio 首页">
-          <img src="/png/logo.png" alt="" />
-          <span>LiYuan Studio</span>
+          <img src="/brand/liyuan-wordmark.svg" alt="" />
         </a>
         <AuthNav variant="papyrus" />
       </div>

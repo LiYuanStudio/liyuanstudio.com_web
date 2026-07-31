@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 240" role="img" aria-labelledby="title">
+  <title id="title">LiYuan Studio</title>
+
+  <path
+    d="M14 220V20l152 53v147H62"
+    fill="none"
+    stroke="#050505"
+    stroke-linecap="square"
+    stroke-linejoin="miter"
+    stroke-width="24"
+  />
+
+  <g fill="#050505">
+    <path d="M266 54h19v92h79v18h-98z" />
+    <path d="M442 54h19l-20 110h-19z" />
+    <path d="M521 54h24l43 52 43-52h24l-57 69v41h-20v-41z" />
+    <path d="M710 54h19v67c0 18 14 27 42 27s42-9 42-27V54h19v69c0 29-21 43-61 43s-61-14-61-43z" />
+    <path d="M963 54h23l61 110h-22l-15-28h-72l-15 28h-22zm-16 64h54l-27-50z" />
+    <path d="M1111 54h22l83 83V54h19v110h-22l-83-83v83h-19z" />
+  </g>
+
+  <text
+    x="266"
+    y="222"
+    fill="#5b5b5b"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="38"
+    font-weight="600"
+    letter-spacing="18"
+  >STUDIO</text>
+</svg>

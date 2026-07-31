@@ -13,8 +13,7 @@ export function ContentHubNav({ current, action }: ContentHubNavProps) {
   return (
     <nav className="hub-nav" aria-label="主导航">
       <a className="hub-brand" href="/">
-        <img src="/png/logo.png" alt="" />
-        <span>LiYuan Studio</span>
+        <img src="/brand/liyuan-wordmark.svg" alt="LiYuan Studio" />
       </a>
       <div className="hub-nav-links">
         <a aria-current={current === 'products' ? 'page' : undefined} href="/products/">产品</a>

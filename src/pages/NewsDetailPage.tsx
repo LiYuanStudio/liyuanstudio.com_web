@@ -85,8 +85,7 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
     <div className="news-detail-page">
       <nav className="news-detail-nav" aria-label="动态导航">
         <a className="news-detail-brand" href="/">
-          <img src="/png/logo.png" alt="" />
-          <span>LiYuan Studio</span>
+          <img src="/brand/liyuan-wordmark.svg" alt="LiYuan Studio" />
         </a>
         <a className="news-detail-back" href="/release/">返回最新动态</a>
       </nav>

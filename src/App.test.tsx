@@ -159,7 +159,8 @@ describe('utilities', () => {
 describe('Footer', () => {
   it('renders brand, links and copyright', () => {
     render(<Footer />);
-    expect(screen.getByText('LiYuan Studio')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'LiYuan Studio 首页' }))
+      .toHaveAttribute('href', '/');
     expect(screen.getByText('打造「有生机的科技」')).toBeInTheDocument();
     expect(screen.getByLabelText('GitHub')).toBeInTheDocument();
     expect(screen.getByText(/© \d{4} LiYuan Studio/)).toBeInTheDocument();
