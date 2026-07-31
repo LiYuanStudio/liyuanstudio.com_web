@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" role="img" aria-labelledby="title">
+  <title id="title">LiYuan Studio</title>
+  <path
+    d="M24 220V20l152 53v147H72"
+    fill="none"
+    stroke="#050505"
+    stroke-linecap="square"
+    stroke-linejoin="miter"
+    stroke-width="24"
+  />
+</svg>

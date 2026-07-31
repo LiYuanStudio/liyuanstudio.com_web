@@ -97,9 +97,13 @@ a {
 }
 
 .brand img {
-  width: 38px;
-  height: 38px;
+  width: 154px;
+  height: 40px;
   object-fit: contain;
+}
+
+.brand picture {
+  display: inline-flex;
 }
 
 .nav-links {
@@ -822,8 +826,8 @@ h1 {
 }
 
 .footer-brand-link img {
-  width: 40px;
-  height: 40px;
+  width: 164px;
+  height: 42px;
   object-fit: contain;
 }
 
@@ -1134,8 +1138,8 @@ h1 {
   }
 
   .footer-brand-link img {
-    width: 36px;
-    height: 36px;
+    width: 148px;
+    height: 38px;
   }
 
   .footer-tagline {

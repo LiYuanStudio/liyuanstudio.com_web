@@ -238,7 +238,7 @@ export function HeroVisual() {
       </div>
       <div className="hv-layer" data-depth="56">
         <div className="hv-chip hv-chip-product">
-          <img src="/png/logo.png" alt="" />
+          <img src="/brand/liyuan-mark.svg" alt="" />
           <span className="hv-chip-text">
             <strong>Papyrus Desktop</strong>
             <span>由简入深</span>

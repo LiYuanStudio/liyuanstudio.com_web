@@ -25,7 +25,7 @@ describe('RegisterPage', () => {
   it('renders the brand shell and register form without mode switch', () => {
     render(<RegisterPage />);
 
-    expect(screen.getByText('LiYuan Studio')).toBeInTheDocument();
+    expect(screen.getByAltText('LiYuan Studio')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /LiYuan Studio/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('heading', { name: '注册' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '登录' })).not.toBeInTheDocument();

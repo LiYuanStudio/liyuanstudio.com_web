@@ -26,7 +26,7 @@ describe('LoginPage', () => {
   it('renders the brand shell and login form', () => {
     render(<LoginPage />);
 
-    expect(screen.getByText('LiYuan Studio')).toBeInTheDocument();
+    expect(screen.getByAltText('LiYuan Studio')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /LiYuan Studio/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument();
   });

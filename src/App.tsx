@@ -41,8 +41,7 @@ export function Footer() {
         <div className="footer-main">
           <div className="footer-brand">
             <a className="footer-brand-link" href="/" aria-label="LiYuan Studio 首页">
-              <img src="/png/logo.png" alt="" />
-              <span>LiYuan Studio</span>
+              <img src="/brand/liyuan-wordmark.svg" alt="" />
             </a>
             <p className="footer-tagline">打造「有生机的科技」</p>
             <div className="footer-socials">
@@ -285,8 +284,10 @@ export function App() {
       <nav ref={navRef} className="nav" aria-label="主导航">
         <div className="nav-inner">
           <a className="brand" href="/" aria-label="LiYuan Studio 首页">
-            <img src="/png/logo.png" alt="" />
-            <span>LiYuan Studio</span>
+            <picture>
+              <source media="(max-width: 760px)" srcSet="/brand/liyuan-mark.svg" />
+              <img src="/brand/liyuan-wordmark.svg" alt="" />
+            </picture>
           </a>
           <div className="nav-links">
             <a className="nav-item" href="/products/">

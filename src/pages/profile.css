@@ -58,8 +58,13 @@ body {
 }
 
 .profile-brand img {
-  width: 28px;
-  height: 28px;
+  width: 140px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.profile-brand picture {
+  display: inline-flex;
 }
 
 .profile-nav-actions {
@@ -492,8 +497,9 @@ button.profile-avatar-upload {
 }
 
 @media (max-width: 520px) {
-  .profile-brand span {
-    display: none;
+  .profile-brand img {
+    width: 32px;
+    height: 32px;
   }
 }
 
