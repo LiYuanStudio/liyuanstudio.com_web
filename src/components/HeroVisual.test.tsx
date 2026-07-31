@@ -101,6 +101,10 @@ describe('HeroVisual', () => {
     expect(container.querySelectorAll('[data-depth]').length).toBeGreaterThan(0);
     expect(container.querySelector('.hv-orb-core')).toBeInTheDocument();
     expect(container.querySelector('.hv-chip-product')).toHaveTextContent('Papyrus Desktop');
+    expect(container.querySelector('.hv-chip-product img')).toHaveAttribute(
+      'src',
+      '/brand/papyrus-desktop.svg',
+    );
     expect(container.querySelector('.hv-chip-cli')).toHaveTextContent('Papyrus CLI');
   });
 
