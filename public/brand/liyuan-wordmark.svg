@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 240" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1010 240" role="img" aria-labelledby="title">
   <title id="title">LiYuan Studio</title>
 
   <path
@@ -11,18 +11,18 @@
   />
 
   <g fill="#050505">
-    <path d="M266 54h19v92h79v18h-98z" />
-    <path d="M442 54h19l-20 110h-19z" />
-    <path d="M521 54h24l43 52 43-52h24l-57 69v41h-20v-41z" />
-    <path d="M710 54h19v67c0 18 14 27 42 27s42-9 42-27V54h19v69c0 29-21 43-61 43s-61-14-61-43z" />
-    <path d="M963 54h23l61 110h-22l-15-28h-72l-15 28h-22zm-16 64h54l-27-50z" />
-    <path d="M1111 54h22l83 83V54h19v110h-22l-83-83v83h-19z" />
+    <path d="M255 54h19v92h70v18h-89z" />
+    <path d="M411 54h20l-31 110h-20z" />
+    <path d="M461 54h22l36 48 36-48h22l-48 65v45h-20v-45z" />
+    <path d="M601 54h19v67c0 18 11 27 33 27s33-9 33-27V54h19v69c0 29-18 43-52 43s-52-14-52-43z" />
+    <path d="M786 54h20l52 110h-21l-13-28h-57l-13 28h-20zm-11 64h41l-20-50z" />
+    <path d="M891 54h20l69 83V54h19v110h-20l-69-83v83h-19z" />
   </g>
 
   <text
-    x="266"
+    x="255"
     y="222"
-    fill="#5b5b5b"
+    fill="#737373"
     font-family="Arial, Helvetica, sans-serif"
     font-size="38"
     font-weight="600"
