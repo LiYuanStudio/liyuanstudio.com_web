@@ -113,12 +113,33 @@ describe('auth routes', () => {
     mockUserModel.create.mockReset();
     mockPendingRegistrationModel.findOne.mockReset();
     mockPendingRegistrationModel.findOneAndUpdate.mockReset();
+    mockPendingRegistrationModel.findOneAndUpdate.mockImplementation(async (_filter, update) => {
+      if (!update || typeof update !== 'object' || !('$inc' in update)) {
+        return null as never;
+      }
+      const pending = await mockPendingRegistrationModel.findOne({});
+      if (!pending) return null as never;
+      pending.failedAttempts = (pending.failedAttempts ?? 0) + 1;
+      return pending as never;
+    });
     mockPendingRegistrationModel.create.mockReset();
     mockPendingRegistrationModel.deleteOne.mockReset();
     mockAuthThrottleModel.findOne.mockReset();
     mockAuthThrottleModel.findOne.mockResolvedValue(null);
     mockAuthThrottleModel.findOneAndUpdate.mockReset();
-    mockAuthThrottleModel.findOneAndUpdate.mockResolvedValue(null as never);
+    mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter, update) => {
+      const updateRecord = update as {
+        $inc?: { attempts?: number };
+        $set?: { attempts?: number; expiresAt?: Date; lockedUntil?: Date };
+      };
+      const increment = updateRecord.$inc?.attempts ?? 0;
+      return {
+        key: (filter as { key?: string }).key ?? 'test-throttle',
+        attempts: updateRecord.$set?.attempts ?? 1 + increment,
+        expiresAt: updateRecord.$set?.expiresAt ?? new Date(Date.now() + 60_000),
+        lockedUntil: updateRecord.$set?.lockedUntil,
+      } as never;
+    });
     mockAuthThrottleModel.deleteMany.mockReset();
     mockAuthThrottleModel.deleteMany.mockResolvedValue({ deletedCount: 0 } as never);
     mockTwoFactorChallengeModel.findOne.mockReset();
@@ -283,6 +304,43 @@ describe('auth routes', () => {
       expect(mockSendRegistrationCodeEmail).not.toHaveBeenCalled();
     });
 
+    it('allows only one registration email when send requests race', async () => {
+      const app = await makeApp();
+      const reservedKeys = new Set<string>();
+      mockUserModel.findOne.mockResolvedValue(null);
+      mockPendingRegistrationModel.findOne.mockResolvedValue(null);
+      mockPendingRegistrationModel.findOneAndUpdate.mockResolvedValue(pendingDoc() as never);
+      mockBcrypt.hash.mockResolvedValue('hashed-password' as never);
+      mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter) => {
+        const key = String((filter as { key?: string }).key ?? '');
+        if (reservedKeys.has(key)) return null as never;
+        reservedKeys.add(key);
+        return {
+          key,
+          attempts: 1,
+          lockedUntil: new Date(Date.now() + 60_000),
+          expiresAt: new Date(Date.now() + 60_000),
+        } as never;
+      });
+
+      const responses = await Promise.all(
+        Array.from({ length: 6 }, () => app.request('/api/auth/register/send-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'hello@liyuanstudio.com',
+            password: 'password123',
+            displayName: 'Hello User',
+          }),
+        })),
+      );
+
+      const statuses = responses.map((response) => response.status);
+      expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+      expect(statuses.filter((status) => status === 429)).toHaveLength(5);
+      expect(mockSendRegistrationCodeEmail).toHaveBeenCalledTimes(1);
+    });
+
     it('rejects passwords without letters and numbers', async () => {
       const app = await makeApp();
 
@@ -409,7 +467,15 @@ describe('auth routes', () => {
 
       expect(res.status).toBe(400);
       expect(pending.failedAttempts).toBe(1);
-      expect(pending.save).toHaveBeenCalled();
+      expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _id: pending._id,
+          failedAttempts: { $lt: 5 },
+        }),
+        { $inc: { failedAttempts: 1 } },
+        { new: true },
+      );
+      expect(pending.save).not.toHaveBeenCalled();
     });
 
     it('locks registration verification after too many wrong codes', async () => {
@@ -425,8 +491,17 @@ describe('auth routes', () => {
 
       expect(res.status).toBe(429);
       expect(pending.failedAttempts).toBe(5);
-      expect(pending.lockedUntil).toEqual(expect.any(Date));
-      expect(pending.save).toHaveBeenCalled();
+      expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
+      expect(mockPendingRegistrationModel.findOneAndUpdate).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          _id: pending._id,
+          failedAttempts: { $gte: 5 },
+        }),
+        { $set: { lockedUntil: expect.any(Date) } },
+        { new: true },
+      );
+      expect(pending.save).not.toHaveBeenCalled();
     });
 
     it('returns 429 when registration verification is still locked', async () => {
@@ -447,6 +522,60 @@ describe('auth routes', () => {
       expect(res.status).toBe(429);
       expect(pending.save).not.toHaveBeenCalled();
       expect(mockUserModel.create).not.toHaveBeenCalled();
+    });
+
+    it('enforces the verification attempt limit across concurrent wrong codes', async () => {
+      const app = await makeApp();
+      let persistedAttempts = 0;
+      let saveCalls = 0;
+      let releaseSaves: (() => void) | undefined;
+      const allSavesStarted = new Promise<void>((resolve) => {
+        releaseSaves = resolve;
+      });
+
+      mockPendingRegistrationModel.findOne.mockImplementation(async () => {
+        const snapshot = pendingDoc({
+          codeHash: hashToken('999999'),
+          failedAttempts: persistedAttempts,
+        });
+        snapshot.save = vi.fn(async () => {
+          saveCalls += 1;
+          if (saveCalls === 6) releaseSaves?.();
+          await allSavesStarted;
+          persistedAttempts = snapshot.failedAttempts;
+        });
+        return snapshot as never;
+      });
+      mockPendingRegistrationModel.findOneAndUpdate.mockImplementation(async (_filter, update) => {
+        if (!update || typeof update !== 'object' || !('$inc' in update)) {
+          return pendingDoc({
+            codeHash: hashToken('999999'),
+            failedAttempts: persistedAttempts,
+          }) as never;
+        }
+        if (persistedAttempts >= 5) return null as never;
+        persistedAttempts += 1;
+        return pendingDoc({
+          codeHash: hashToken('999999'),
+          failedAttempts: persistedAttempts,
+        }) as never;
+      });
+
+      const responses = await Promise.all(
+        Array.from({ length: 6 }, (_, index) => app.request('/api/auth/register/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'hello@liyuanstudio.com',
+            code: String(index).padStart(6, '0'),
+          }),
+        })),
+      );
+      const statuses = responses.map((response) => response.status);
+
+      expect(statuses.filter((status) => status === 400)).toHaveLength(4);
+      expect(statuses.filter((status) => status === 429)).toHaveLength(2);
+      expect(persistedAttempts).toBe(5);
     });
   });
 
@@ -1323,6 +1452,17 @@ describe('auth routes', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(emailThrottle as never)
       .mockResolvedValueOnce(ipThrottle as never);
+    mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter, update) => {
+      const key = String((filter as { key?: string }).key ?? '');
+      const throttle = key.includes(':email:') ? emailThrottle : ipThrottle;
+      const increment = (update as { $inc?: { attempts?: number } }).$inc?.attempts ?? 0;
+      throttle.attempts += increment;
+      throttle.expiresAt = new Date(Date.now() + 60_000);
+      if (throttle.attempts >= 5) {
+        throttle.lockedUntil = new Date(Date.now() + 10 * 60_000);
+      }
+      return throttle as never;
+    });
     mockUserModel.findOne.mockResolvedValue(null);
 
     const res = await app.request('/api/auth/login', {
@@ -1336,6 +1476,67 @@ describe('auth routes', () => {
     expect(ipThrottle.attempts).toBe(5);
     expect(emailThrottle.lockedUntil).toEqual(expect.any(Date));
     expect(ipThrottle.lockedUntil).toEqual(expect.any(Date));
+  });
+
+  it('enforces the login failure limit across concurrent attempts', async () => {
+    const app = await makeApp();
+    const attemptsByKey = new Map<string, number>();
+    mockUserModel.findOne.mockResolvedValue(null);
+    mockAuthThrottleModel.findOne.mockImplementation(async (filter) => {
+      const key = String((filter as { key?: string }).key ?? '');
+      const attempts = attemptsByKey.get(key) ?? 0;
+      if (attempts === 0) return null;
+      return {
+        key,
+        attempts,
+        lockedUntil: attempts >= 5 ? new Date(Date.now() + 10 * 60_000) : undefined,
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never;
+    });
+    mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter, update) => {
+      const key = String((filter as { key?: string }).key ?? '');
+      const increment = (update as { $inc?: { attempts?: number } }).$inc?.attempts ?? 0;
+      const initialAttempts = (update as { $set?: { attempts?: number } }).$set?.attempts;
+      const attempts = attemptsByKey.get(key) ?? 0;
+      if (increment) {
+        if (attempts >= 5) return null as never;
+        const next = attempts + increment;
+        attemptsByKey.set(key, next);
+        return {
+          key,
+          attempts: next,
+          expiresAt: new Date(Date.now() + 60_000),
+        } as never;
+      }
+      if (initialAttempts !== undefined) {
+        if (attempts > 0) return null as never;
+        attemptsByKey.set(key, initialAttempts);
+        return {
+          key,
+          attempts: initialAttempts,
+          expiresAt: new Date(Date.now() + 60_000),
+        } as never;
+      }
+      return {
+        key,
+        attempts,
+        lockedUntil: new Date(Date.now() + 10 * 60_000),
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never;
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 6 }, () => app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      })),
+    );
+
+    const statuses = responses.map((response) => response.status);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(4);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(2);
+    expect(attemptsByKey.get('login:email:hello@liyuanstudio.com')).toBe(5);
   });
 
   it('POST /api/auth/login clears throttles after successful login', async () => {
@@ -1621,6 +1822,37 @@ describe('auth routes', () => {
     });
   });
 
+  it('keeps the one-minute cooldown when a reset throttle is first created', async () => {
+    const app = await makeApp();
+    mockUserModel.findOne.mockResolvedValue(null);
+    mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter, update) => {
+      const updateRecord = update as {
+        $inc?: { attempts?: number };
+        $set?: { attempts?: number; expiresAt?: Date; lockedUntil?: Date };
+      };
+      if (updateRecord.$inc) return null as never;
+      return {
+        key: (filter as { key?: string }).key,
+        attempts: updateRecord.$set?.attempts ?? 1,
+        expiresAt: updateRecord.$set?.expiresAt ?? new Date(Date.now() + 15 * 60_000),
+        lockedUntil: updateRecord.$set?.lockedUntil,
+      } as never;
+    });
+
+    const response = await app.request('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com' }),
+    });
+
+    expect(response.status).toBe(200);
+    const initialReservations = mockAuthThrottleModel.findOneAndUpdate.mock.calls
+      .map(([, update]) => update as { $set?: { attempts?: number; lockedUntil?: Date } })
+      .filter((update) => update.$set?.attempts === 1);
+    expect(initialReservations).toHaveLength(2);
+    expect(initialReservations.every((update) => update.$set?.lockedUntil instanceof Date)).toBe(true);
+  });
+
   it('POST /api/auth/forgot-password returns generic success during cooldown', async () => {
     const app = await makeApp();
     mockAuthThrottleModel.findOne
@@ -1642,6 +1874,66 @@ describe('auth routes', () => {
     expect(await res.json()).toEqual({
       message: '如果该邮箱已注册，我们已发送重置密码链接。',
     });
+  });
+
+  it('caps concurrent password-reset sends at the throttle limit', async () => {
+    const app = await makeApp();
+    const attemptsByKey = new Map<string, number>();
+    mockUserModel.findOne.mockResolvedValue(userDoc() as never);
+    mockAuthThrottleModel.findOne.mockImplementation(async (filter) => {
+      const key = String((filter as { key?: string }).key ?? '');
+      const attempts = attemptsByKey.get(key) ?? 0;
+      if (attempts === 0) return null;
+      return {
+        key,
+        attempts,
+        lockedUntil: attempts >= 3 ? new Date(Date.now() + 60_000) : undefined,
+        expiresAt: new Date(Date.now() + 15 * 60_000),
+      } as never;
+    });
+    mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter, update) => {
+      const key = String((filter as { key?: string }).key ?? '');
+      const increment = (update as { $inc?: { attempts?: number } }).$inc?.attempts ?? 0;
+      const initialAttempts = (update as { $set?: { attempts?: number } }).$set?.attempts;
+      const attempts = attemptsByKey.get(key) ?? 0;
+      if (increment) {
+        if (attempts >= 3) return null as never;
+        const next = attempts + increment;
+        attemptsByKey.set(key, next);
+        return {
+          key,
+          attempts: next,
+          expiresAt: new Date(Date.now() + 15 * 60_000),
+        } as never;
+      }
+      if (initialAttempts !== undefined) {
+        if (attempts > 0) return null as never;
+        attemptsByKey.set(key, initialAttempts);
+        return {
+          key,
+          attempts: initialAttempts,
+          expiresAt: new Date(Date.now() + 15 * 60_000),
+        } as never;
+      }
+      return {
+        key,
+        attempts,
+        lockedUntil: new Date(Date.now() + 60_000),
+        expiresAt: new Date(Date.now() + 15 * 60_000),
+      } as never;
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 6 }, () => app.request('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com' }),
+      })),
+    );
+
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+    expect(mockSendPasswordResetEmail).toHaveBeenCalledTimes(3);
+    expect(attemptsByKey.get('forgot:email:hello@liyuanstudio.com')).toBe(3);
   });
 
   it('POST /api/auth/forgot-password clears reset token fields when email sending fails', async () => {

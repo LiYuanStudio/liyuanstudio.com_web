@@ -256,10 +256,12 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
 
 export function App() {
   const navRef = useRef<HTMLElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const productsRef = useRef<HTMLElement>(null);
   const newsRef = useRef<HTMLElement>(null);
   const blogRef = useRef<HTMLElement>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -278,6 +280,36 @@ export function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const nav = navRef.current;
+      if (nav && event.target instanceof Node && !nav.contains(event.target)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsMobileMenuOpen(false);
+      menuButtonRef.current?.focus();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMobileMenuOpen]);
+
+  const handleMenuNavigation = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest('a')) {
+      setIsMobileMenuOpen(false);
+    }
+  };
+
   return (
     <>
       <SkipLink />
@@ -289,18 +321,39 @@ export function App() {
               <img src="/brand/liyuan-wordmark.svg" alt="" />
             </picture>
           </a>
-          <div className="nav-links">
-            <a className="nav-item" href="/products/">
-              产品
-            </a>
-            <a className="nav-item" href="/release/">
-              动态
-            </a>
-            <a className="nav-item" href="/blog/">
-              博客
-            </a>
+          <button
+            ref={menuButtonRef}
+            className="mobile-nav-toggle"
+            type="button"
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="main-nav-menu"
+            aria-label={isMobileMenuOpen ? '关闭主菜单' : '打开主菜单'}
+            onClick={() => setIsMobileMenuOpen((isOpen) => !isOpen)}
+          >
+            <span className="mobile-nav-toggle-icon" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </button>
+          <div
+            id="main-nav-menu"
+            className={`nav-menu${isMobileMenuOpen ? ' nav-menu-open' : ''}`}
+            onClick={handleMenuNavigation}
+          >
+            <div className="nav-links">
+              <a className="nav-item" href="/products/">
+                产品
+              </a>
+              <a className="nav-item" href="/release/">
+                动态
+              </a>
+              <a className="nav-item" href="/blog/">
+                博客
+              </a>
+            </div>
+            <AuthNav />
           </div>
-          <AuthNav />
         </div>
       </nav>
 
