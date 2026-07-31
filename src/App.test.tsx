@@ -70,6 +70,48 @@ describe('App', () => {
       .toEqual(['/products/', '/release/', '/blog/']);
   });
 
+  it('opens and closes the mobile navigation accessibly', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const menuButton = screen.getByRole('button', { name: '打开主菜单' });
+    const menu = document.querySelector('#main-nav-menu');
+
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    expect(menu).not.toHaveClass('nav-menu-open');
+
+    await user.click(menuButton);
+
+    expect(screen.getByRole('button', { name: '关闭主菜单' }))
+      .toHaveAttribute('aria-expanded', 'true');
+    expect(menu).toHaveClass('nav-menu-open');
+    expect(within(menu as HTMLElement).getByRole('link', { name: '产品' }))
+      .toHaveAttribute('href', '/products/');
+    expect(within(menu as HTMLElement).getByRole('link', { name: '登录' }))
+      .toHaveAttribute('href', '/login/');
+    expect(within(menu as HTMLElement).getByRole('link', { name: '注册' }))
+      .toHaveAttribute('href', '/register/');
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.getByRole('button', { name: '打开主菜单' }))
+      .toHaveAttribute('aria-expanded', 'false');
+    expect(menu).not.toHaveClass('nav-menu-open');
+    expect(menuButton).toHaveFocus();
+  });
+
+  it('closes the mobile navigation when clicking outside it', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: '打开主菜单' }));
+    expect(document.querySelector('#main-nav-menu')).toHaveClass('nav-menu-open');
+
+    await user.click(screen.getByRole('heading', { name: '打造「有生机的科技」' }));
+
+    expect(document.querySelector('#main-nav-menu')).not.toHaveClass('nav-menu-open');
+  });
+
   it('has no automated accessibility violations in the loaded empty state', async () => {
     const { container } = renderApp();
 
@@ -105,6 +147,8 @@ describe('App', () => {
     expect(screen.queryByRole('link', { name: '后台' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/li-yuan/');
+    expect(within(document.querySelector('#main-nav-menu') as HTMLElement)
+      .getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/li-yuan/');
   });
 
   it('does not use the display name as a homepage public profile slug', async () => {

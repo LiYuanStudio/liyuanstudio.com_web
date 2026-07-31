@@ -276,30 +276,115 @@ async function hasLockedThrottle(keys: string[], now: Date): Promise<boolean> {
   return throttles.some((throttle) => isActiveDate(throttle?.lockedUntil, now));
 }
 
-async function recordLoginFailure(key: string, now: Date): Promise<boolean> {
-  const throttle = await AuthThrottleModel.findOne({ key });
-  if (!throttle || throttle.expiresAt <= now) {
-    const lockedUntil = LOGIN_MAX_ATTEMPTS <= 1 ? new Date(now.getTime() + LOGIN_LOCK_MS) : undefined;
-    await AuthThrottleModel.findOneAndUpdate(
-      { key },
+type ThrottleReservation = {
+  accepted: boolean;
+  locked: boolean;
+};
+
+async function reserveThrottleAttempt(
+  key: string,
+  now: Date,
+  windowMs: number,
+  maxAttempts: number,
+  lockMs: number,
+  lockEveryAcceptedAttempt = false,
+  retryCount = 0,
+): Promise<ThrottleReservation> {
+  const expiresAt = new Date(now.getTime() + windowMs);
+  const lockedUntil = new Date(now.getTime() + lockMs);
+  const active = await AuthThrottleModel.findOneAndUpdate(
+    {
+      key,
+      expiresAt: { $gt: now },
+      attempts: { $lt: maxAttempts },
+      $or: [
+        { lockedUntil: { $exists: false } },
+        { lockedUntil: { $lte: now } },
+      ],
+    },
+    {
+      $inc: { attempts: 1 },
+      $set: { expiresAt },
+    },
+    { new: true },
+  );
+
+  if (active) {
+    const attempts = active.attempts ?? 1;
+    if (lockEveryAcceptedAttempt || attempts >= maxAttempts) {
+      await AuthThrottleModel.findOneAndUpdate(
+        {
+          key,
+          expiresAt: { $gt: now },
+          attempts: { $gte: lockEveryAcceptedAttempt ? 1 : maxAttempts },
+        },
+        { $set: { lockedUntil } },
+        { new: true },
+      );
+      return { accepted: true, locked: lockEveryAcceptedAttempt || attempts >= maxAttempts };
+    }
+    return { accepted: true, locked: false };
+  }
+
+  try {
+    const initial = await AuthThrottleModel.findOneAndUpdate(
       {
         key,
-        attempts: 1,
-        lockedUntil,
-        expiresAt: new Date(now.getTime() + LOGIN_WINDOW_MS),
+        $or: [
+          { expiresAt: { $lte: now } },
+          { expiresAt: { $exists: false } },
+        ],
+      },
+      {
+        $set: {
+          key,
+          attempts: 1,
+          expiresAt,
+          ...(lockEveryAcceptedAttempt || maxAttempts <= 1 ? { lockedUntil } : {}),
+        },
+        ...(lockEveryAcceptedAttempt || maxAttempts <= 1 ? {} : { $unset: { lockedUntil: 1 } }),
       },
       { upsert: true, new: true },
     );
-    return Boolean(lockedUntil);
+    if (initial) {
+      return { accepted: true, locked: lockEveryAcceptedAttempt || maxAttempts <= 1 };
+    }
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) {
+      throw error;
+    }
   }
 
-  throttle.attempts = (throttle.attempts ?? 0) + 1;
-  throttle.expiresAt = new Date(now.getTime() + LOGIN_WINDOW_MS);
-  if (throttle.attempts >= LOGIN_MAX_ATTEMPTS) {
-    throttle.lockedUntil = new Date(now.getTime() + LOGIN_LOCK_MS);
+  const latest = await AuthThrottleModel.findOne({ key });
+  if (
+    retryCount < 3 &&
+    latest &&
+    latest.expiresAt > now &&
+    !isActiveDate(latest.lockedUntil, now) &&
+    (latest.attempts ?? 0) < maxAttempts
+  ) {
+    return reserveThrottleAttempt(
+      key,
+      now,
+      windowMs,
+      maxAttempts,
+      lockMs,
+      lockEveryAcceptedAttempt,
+      retryCount + 1,
+    );
   }
-  await throttle.save();
-  return isActiveDate(throttle.lockedUntil, now);
+  return { accepted: false, locked: true };
+}
+
+async function recordLoginFailure(key: string, now: Date): Promise<boolean> {
+  const reservation = await reserveThrottleAttempt(
+    key,
+    now,
+    LOGIN_WINDOW_MS,
+    LOGIN_MAX_ATTEMPTS,
+    LOGIN_LOCK_MS,
+  );
+  return reservation.locked;
 }
 
 async function clearThrottleKeys(keys: string[]): Promise<void> {
@@ -316,25 +401,16 @@ async function isForgotPasswordLimited(keys: string[], now: Date): Promise<boole
   });
 }
 
-async function recordForgotPasswordAttempt(key: string, now: Date): Promise<void> {
-  const throttle = await AuthThrottleModel.findOne({ key });
-  if (!throttle || throttle.expiresAt <= now) {
-    await AuthThrottleModel.findOneAndUpdate(
-      { key },
-      {
-        key,
-        attempts: 1,
-        lockedUntil: new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS),
-        expiresAt: new Date(now.getTime() + FORGOT_PASSWORD_WINDOW_MS),
-      },
-      { upsert: true, new: true },
-    );
-    return;
-  }
-
-  throttle.attempts = (throttle.attempts ?? 0) + 1;
-  throttle.lockedUntil = new Date(now.getTime() + FORGOT_PASSWORD_COOLDOWN_MS);
-  await throttle.save();
+async function recordForgotPasswordAttempt(key: string, now: Date): Promise<boolean> {
+  const reservation = await reserveThrottleAttempt(
+    key,
+    now,
+    FORGOT_PASSWORD_WINDOW_MS,
+    FORGOT_PASSWORD_MAX_ATTEMPTS,
+    FORGOT_PASSWORD_COOLDOWN_MS,
+    true,
+  );
+  return reservation.accepted;
 }
 
 async function isRegistrationSendLimited(keys: string[], now: Date): Promise<boolean> {
@@ -347,17 +423,16 @@ async function isRegistrationSendLimited(keys: string[], now: Date): Promise<boo
   });
 }
 
-async function recordRegistrationSendAttempt(key: string, now: Date): Promise<void> {
-  await AuthThrottleModel.findOneAndUpdate(
-    { key },
-    {
-      key,
-      attempts: 1,
-      lockedUntil: new Date(now.getTime() + REGISTRATION_RATE_LIMIT_MS),
-      expiresAt: new Date(now.getTime() + REGISTRATION_RATE_LIMIT_MS),
-    },
-    { upsert: true, new: true },
+async function recordRegistrationSendAttempt(key: string, now: Date): Promise<boolean> {
+  const reservation = await reserveThrottleAttempt(
+    key,
+    now,
+    REGISTRATION_RATE_LIMIT_MS,
+    REGISTRATION_SEND_MAX_ATTEMPTS,
+    REGISTRATION_RATE_LIMIT_MS,
+    true,
   );
+  return reservation.accepted;
 }
 
 async function startTwoFactorChallenge(
@@ -560,6 +635,12 @@ app.post('/register/send-code', async (c) => {
   if (await isRegistrationSendLimited(registrationThrottleKeys, now)) {
     return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
   }
+  const registrationReservations = await Promise.all(
+    registrationThrottleKeys.map((key) => recordRegistrationSendAttempt(key, now)),
+  );
+  if (registrationReservations.some((accepted) => !accepted)) {
+    return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
+  }
 
   const code = createRegistrationCode();
   const codeHash = hashToken(code);
@@ -581,7 +662,6 @@ app.post('/register/send-code', async (c) => {
 
   try {
     await sendRegistrationCodeEmail({ email, displayName, code });
-    await Promise.all(registrationThrottleKeys.map((key) => recordRegistrationSendAttempt(key, now)));
   } catch (error) {
     await PendingRegistrationModel.deleteOne({ email });
     return jsonError(c, '验证码邮件发送失败', 502, {
@@ -610,18 +690,42 @@ app.post('/register/verify', requireTrustedSessionCreation, async (c) => {
   }
 
   const now = new Date();
-  if (isActiveDate(pending.lockedUntil, now)) {
+  if (
+    isActiveDate(pending.lockedUntil, now) ||
+    (pending.failedAttempts ?? 0) >= REGISTRATION_VERIFY_MAX_ATTEMPTS
+  ) {
     return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
   }
 
-  if (!hashesMatch(pending.codeHash, hashToken(code))) {
-    pending.failedAttempts = (pending.failedAttempts ?? 0) + 1;
-    if (pending.failedAttempts >= REGISTRATION_VERIFY_MAX_ATTEMPTS) {
-      pending.lockedUntil = new Date(now.getTime() + REGISTRATION_VERIFY_LOCK_MS);
-      await pending.save();
+  const attempted = await PendingRegistrationModel.findOneAndUpdate(
+    {
+      _id: pending._id,
+      expiresAt: { $gt: now },
+      failedAttempts: { $lt: REGISTRATION_VERIFY_MAX_ATTEMPTS },
+      $or: [
+        { lockedUntil: { $exists: false } },
+        { lockedUntil: { $lte: now } },
+      ],
+    },
+    { $inc: { failedAttempts: 1 } },
+    { new: true },
+  );
+  if (!attempted) {
+    return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
+  }
+
+  if (!hashesMatch(attempted.codeHash, hashToken(code))) {
+    if ((attempted.failedAttempts ?? 0) >= REGISTRATION_VERIFY_MAX_ATTEMPTS) {
+      await PendingRegistrationModel.findOneAndUpdate(
+        {
+          _id: attempted._id,
+          failedAttempts: { $gte: REGISTRATION_VERIFY_MAX_ATTEMPTS },
+        },
+        { $set: { lockedUntil: new Date(now.getTime() + REGISTRATION_VERIFY_LOCK_MS) } },
+        { new: true },
+      );
       return jsonError(c, '验证码错误次数过多，请稍后再试', 429);
     }
-    await pending.save();
     return jsonError(c, '验证码错误', 400);
   }
 
@@ -631,13 +735,13 @@ app.post('/register/verify', requireTrustedSessionCreation, async (c) => {
     return jsonError(c, '该邮箱已被注册', 409);
   }
 
-  const username = await createUniqueUsername(pending.displayName, pending.email);
+  const username = await createUniqueUsername(attempted.displayName, attempted.email);
   const user = await UserModel.create({
-    email: pending.email,
-    passwordHash: pending.passwordHash,
-    displayName: pending.displayName,
+    email: attempted.email,
+    passwordHash: attempted.passwordHash,
+    displayName: attempted.displayName,
     username,
-    role: isAdminEmail(pending.email) ? 'admin' : 'tourist',
+    role: isAdminEmail(attempted.email) ? 'admin' : 'tourist',
     tokenVersion: 0,
     emailVerified: true,
   });
@@ -762,7 +866,10 @@ app.post('/login', requireTrustedSessionCreation, async (c) => {
     if (await isForgotPasswordLimited(sendKeys, now)) {
       return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
     }
-    await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+    const reservations = await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+    if (reservations.some((accepted) => !accepted)) {
+      return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
+    }
     try {
       const challengeToken = await startTwoFactorChallenge(user, 'login');
       return c.json({
@@ -927,6 +1034,10 @@ app.post('/2fa/login/resend', async (c) => {
   ) {
     return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
   }
+  const reservations = await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+  if (reservations.some((accepted) => !accepted)) {
+    return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
+  }
 
   const code = createRegistrationCode();
   const codeHash = hashToken(code);
@@ -964,7 +1075,6 @@ app.post('/2fa/login/resend', async (c) => {
       ? rejectTwoFactorChallenge(c, 'login', 'already_consumed')
       : jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
   }
-  await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
   try {
     await sendTwoFactorCodeEmail({
       email: user.email,
@@ -1032,7 +1142,10 @@ async function beginAccountTwoFactorChallenge(
   if (await isForgotPasswordLimited(sendKeys, now)) {
     return { response: jsonError(c, '验证码发送过于频繁，请稍后再试', 429) };
   }
-  await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+  const reservations = await Promise.all(sendKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+  if (reservations.some((accepted) => !accepted)) {
+    return { response: jsonError(c, '验证码发送过于频繁，请稍后再试', 429) };
+  }
   try {
     return { user, challengeToken: await startTwoFactorChallenge(user, purpose) };
   } catch (error) {
@@ -1239,7 +1352,12 @@ app.post('/forgot-password', async (c) => {
   if (await isForgotPasswordLimited(forgotThrottleKeys, now)) {
     return c.json({ message: GENERIC_PASSWORD_RESET_MESSAGE });
   }
-  await Promise.all(forgotThrottleKeys.map((key) => recordForgotPasswordAttempt(key, now)));
+  const reservations = await Promise.all(
+    forgotThrottleKeys.map((key) => recordForgotPasswordAttempt(key, now)),
+  );
+  if (reservations.some((accepted) => !accepted)) {
+    return c.json({ message: GENERIC_PASSWORD_RESET_MESSAGE });
+  }
 
   const user = await UserModel.findOne({ email });
   if (user) {
