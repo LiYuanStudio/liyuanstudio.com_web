@@ -66,8 +66,28 @@ describe('App', () => {
     expect(navigation.getByRole('link', { name: '产品' })).toHaveAttribute('href', '/products/');
     expect(navigation.getByRole('link', { name: '动态' })).toHaveAttribute('href', '/release/');
     expect(navigation.getByRole('link', { name: '博客' })).toHaveAttribute('href', '/blog/');
-    expect(screen.getAllByRole('link', { name: /查看更多/ }).map((link) => link.getAttribute('href')))
+    const sectionLinks = screen.getAllByRole('link', { name: /查看更多/ });
+    expect(sectionLinks.map((link) => link.getAttribute('href')))
       .toEqual(['/products/', '/release/', '/blog/']);
+
+    const sections = [
+      { selector: '#products', gridSelector: '.product-grid', href: '/products/' },
+      { selector: '#news', gridSelector: '.news-grid', href: '/release/' },
+      { selector: '#blog', gridSelector: '.blog-grid', href: '/blog/' },
+    ];
+
+    sections.forEach(({ selector, gridSelector, href }) => {
+      const section = document.querySelector(selector);
+      const grid = section?.querySelector(gridSelector);
+
+      expect(section).toBeInTheDocument();
+      expect(grid).toBeInTheDocument();
+      if (!section || !grid) throw new Error(`Missing homepage section structure for ${selector}`);
+
+      const link = within(section as HTMLElement).getByRole('link', { name: /查看更多/ });
+      expect(link).toHaveAttribute('href', href);
+      expect(grid.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
   });
 
   it('opens and closes the mobile navigation accessibly', async () => {

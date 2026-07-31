@@ -113,12 +113,9 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       id="news"
       aria-labelledby="news-title"
     >
-      <div className="section-heading-row">
-        <MaskedHeading as="h2" id="news-title">
-          最新动态
-        </MaskedHeading>
-        <a className="section-more-link" href="/release/">查看更多 <span aria-hidden="true">›</span></a>
-      </div>
+      <MaskedHeading as="h2" id="news-title">
+        最新动态
+      </MaskedHeading>
       <p className="news-lead">
         产品更新、品牌动向与团队成长的一线消息。
       </p>
@@ -153,6 +150,7 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
           </article>
         ))}
       </div>
+      <a className="section-more-link" href="/release/">查看更多 <span aria-hidden="true">›</span></a>
     </section>
   );
 });
@@ -210,12 +208,9 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
       id="blog"
       aria-labelledby="blog-title"
     >
-      <div className="section-heading-row">
-        <MaskedHeading as="h2" id="blog-title">
-          博客
-        </MaskedHeading>
-        <a className="section-more-link" href="/blog/">查看更多 <span aria-hidden="true">›</span></a>
-      </div>
+      <MaskedHeading as="h2" id="blog-title">
+        博客
+      </MaskedHeading>
       <p className="blog-lead">
         记录产品迭代、技术探索与我们对数字体验的思考。
       </p>
@@ -250,6 +245,7 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
           </article>
         ))}
       </div>
+      <a className="section-more-link" href="/blog/">查看更多 <span aria-hidden="true">›</span></a>
     </section>
   );
 });
@@ -378,12 +374,9 @@ export function App() {
           id="products"
           aria-labelledby="products-title"
         >
-          <div className="section-heading-row">
-            <MaskedHeading as="h2" id="products-title">
-              我们的产品
-            </MaskedHeading>
-            <a className="section-more-link" href="/products/">查看更多 <span aria-hidden="true">›</span></a>
-          </div>
+          <MaskedHeading as="h2" id="products-title">
+            我们的产品
+          </MaskedHeading>
           <p className="products-lead">
             从桌面应用到开源核心与命令行工具，连接更自由的创作流程。
           </p>
@@ -448,6 +441,7 @@ export function App() {
               </div>
             </article>
           </div>
+          <a className="section-more-link" href="/products/">查看更多 <span aria-hidden="true">›</span></a>
         </section>
 
         <News ref={newsRef} />
