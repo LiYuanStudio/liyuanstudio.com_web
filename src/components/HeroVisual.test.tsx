@@ -15,9 +15,11 @@ function createMediaQueryListMock(matches: boolean, query: string) {
   };
 }
 
-function stubMatchMedia(matches: boolean) {
+function stubMatchMedia(matches: boolean | ((query: string) => boolean)) {
   const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
-  const mock = vi.fn((query: string) => createMediaQueryListMock(matches, query));
+  const mock = vi.fn((query: string) =>
+    createMediaQueryListMock(typeof matches === 'function' ? matches(query) : matches, query),
+  );
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     writable: true,
@@ -109,7 +111,7 @@ describe('HeroVisual', () => {
   });
 
   it('moves parallax layers towards the cursor and settles', () => {
-    const media = stubMatchMedia(false);
+    const media = stubMatchMedia((query) => !query.includes('reduced-motion'));
     const raf = stubRaf();
     cleanups.push(media.restore, raf.restore);
 
@@ -144,7 +146,7 @@ describe('HeroVisual', () => {
   });
 
   it('cancels the animation frame and listeners on unmount', () => {
-    const media = stubMatchMedia(false);
+    const media = stubMatchMedia((query) => !query.includes('reduced-motion'));
     const raf = stubRaf();
     cleanups.push(media.restore, raf.restore);
 
@@ -170,8 +172,20 @@ describe('HeroVisual', () => {
     expect(raf.raf).not.toHaveBeenCalled();
   });
 
-  it('does not enable parallax when requestAnimationFrame is unavailable', () => {
+  it('keeps layers fixed on touch-oriented devices', () => {
     const media = stubMatchMedia(false);
+    const raf = stubRaf();
+    cleanups.push(media.restore, raf.restore);
+
+    const { container } = render(<HeroVisual />);
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 100 }));
+
+    expect(raf.raf).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLElement>('[data-depth="30"]')?.style.transform).toBe('');
+  });
+
+  it('does not enable parallax when requestAnimationFrame is unavailable', () => {
+    const media = stubMatchMedia((query) => !query.includes('reduced-motion'));
     const originalRaf = Object.getOwnPropertyDescriptor(window, 'requestAnimationFrame');
     Reflect.deleteProperty(window, 'requestAnimationFrame');
     cleanups.push(media.restore, () => {

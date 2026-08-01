@@ -93,8 +93,11 @@ export function HeroVisual() {
     const motionAllowed =
       typeof window.matchMedia !== 'function' ||
       !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const supportsPointerParallax =
+      typeof window.matchMedia !== 'function' ||
+      window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     const rafAvailable = typeof window.requestAnimationFrame === 'function';
-    if (!motionAllowed || !rafAvailable) return;
+    if (!motionAllowed || !supportsPointerParallax || !rafAvailable) return;
 
     const layers = Array.from(root.querySelectorAll<HTMLElement>('[data-depth]'));
     let targetX = 0;
