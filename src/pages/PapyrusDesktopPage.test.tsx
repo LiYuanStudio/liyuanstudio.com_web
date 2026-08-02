@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { AuthProvider } from '../context/AuthContext.js';
 import { PapyrusDesktopPage } from './PapyrusDesktopPage.js';
 
 const RELEASES_API_URL =
-  'https://api.github.com/repos/PapyrusOR/Papyrus_Desktop/releases?per_page=20';
+  'https://api.github.com/repos/LiYuanStudio/Papyrus_Desktop/releases?per_page=20';
 
 const BA14_ASSET_NAMES = [
   'Papyrus.Desktop-Linux-amd64.deb',
@@ -43,7 +43,7 @@ function release(
     assets: assetNames.map((name) => ({
       name,
       browser_download_url:
-        `https://github.com/PapyrusOR/Papyrus_Desktop/releases/download/${tagName}/${name}`,
+        `https://github.com/LiYuanStudio/Papyrus_Desktop/releases/download/${tagName}/${name}`,
     })),
   };
 }
@@ -103,17 +103,20 @@ describe('PapyrusDesktopPage', () => {
   it('renders the product sections in the requested order', () => {
     renderPage();
 
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+    const headings = within(screen.getByRole('main'))
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent);
 
     expect(headings).toEqual([
-      '下载 Papyrus Desktop',
-      '源码与文档',
-      '核心亮点',
-      '技术栈',
+      '从记下来，到真正掌握',
+      '技术不该抢镜，但应该让人放心。',
+      '为你的电脑准备好',
+      '保持透明，也保持可塑。',
     ]);
   });
 
   it('selects the newest prerelease by publication time and renders its actual assets', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
     const fetchMock = installFetchMock({
       releases: [
         release('v1.2.4', '2026-07-24T10:00:00Z', { prerelease: false }),
@@ -125,7 +128,7 @@ describe('PapyrusDesktopPage', () => {
     const { container } = renderPage();
 
     expect(screen.getByText('正在获取最新测试版…')).toBeInTheDocument();
-    expect(await screen.findByText('当前测试版：v2.0.0-beta.14')).toBeInTheDocument();
+    expect(await screen.findByText(/当前测试版 v2\.0\.0-beta\.14/)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       RELEASES_API_URL,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -141,11 +144,11 @@ describe('PapyrusDesktopPage', () => {
 
     const links = Array.from(container.querySelectorAll<HTMLAnchorElement>('.papyrus-download-link'));
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      'https://github.com/PapyrusOR/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Setup.exe',
-      'https://github.com/PapyrusOR/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-macOS-arm64.dmg',
-      'https://github.com/PapyrusOR/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-macOS-x64.dmg',
-      'https://github.com/PapyrusOR/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Linux-amd64.deb',
-      'https://github.com/PapyrusOR/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Linux-x86_64.AppImage',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Setup.exe',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-macOS-arm64.dmg',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-macOS-x64.dmg',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Linux-amd64.deb',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Linux-x86_64.AppImage',
     ]);
 
     expect(screen.getByRole('link', { name: 'Apple Silicon 安装包' })).toHaveAttribute(
@@ -198,7 +201,7 @@ describe('PapyrusDesktopPage', () => {
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '前往 GitHub Releases' })).toHaveAttribute(
       'href',
-      'https://github.com/PapyrusOR/Papyrus_Desktop/releases',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop/releases',
     );
     expect(screen.queryByText(/当前测试版：/)).not.toBeInTheDocument();
   });
@@ -248,16 +251,59 @@ describe('PapyrusDesktopPage', () => {
   it('does not render the fixed blue period on the hero title', () => {
     const { container } = renderPage();
 
+    expect(screen.getByRole('heading', { level: 1, name: '由简入深' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Papyrus Desktop 核心保障' })).toHaveTextContent(
+      '本地数据三端可用MIT 开源',
+    );
     expect(container.querySelector('.papyrus-hero h1')).not.toHaveClass('fixed-blue-period');
+    expect(screen.getByRole('img', { name: 'Papyrus Desktop 卷轴复习与进度界面' })).toHaveAttribute(
+      'src',
+      '/images/papyrus-desktop-hero-v3.png',
+    );
+    expect(screen.getByRole('img', { name: 'Papyrus Desktop 卷轴复习与进度界面' })).toHaveAttribute(
+      'width',
+      '1586',
+    );
   });
 
   it('links the source button to the stable repository root', () => {
     renderPage();
 
-    expect(screen.getByRole('link', { name: 'Papyrus Desktop on GitHub ↗' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '在 GitHub 查看项目 ↗' })).toHaveAttribute(
       'href',
-      'https://github.com/PapyrusOR/Papyrus_Desktop',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop',
     );
+  });
+
+  it('reuses the complete home page footer', () => {
+    renderPage();
+
+    expect(screen.getByText('打造「有生机的科技」')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: '页脚导航' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/LiYuanStudio',
+    );
+    expect(screen.getByRole('link', { name: 'Papyrus Desktop' })).toHaveAttribute(
+      'href',
+      '/products/papyrusdesktop/',
+    );
+  });
+
+  it('recommends and prioritizes the detected operating system', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    installFetchMock();
+    const { container } = renderPage();
+
+    expect(await screen.findByText('适合当前设备')).toBeInTheDocument();
+    expect(screen.getByText(/已识别 macOS/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '下载 macOS 测试版' })).toHaveAttribute(
+      'href',
+      '#download',
+    );
+    const cards = Array.from(container.querySelectorAll<HTMLElement>('.papyrus-download-card'));
+    expect(cards[0]).toHaveTextContent('macOS 客户端');
+    expect(cards[0]).toHaveClass('papyrus-download-card-recommended');
   });
 
   it('keeps authenticated users on the product page from the product nav', async () => {
