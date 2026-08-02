@@ -116,6 +116,7 @@ describe('PapyrusDesktopPage', () => {
   });
 
   it('selects the newest prerelease by publication time and renders its actual assets', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
     const fetchMock = installFetchMock({
       releases: [
         release('v1.2.4', '2026-07-24T10:00:00Z', { prerelease: false }),
