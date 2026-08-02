@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import { IconGithub } from '@arco-design/web-react/icon';
 import { AuthNav } from '../components/AuthNav.js';
 import { MaskedHeading } from '../components/MaskedHeading.js';
 import './papyrusdesktop.css';
 
-const REPO = 'PapyrusOR/Papyrus_Desktop';
+const REPO = 'LiYuanStudio/Papyrus_Desktop';
 const RELEASES_API_URL = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
 const RELEASES_PAGE_URL = `https://github.com/${REPO}/releases`;
 const TRUSTED_DOWNLOAD_PATH_PREFIX = `/${REPO}/releases/download/`;
@@ -32,6 +33,8 @@ type PlatformDownload = {
   arch?: string;
   links: DownloadLink[];
 };
+
+type DetectedPlatform = PlatformDownload['platform'] | null;
 
 type ReleaseDownloadState =
   | { status: 'loading' }
@@ -209,20 +212,50 @@ function useReleaseDownloads(): ReleaseDownloadState {
   return state;
 }
 
+function detectPlatform(): DetectedPlatform {
+  const navigatorWithUAData = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  const platform = (
+    navigatorWithUAData.userAgentData?.platform ||
+    navigator.platform ||
+    navigator.userAgent
+  ).toLowerCase();
+
+  if (platform.includes('win')) return 'Windows';
+  if (platform.includes('mac')) return 'macOS';
+  if (platform.includes('linux')) return 'Linux';
+  return null;
+}
+
 const PLATFORM_ICON: Record<PlatformDownload['platform'], string> = {
   Windows: '/icons/windows.svg',
   macOS: '/icons/apple.svg',
   Linux: '/icons/linux.svg',
 };
 
-function PapyrusDownload() {
+function PapyrusDownload({ detectedPlatform }: { detectedPlatform: DetectedPlatform }) {
   const releaseState = useReleaseDownloads();
 
+  const orderedDownloads = releaseState.status === 'success'
+    ? [...releaseState.downloads].sort((a, b) => {
+        if (a.platform === detectedPlatform) return -1;
+        if (b.platform === detectedPlatform) return 1;
+        return 0;
+      })
+    : [];
+
   return (
-    <section className="papyrus-section papyrus-download" aria-labelledby="download-title">
-      <h2 id="download-title" className="papyrus-download-title">
-        下载 Papyrus Desktop
-      </h2>
+    <section className="papyrus-section papyrus-download" id="download" aria-labelledby="download-title">
+      <div className="papyrus-section-heading papyrus-download-heading">
+        <div>
+          <span className="papyrus-kicker">DOWNLOAD</span>
+          <h2 id="download-title" className="papyrus-download-title">
+            为你的电脑准备好
+          </h2>
+        </div>
+        <p>无需注册即可开始。安装包来自官方 GitHub Releases，数据默认保存在本地。</p>
+      </div>
       {releaseState.status === 'loading' && (
         <p className="papyrus-download-status" aria-live="polite">
           正在获取最新测试版…
@@ -244,11 +277,20 @@ function PapyrusDownload() {
       {releaseState.status === 'success' && (
         <>
           <p className="papyrus-version papyrus-download-version" aria-live="polite">
-            当前测试版：{releaseState.tagName}
+            当前测试版 {releaseState.tagName}
+            {detectedPlatform && ` · 已识别 ${detectedPlatform}`}
           </p>
           <div className="papyrus-download-grid">
-            {releaseState.downloads.map((item) => (
-              <article className="papyrus-download-card" key={item.platform}>
+            {orderedDownloads.map((item) => (
+              <article
+                className={`papyrus-download-card${
+                  item.platform === detectedPlatform ? ' papyrus-download-card-recommended' : ''
+                }`}
+                key={item.platform}
+              >
+                {item.platform === detectedPlatform && (
+                  <span className="papyrus-recommended">适合当前设备</span>
+                )}
                 <div className="papyrus-download-icon">
                   <img src={PLATFORM_ICON[item.platform]} alt="" />
                 </div>
@@ -302,44 +344,102 @@ function PapyrusFooter() {
   return (
     <footer className="papyrus-footer">
       <div className="papyrus-footer-inner">
+        <div className="papyrus-footer-main">
+          <div className="papyrus-footer-brand">
+            <a className="papyrus-footer-brand-link" href="/" aria-label="LiYuan Studio 首页">
+              <img src="/brand/liyuan-wordmark.svg" alt="" />
+            </a>
+            <p className="papyrus-footer-tagline">打造「有生机的科技」</p>
+            <div className="papyrus-footer-socials">
+              <a
+                href="https://github.com/LiYuanStudio"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub"
+              >
+                <IconGithub style={{ fontSize: '16px' }} />
+              </a>
+            </div>
+          </div>
+
+          <nav className="papyrus-footer-nav" aria-label="页脚导航">
+            <div className="papyrus-footer-group">
+              <h2>产品</h2>
+              <a href="/products/papyrusdesktop/">Papyrus Desktop</a>
+              <a href="https://github.com/PapyrusOR/Papyrus" target="_blank" rel="noopener noreferrer">
+                Papyrus
+              </a>
+              <a href="https://github.com/PapyrusOR/Papyrus_CLI" target="_blank" rel="noopener noreferrer">
+                Papyrus CLI
+              </a>
+            </div>
+            <div className="papyrus-footer-group">
+              <h2>内容</h2>
+              <a href="/release/">最新动态</a>
+              <a href="/blog/">博客</a>
+            </div>
+          </nav>
+        </div>
+
         <div className="papyrus-footer-bottom">
           <span>© {new Date().getFullYear()} LiYuan Studio. All rights reserved.</span>
-          <a href="/">返回首页</a>
         </div>
       </div>
     </footer>
   );
 }
 
-const highlights = [
+const productHighlights = [
   {
-    title: '键盘驱动的 Flow 状态',
-    desc: '复习过程中完全使用键盘操作，无需触碰鼠标。',
+    index: '01',
+    eyebrow: 'REVIEW',
+    title: '让复习顺着节奏发生',
+    desc: 'SM-2 会根据每次反馈自动安排下次出现的时间。键盘驱动的操作，把注意力留给真正需要记住的内容。',
   },
   {
-    title: 'SM-2 间隔重复',
-    desc: '内置经证实的 SM-2 算法，为每张卡片自动调整下次复习间隔。',
+    index: '02',
+    eyebrow: 'THINK',
+    title: '让笔记彼此看得见',
+    desc: '文件夹、标签与关系图谱组成清晰的知识结构，也能导入已有的 Obsidian 笔记库，从旧习惯自然迁移。',
   },
   {
-    title: 'AI 智能体',
-    desc: '支持 OpenAI / Anthropic / Ollama，可调用工具管理卡片与笔记，支持手动或自动审批。',
+    index: '03',
+    eyebrow: 'CREATE',
+    title: '让 AI 真正参与整理',
+    desc: '连接 OpenAI、Anthropic 或本地 Ollama。智能体可以管理卡片与笔记，工具调用始终由你决定手动或自动批准。',
+  },
+];
+
+const technicalHighlights = [
+  {
+    title: '本地优先的数据层',
+    desc: '学习资料默认留在设备上，离线也能继续使用；模型 API 密钥使用 AES-GCM 加密存储。',
+    meta: 'LOCAL FIRST',
   },
   {
-    title: '笔记与 Obsidian 导入',
-    desc: '通过文件夹树、标签和关系图谱管理现有笔记库。',
+    title: '可审计的智能体',
+    desc: '工具调用具备明确的批准边界，你可以逐次确认，也可以为可信工作流开启自动审批。',
+    meta: 'HUMAN IN CONTROL',
   },
   {
-    title: '版本历史与回滚',
-    desc: '每次编辑自动保存内容哈希版本，回滚不产生破坏性历史。',
+    title: '无损的版本历史',
+    desc: '每次编辑都会生成内容哈希版本。回看与回滚不会覆盖已有历史，让长期笔记更安心。',
+    meta: 'NON-DESTRUCTIVE',
   },
   {
-    title: '本地优先',
-    desc: '数据默认留在本地；API 密钥使用 AES-GCM 加密存储。',
+    title: '可解释的复习调度',
+    desc: '基于 SM-2 的间隔重复不是黑箱推荐；复习间隔随着你的反馈稳定调整。',
+    meta: 'SM-2 SCHEDULING',
   },
 ];
 
 export function PapyrusDesktopPage() {
   const navRef = useRef<HTMLElement>(null);
+  const [detectedPlatform, setDetectedPlatform] = useState<DetectedPlatform>(null);
+
+  useEffect(() => {
+    setDetectedPlatform(detectPlatform());
+  }, []);
 
   return (
     <div className="papyrus-page">
@@ -347,37 +447,86 @@ export function PapyrusDesktopPage() {
 
       <header className="papyrus-hero">
         <div className="papyrus-hero-inner">
-          <MaskedHeading as="h1">
-            Papyrus Desktop
-          </MaskedHeading>
-          <p className="papyrus-lead">由简入深</p>
-          <p className="papyrus-note">
-            当前为测试版，数据 schema 已稳定，UI 与 API 在正式版前可能仍有调整。
-          </p>
+          <div className="papyrus-hero-copy">
+            <p className="papyrus-eyebrow"><span /> 离线优先的智能学习空间</p>
+            <MaskedHeading as="h1">
+              由简入深
+            </MaskedHeading>
+            <p className="papyrus-lead">
+              Papyrus Desktop 把笔记、卡片、间隔复习与 AI 智能体放进一个安静的桌面空间。
+            </p>
+            <div className="papyrus-hero-actions">
+              <a className="papyrus-button papyrus-button-primary" href="#download">
+                {detectedPlatform ? `下载 ${detectedPlatform} 测试版` : '下载适合你的版本'}{' '}
+                <span aria-hidden="true">↓</span>
+              </a>
+              <a
+                className="papyrus-button papyrus-button-secondary"
+                href="https://github.com/LiYuanStudio/Papyrus_Desktop"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                查看源代码 ↗
+              </a>
+            </div>
+            <ul className="papyrus-proof-list" aria-label="Papyrus Desktop 核心保障">
+              <li>本地数据</li>
+              <li>三端可用</li>
+              <li>MIT 开源</li>
+            </ul>
+          </div>
+          <div className="papyrus-hero-visual">
+            <div className="papyrus-visual-orbit papyrus-visual-orbit-one" aria-hidden="true" />
+            <div className="papyrus-visual-orbit papyrus-visual-orbit-two" aria-hidden="true" />
+            <img
+              src="/images/papyrus-desktop-hero-v3.png"
+              alt="Papyrus Desktop 卷轴复习与进度界面"
+              width="1586"
+              height="992"
+              decoding="async"
+              fetchPriority="high"
+            />
+            <span className="papyrus-visual-badge papyrus-visual-badge-local">本地优先</span>
+            <span className="papyrus-visual-badge papyrus-visual-badge-ai">AI 可控</span>
+          </div>
         </div>
       </header>
 
       <main className="papyrus-main" id="main-content" tabIndex={-1}>
-        <PapyrusDownload />
-
-        <section className="papyrus-section" aria-labelledby="source-title">
-          <h2 id="source-title">源码与文档</h2>
-          <p className="papyrus-section-lead">项目以 MIT 协议开源，更多信息请访问：</p>
-          <a
-            className="papyrus-button papyrus-button-primary"
-            href="https://github.com/PapyrusOR/Papyrus_Desktop"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Papyrus Desktop on GitHub ↗
-          </a>
+        <section className="papyrus-section" aria-labelledby="highlights-title">
+          <div className="papyrus-section-heading">
+            <div>
+              <span className="papyrus-kicker">WHY PAPYRUS</span>
+              <h2 id="highlights-title">从记下来，到真正掌握</h2>
+            </div>
+            <p>不是再造一个资料仓库，而是让每条信息进入可回顾、可连接、可推进的学习循环。</p>
+          </div>
+          <div className="papyrus-feature-list">
+            {productHighlights.map((item) => (
+              <article className="papyrus-feature" key={item.title}>
+                <span className="papyrus-feature-index">{item.index}</span>
+                <div>
+                  <span className="papyrus-feature-eyebrow">{item.eyebrow}</span>
+                  <h3>{item.title}</h3>
+                </div>
+                <p>{item.desc}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
-        <section className="papyrus-section" aria-labelledby="highlights-title">
-          <h2 id="highlights-title">核心亮点</h2>
-          <div className="papyrus-grid">
-            {highlights.map((item) => (
-              <article className="papyrus-card" key={item.title}>
+        <section className="papyrus-section papyrus-tech" aria-labelledby="tech-title">
+          <div className="papyrus-section-heading papyrus-section-heading-light">
+            <div>
+              <span className="papyrus-kicker">BUILT WITH INTENT</span>
+              <h2 id="tech-title">技术不该抢镜，<br />但应该让人放心。</h2>
+            </div>
+            <p>我们把复杂性留在底层：保护数据、保留选择权，并让自动化始终有清晰边界。</p>
+          </div>
+          <div className="papyrus-tech-grid">
+            {technicalHighlights.map((item) => (
+              <article className="papyrus-tech-card" key={item.title}>
+                <span>{item.meta}</span>
                 <h3>{item.title}</h3>
                 <p>{item.desc}</p>
               </article>
@@ -385,15 +534,20 @@ export function PapyrusDesktopPage() {
           </div>
         </section>
 
-        <section className="papyrus-section" aria-labelledby="stack-title">
-          <h2 id="stack-title">技术栈</h2>
-          <ul className="papyrus-stack">
-            <li>桌面端：Electron 41</li>
-            <li>前端：React 19 + Vite + Arco Design</li>
-            <li>后端：Node.js + TypeScript + Fastify</li>
-            <li>算法：SM-2 间隔重复</li>
-            <li>存储：本地 JSON，内容哈希版本</li>
-          </ul>
+        <PapyrusDownload detectedPlatform={detectedPlatform} />
+
+        <section className="papyrus-section papyrus-source" aria-labelledby="source-title">
+          <span className="papyrus-kicker">OPEN SOURCE</span>
+          <h2 id="source-title">保持透明，也保持可塑。</h2>
+          <p>Papyrus Desktop 以 MIT 协议开源。查看实现、提交问题，或参与下一次迭代。</p>
+          <a
+            className="papyrus-button papyrus-button-primary"
+            href="https://github.com/LiYuanStudio/Papyrus_Desktop"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            在 GitHub 查看项目 ↗
+          </a>
         </section>
       </main>
 
