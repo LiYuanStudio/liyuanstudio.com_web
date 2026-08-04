@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { AuthProvider } from '../context/AuthContext.js';
+import { expectNoAccessibilityViolations } from '../test/accessibility.js';
 import { PapyrusDesktopPage } from './PapyrusDesktopPage.js';
 
 const RELEASES_API_URL =
@@ -115,6 +116,29 @@ describe('PapyrusDesktopPage', () => {
     ]);
   });
 
+  it('renders the refreshed product story and working primary journeys', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    installFetchMock();
+    renderPage();
+
+    expect(screen.getByRole('heading', { level: 1, name: '由简入深' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '下载 Windows 测试版' })).toHaveAttribute(
+      'href',
+      '#download',
+    );
+    expect(screen.getByRole('link', { name: '查看源代码 ↗' })).toHaveAttribute(
+      'href',
+      'https://github.com/LiYuanStudio/Papyrus_Desktop',
+    );
+    expect(screen.getByRole('heading', { level: 3, name: '让复习顺着节奏发生' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: '让笔记彼此看得见' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: '让 AI 真正参与整理' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: '下载安装包' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/v2.0.0-beta.14/Papyrus.Desktop-Setup.exe'),
+    );
+  });
+
   it('selects the newest prerelease by publication time and renders its actual assets', async () => {
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
     const fetchMock = installFetchMock({
@@ -203,20 +227,94 @@ describe('PapyrusDesktopPage', () => {
       'href',
       'https://github.com/LiYuanStudio/Papyrus_Desktop/releases',
     );
-    expect(screen.queryByText(/当前测试版：/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/当前测试版/)).not.toBeInTheDocument();
   });
 
-  it('rejects asset download URLs outside the Papyrus Desktop GitHub repository', async () => {
+  it.each([
+    ['a different host', 'https://example.com/Papyrus.Desktop-Setup.exe'],
+    [
+      'a hostname-prefix spoof',
+      'https://github.com.evil.example/LiYuanStudio/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Setup.exe',
+    ],
+    [
+      'a different repository',
+      'https://github.com/PapyrusOR/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Setup.exe',
+    ],
+    [
+      'an insecure GitHub URL',
+      'http://github.com/LiYuanStudio/Papyrus_Desktop/releases/download/v2.0.0-beta.14/Papyrus.Desktop-Setup.exe',
+    ],
+    ['a malformed URL', 'not a URL'],
+  ])('rejects an asset download URL using %s', async (_caseName, browserDownloadUrl) => {
     const payload = release('v2.0.0-beta.14', '2026-07-23T17:33:53Z');
     payload.assets = [{
       name: 'Papyrus.Desktop-Setup.exe',
-      browser_download_url: 'https://example.com/Papyrus.Desktop-Setup.exe',
+      browser_download_url: browserDownloadUrl,
     }];
     installFetchMock({ releases: [payload] });
     renderPage();
 
     expect(await screen.findByText('最新测试版暂无可用安装包')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '下载安装包' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['a non-array response', { message: 'rate limited' }],
+    [
+      'an invalid publication date',
+      [{ ...release('v2.0.0-beta.14', '2026-07-23T17:33:53Z'), published_at: 'not-a-date' }],
+    ],
+    [
+      'a release without an explicit draft flag',
+      [{ ...release('v2.0.0-beta.14', '2026-07-23T17:33:53Z'), draft: undefined }],
+    ],
+    [
+      'a release with malformed assets',
+      [{ ...release('v2.0.0-beta.14', '2026-07-23T17:33:53Z'), assets: null }],
+    ],
+  ])('rejects %s instead of manufacturing download links', async (_caseName, releases) => {
+    installFetchMock({ releases });
+    renderPage();
+
+    expect(
+      await screen.findByText('暂无可用的 Papyrus Desktop 测试版'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/当前测试版/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /安装包|DEB 包|AppImage/ })).not.toBeInTheDocument();
+  });
+
+  it('does not silently fall back to an older build when the newest prerelease has no installer', async () => {
+    installFetchMock({
+      releases: [
+        release('v2.0.0-beta.14', '2026-07-23T17:33:53Z', { assetNames: ['checksums.txt'] }),
+        release('v2.0.0-beta.13', '2026-07-18T17:44:03Z'),
+      ],
+    });
+    renderPage();
+
+    expect(await screen.findByText('最新测试版暂无可用安装包')).toBeInTheDocument();
+    expect(screen.queryByText(/v2\.0\.0-beta\.13/)).not.toBeInTheDocument();
+  });
+
+  it('supports a generic macOS installer without manufacturing an architecture label', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    installFetchMock({
+      releases: [
+        release('v2.0.0-beta.14', '2026-07-23T17:33:53Z', {
+          assetNames: ['Papyrus.Desktop-macOS.dmg'],
+        }),
+      ],
+    });
+    renderPage();
+
+    expect(await screen.findByRole('link', { name: '下载安装包' })).toHaveAttribute(
+      'title',
+      'Papyrus.Desktop-macOS.dmg',
+    );
+    const macCard = screen.getByRole('heading', { level: 3, name: 'macOS 客户端' }).closest('article');
+    expect(macCard).toHaveTextContent('适合当前设备');
+    expect(macCard).not.toHaveTextContent('Apple Silicon');
+    expect(macCard).not.toHaveTextContent('Intel');
   });
 
   it('aborts the GitHub release request when the page unmounts', () => {
@@ -290,20 +388,55 @@ describe('PapyrusDesktopPage', () => {
     );
   });
 
-  it('recommends and prioritizes the detected operating system', async () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+  it.each([
+    ['Windows', 'Win32', 'Windows 客户端'],
+    ['macOS', 'MacIntel', 'macOS 客户端'],
+    ['Linux', 'Linux x86_64', 'Linux 客户端'],
+  ])('recommends and prioritizes detected %s devices', async (platform, navigatorPlatform, cardLabel) => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue(navigatorPlatform);
     installFetchMock();
     const { container } = renderPage();
 
     expect(await screen.findByText('适合当前设备')).toBeInTheDocument();
-    expect(screen.getByText(/已识别 macOS/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '下载 macOS 测试版' })).toHaveAttribute(
+    expect(screen.getByText(new RegExp(`已识别 ${platform}`))).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: `下载 ${platform} 测试版` })).toHaveAttribute(
       'href',
       '#download',
     );
     const cards = Array.from(container.querySelectorAll<HTMLElement>('.papyrus-download-card'));
-    expect(cards[0]).toHaveTextContent('macOS 客户端');
+    expect(cards[0]).toHaveTextContent(cardLabel);
     expect(cards[0]).toHaveClass('papyrus-download-card-recommended');
+    expect(cards.filter((card) => card.classList.contains('papyrus-download-card-recommended')))
+      .toHaveLength(1);
+  });
+
+  it('keeps neutral copy and release order when the operating system is unknown', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('FreeBSD');
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (X11; FreeBSD amd64)');
+    installFetchMock();
+    const { container } = renderPage();
+
+    expect(await screen.findByText('当前测试版 v2.0.0-beta.14')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '下载适合你的版本' })).toHaveAttribute(
+      'href',
+      '#download',
+    );
+    expect(screen.queryByText('适合当前设备')).not.toBeInTheDocument();
+    const cards = Array.from(container.querySelectorAll<HTMLElement>('.papyrus-download-card'));
+    expect(cards.map((card) => within(card).getByRole('heading', { level: 3 }).textContent)).toEqual([
+      'Windows 客户端',
+      'macOS 客户端',
+      'Linux 客户端',
+    ]);
+  });
+
+  it('has no detectable accessibility violations after downloads load', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    installFetchMock();
+    const { container } = renderPage();
+
+    await screen.findByText(/当前测试版 v2\.0\.0-beta\.14/);
+    await expectNoAccessibilityViolations(container);
   });
 
   it('keeps authenticated users on the product page from the product nav', async () => {
