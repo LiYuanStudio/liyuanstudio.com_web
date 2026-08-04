@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-labelledby="title">
+  <title id="title">LiYuan Studio</title>
+  <rect x="4" y="4" width="172" height="172" rx="38" fill="#050505" />
+  <path
+    d="M18 218V28l146 54v136H68v-18h76V95L38 56v162z"
+    fill="#fff"
+    transform="translate(31 6) scale(.65)"
+  />
+</svg>
