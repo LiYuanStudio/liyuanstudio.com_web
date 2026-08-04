@@ -10,6 +10,6 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "hono": "^4.12.27"
+    "hono": "^4.13.0"
   }
 }
