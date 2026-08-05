@@ -8,7 +8,7 @@ export function ProductsPage() {
       title="产品"
       description="从桌面应用到开源核心与命令行工具，探索 LiYuan Studio 构建的创作工具。"
     >
-      <CollageGrid>
+      <CollageGrid variant="products">
         {PRODUCTS.map((product) => (
           <CollageCard
             key={product.name}

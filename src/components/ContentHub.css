@@ -298,6 +298,12 @@
   -webkit-line-clamp: 4;
 }
 
+.collage-grid-products .collage-card strong {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
 .collage-card-description {
   display: -webkit-box;
   max-width: 92%;

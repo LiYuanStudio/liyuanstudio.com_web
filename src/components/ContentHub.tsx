@@ -58,15 +58,18 @@ export function ContentHubLayout({
 export function CollageGrid({
   children,
   busy,
+  variant,
 }: {
   children: ReactNode;
   busy?: boolean;
+  variant?: 'products';
 }) {
   const supportsFiveItemLayout = Children.count(children) >= 5;
+  const variantClass = variant ? ` collage-grid-${variant}` : '';
 
   return (
     <div
-      className={`collage-grid${supportsFiveItemLayout ? ' collage-grid-five-up' : ''}`}
+      className={`collage-grid${supportsFiveItemLayout ? ' collage-grid-five-up' : ''}${variantClass}`}
       aria-busy={busy}
     >
       {children}

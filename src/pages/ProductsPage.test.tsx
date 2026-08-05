@@ -23,6 +23,7 @@ describe('ProductsPage', () => {
     expect(cliLink).toHaveAttribute('target', '_blank');
     expect(cliLink).toHaveAttribute('rel', 'noopener noreferrer');
     expect(container.querySelectorAll('.collage-card')).toHaveLength(3);
+    expect(container.querySelector('.collage-grid')).toHaveClass('collage-grid-products');
   });
 
   it('marks products as the current content hub section', () => {
