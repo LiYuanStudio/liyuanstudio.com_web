@@ -71,6 +71,23 @@ describe('ReleasePage', () => {
     await expectNoAccessibilityViolations(container);
   });
 
+  it('keeps the full long title in the DOM and accessible link name', async () => {
+    const longTitle = '超长中文动态标题PapyrusDesktopContinuousReleaseName-v2.0.0-beta.15正式发布';
+    mockFetchNews.mockResolvedValue([{
+      slug: 'long-release-title',
+      title: longTitle,
+      description: '卡片可以在视觉上省略标题，但不能截断原始内容。',
+      tag: '产品动态',
+      date: '2026-08-05',
+    }]);
+
+    render(<ReleasePage />);
+
+    expect(await screen.findByText(longTitle)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: `阅读动态：${longTitle}` }))
+      .toHaveAttribute('href', '/release/long-release-title/');
+  });
+
   it('renders empty and error states', async () => {
     mockFetchNews.mockResolvedValue([]);
     const { unmount } = render(<ReleasePage />);
