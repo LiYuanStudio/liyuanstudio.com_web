@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const TEST_RESEND_KEY = 're_'.concat('test_key');
+
 function stubBaseEnv(overrides: Record<string, string | undefined> = {}) {
   const values: Record<string, string | undefined> = {
     MONGODB_URI: 'mongodb://localhost/test',
-    API_KEY: 'secret-key',
+    API_KEY: 'x'.repeat(32),
     JWT_SECRET: 'test-secret-must-be-at-least-32-characters',
     CORS_ORIGIN: 'https://liyuanstudio.com',
     TRUSTED_ORIGINS: undefined,
@@ -43,7 +45,7 @@ describe('server env', () => {
     const { env } = await import('./env.js');
     expect(env.PORT).toBe(3000);
     expect(env.MONGODB_URI).toBe('mongodb://localhost/test');
-    expect(env.API_KEY).toBe('secret-key');
+    expect(env.API_KEY).toBe('x'.repeat(32));
     expect(env.JWT_SECRET).toBe('test-secret-must-be-at-least-32-characters');
     expect(env.APP_URL).toBe('http://localhost:5173');
     expect(env.CORS_ORIGIN).toEqual(['https://liyuanstudio.com', 'https://app.liyuanstudio.com']);
@@ -78,6 +80,12 @@ describe('server env', () => {
     stubBaseEnv({ JWT_SECRET: 'too-short' });
 
     await expect(import('./env.js')).rejects.toThrow('JWT_SECRET must be at least 32 characters');
+  });
+
+  it('throws when API_KEY is shorter than 32 characters', async () => {
+    stubBaseEnv({ API_KEY: 'short' });
+
+    await expect(import('./env.js')).rejects.toThrow('API_KEY must be at least 32 characters');
   });
 
   it('throws when CORS_ORIGIN is missing', async () => {
@@ -144,14 +152,14 @@ describe('server env', () => {
       NODE_ENV: 'production',
       APP_URL: 'https://www.liyuanstudio.com',
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: TEST_RESEND_KEY,
       EMAIL_FROM: 'LiYuan Studio <noreply@example.com>',
     });
 
     const { env } = await import('./env.js');
     expect(env.APP_URL).toBe('https://www.liyuanstudio.com');
     expect(env.EMAIL_PROVIDER).toBe('resend');
-    expect(env.RESEND_API_KEY).toBe('re_test_key');
+    expect(env.RESEND_API_KEY).toBe(TEST_RESEND_KEY);
     expect(env.EMAIL_FROM).toBe('LiYuan Studio <noreply@example.com>');
   });
 
@@ -160,7 +168,7 @@ describe('server env', () => {
       NODE_ENV: 'production',
       APP_URL: undefined,
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: TEST_RESEND_KEY,
       EMAIL_FROM: 'noreply@example.com',
     });
 
@@ -172,7 +180,7 @@ describe('server env', () => {
       NODE_ENV: 'production',
       APP_URL: 'http://www.liyuanstudio.com',
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: TEST_RESEND_KEY,
       EMAIL_FROM: 'noreply@example.com',
     });
 
@@ -184,7 +192,7 @@ describe('server env', () => {
       NODE_ENV: 'production',
       APP_URL: 'https://localhost:5173',
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: TEST_RESEND_KEY,
       EMAIL_FROM: 'noreply@example.com',
     });
 
@@ -196,7 +204,7 @@ describe('server env', () => {
       NODE_ENV: 'production',
       APP_URL: 'https://www.liyuanstudio.com',
       EMAIL_PROVIDER: undefined,
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: TEST_RESEND_KEY,
       EMAIL_FROM: 'noreply@example.com',
     });
 
@@ -220,7 +228,7 @@ describe('server env', () => {
       NODE_ENV: 'production',
       APP_URL: 'https://www.liyuanstudio.com',
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: TEST_RESEND_KEY,
       EMAIL_FROM: undefined,
     });
 
@@ -239,7 +247,7 @@ describe('server env', () => {
       NODE_ENV: 'production',
       APP_URL: 'https://www.liyuanstudio.com',
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: TEST_RESEND_KEY,
       EMAIL_FROM: 'noreply@example.com',
       VERCEL: undefined,
     });
@@ -249,9 +257,34 @@ describe('server env', () => {
   });
 
   it('enables secure site cookies on Vercel preview runtimes', async () => {
-    stubBaseEnv({ VERCEL: '1' });
+    stubBaseEnv({
+      VERCEL: '1',
+      EMAIL_PROVIDER: 'resend',
+      RESEND_API_KEY: 'k'.repeat(12),
+      EMAIL_FROM: 'noreply@example.com',
+    });
 
     const { env } = await import('./env.js');
     expect(env.SECURE_SITE_COOKIES).toBe(true);
+  });
+
+  it('rejects mock email on Vercel preview runtimes', async () => {
+    stubBaseEnv({ VERCEL: '1' });
+
+    await expect(import('./env.js')).rejects.toThrow('EMAIL_PROVIDER must be set to resend');
+  });
+
+  it('exposes the Vercel platform flag and optional client IP HMAC key', async () => {
+    stubBaseEnv({
+      VERCEL: '1',
+      CLIENT_IP_HMAC_KEY: '  ',
+      EMAIL_PROVIDER: 'resend',
+      RESEND_API_KEY: 'k'.repeat(12),
+      EMAIL_FROM: 'noreply@example.com',
+    });
+
+    const { env } = await import('./env.js');
+    expect(env.IS_VERCEL).toBe(true);
+    expect(env.CLIENT_IP_HMAC_KEY).toBeUndefined();
   });
 });

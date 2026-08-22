@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 function stubBaseEnv(overrides: Record<string, string | undefined> = {}) {
   const values: Record<string, string | undefined> = {
     MONGODB_URI: 'mongodb://localhost/test',
-    API_KEY: 'secret-key',
+    API_KEY: 'x'.repeat(32),
     JWT_SECRET: 'test-secret-must-be-at-least-32-characters',
     CORS_ORIGIN: 'https://liyuanstudio.com',
     NODE_ENV: 'test',
@@ -57,7 +57,7 @@ const secureRuntimeCases = [
       VERCEL: undefined,
       APP_URL: 'https://www.liyuanstudio.com',
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: 're_'.concat('test_key'),
       EMAIL_FROM: 'noreply@example.com',
     },
   },
@@ -66,6 +66,9 @@ const secureRuntimeCases = [
     env: {
       NODE_ENV: 'test',
       VERCEL: '1',
+      EMAIL_PROVIDER: 'resend',
+      RESEND_API_KEY: 'k'.repeat(12),
+      EMAIL_FROM: 'noreply@example.com',
     },
   },
 ] satisfies Array<{

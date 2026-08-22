@@ -11,6 +11,10 @@
 # local account notes
 accounts.md
 
+# local agent/tool state
+.mimosa/
+.zcode/
+
 # build files
 dist
 node_modules

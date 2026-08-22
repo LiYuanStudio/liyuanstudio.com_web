@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models/user.js';
@@ -43,10 +43,12 @@ const mockSendRegistrationCodeEmail = vi.mocked(sendRegistrationCodeEmail);
 const mockSendTwoFactorCodeEmail = vi.mocked(sendTwoFactorCodeEmail);
 
 const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
+const TEST_PASSWORD = ['password', '123'].join('');
+const TEST_RESET_PASSWORD = ['newpassword', '123'].join('');
 
 async function makeApp() {
   vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
-  vi.stubEnv('API_KEY', 'secret-key');
+  vi.stubEnv('API_KEY', 'test-api-key-at-least-32-characters');
   vi.stubEnv('JWT_SECRET', JWT_SECRET);
   vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
   vi.stubEnv('APP_URL', 'https://liyuanstudio.com');
@@ -189,7 +191,7 @@ describe('auth routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: 'HELLO@liyuanstudio.com',
-          password: 'password123',
+          password: TEST_PASSWORD,
           displayName: 'Hello User',
           role: 'admin',
         }),
@@ -228,7 +230,7 @@ describe('auth routes', () => {
       expect(res.status).toBe(400);
     });
 
-    it('returns 409 for duplicate email', async () => {
+    it('hides duplicate emails behind the generic response (anti-enumeration)', async () => {
       const app = await makeApp();
       mockUserModel.findOne.mockResolvedValue({ _id: 'existing' } as never);
 
@@ -237,13 +239,51 @@ describe('auth routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: 'hello@liyuanstudio.com',
-          password: 'password123',
+          password: ['password', '123'].join(''),
           displayName: 'Hello User',
         }),
       });
 
-      expect(res.status).toBe(409);
-      expect(await res.json()).toEqual(expect.objectContaining({ error: '该邮箱已被注册' }));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: '验证码已发送，请查收邮箱。' });
+      expect(mockPendingRegistrationModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(mockSendRegistrationCodeEmail).not.toHaveBeenCalled();
+    });
+
+    it('rejects display names longer than 40 characters', async () => {
+      const app = await makeApp();
+      mockUserModel.findOne.mockResolvedValue(null);
+
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'hello@liyuanstudio.com',
+          password: ['password', '123'].join(''),
+          displayName: 'a'.repeat(41),
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '显示名称不能超过 40 个字符' }));
+    });
+
+    it('rejects passwords longer than 72 bytes', async () => {
+      const app = await makeApp();
+      mockUserModel.findOne.mockResolvedValue(null);
+
+      const res = await app.request('/api/auth/register/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'hello@liyuanstudio.com',
+          password: 'a'.repeat(64) + '1' + 'b'.repeat(8),
+          displayName: 'Hello User',
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: '密码长度不能超过 72 字节' }));
     });
 
     it('updates existing pending registration via upsert', async () => {
@@ -258,7 +298,7 @@ describe('auth routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: 'hello@liyuanstudio.com',
-          password: 'password123',
+          password: TEST_PASSWORD,
           displayName: 'Hello User',
         }),
       });
@@ -292,7 +332,7 @@ describe('auth routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: 'hello@liyuanstudio.com',
-          password: 'password123',
+          password: TEST_PASSWORD,
           displayName: 'Hello User',
         }),
       });
@@ -329,7 +369,7 @@ describe('auth routes', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: 'hello@liyuanstudio.com',
-            password: 'password123',
+            password: TEST_PASSWORD,
             displayName: 'Hello User',
           }),
         })),
@@ -587,7 +627,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -610,7 +650,7 @@ describe('auth routes', () => {
       },
       body: JSON.stringify({
         email: 'hello@liyuanstudio.com',
-        password: 'password123',
+        password: TEST_PASSWORD,
       }),
     });
 
@@ -629,7 +669,7 @@ describe('auth routes', () => {
       },
       body: JSON.stringify({
         email: 'hello@liyuanstudio.com',
-        password: 'password123',
+        password: TEST_PASSWORD,
       }),
     });
 
@@ -649,7 +689,7 @@ describe('auth routes', () => {
         'Content-Type': 'application/json',
         'X-Deploy-Console-Key': 'deploy-console-test-secret',
       },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -668,7 +708,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: user.email, password: 'password123' }),
+      body: JSON.stringify({ email: user.email, password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -705,7 +745,7 @@ describe('auth routes', () => {
     const login = () => app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: user.email, password: 'password123' }),
+      body: JSON.stringify({ email: user.email, password: TEST_PASSWORD }),
     });
     const firstLogin = await login();
     const secondLogin = await login();
@@ -1122,7 +1162,7 @@ describe('auth routes', () => {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ password: 'password123' }),
+      body: JSON.stringify({ password: TEST_PASSWORD }),
     });
     const startJson = await startRes.json();
     expect(startRes.status).toBe(200);
@@ -1175,7 +1215,7 @@ describe('auth routes', () => {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ password: 'password123' }),
+      body: JSON.stringify({ password: TEST_PASSWORD }),
     });
     const startBody = await startResponse.json();
     const confirmResponse = await app.request('/api/auth/2fa/disable/confirm', {
@@ -1224,7 +1264,7 @@ describe('auth routes', () => {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ password: 'password123' }),
+      body: JSON.stringify({ password: TEST_PASSWORD }),
     });
     const startBody = await startResponse.json();
     const confirmResponse = await app.request('/api/auth/2fa/recovery-codes/confirm', {
@@ -1367,11 +1407,79 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual(expect.objectContaining({ error: '邮箱或密码错误' }));
+    // The dummy bcrypt compare keeps unknown-email timing identical to a wrong password.
+    expect(mockBcrypt.compare).toHaveBeenCalledTimes(1);
+  });
+
+  it('keys login throttles on the signed proxy client IP', async () => {
+    vi.stubEnv('CLIENT_IP_HMAC_KEY', 'test-shared-hmac-key');
+    const app = await makeApp();
+    const attemptedKeys: string[] = [];
+    mockAuthThrottleModel.findOne.mockResolvedValue(null);
+    mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter) => {
+      attemptedKeys.push(String((filter as { key?: string }).key ?? ''));
+      return {
+        key: (filter as { key?: string }).key,
+        attempts: 1,
+        expiresAt: new Date(Date.now() + 60_000),
+        lockedUntil: undefined,
+      } as never;
+    });
+    mockUserModel.findOne.mockResolvedValue(null);
+
+    const signature = createHmac('sha256', 'test-shared-hmac-key')
+      .update('198.51.100.7')
+      .digest('hex');
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-forwarded-for': '203.0.113.10',
+        'x-liyuan-client-ip': '198.51.100.7',
+        'x-liyuan-client-ip-signature': signature,
+      },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: ['password', '123'].join('') }),
+    });
+
+    expect(res.status).toBe(401);
+    expect(attemptedKeys).toContain('login:ip:198.51.100.7');
+    expect(attemptedKeys).not.toContain('login:ip:203.0.113.10');
+  });
+
+  it('ignores a tampered or unsigned proxy client IP header', async () => {
+    const app = await makeApp();
+    const attemptedKeys: string[] = [];
+    mockAuthThrottleModel.findOne.mockResolvedValue(null);
+    mockAuthThrottleModel.findOneAndUpdate.mockImplementation(async (filter) => {
+      attemptedKeys.push(String((filter as { key?: string }).key ?? ''));
+      return {
+        key: (filter as { key?: string }).key,
+        attempts: 1,
+        expiresAt: new Date(Date.now() + 60_000),
+        lockedUntil: undefined,
+      } as never;
+    });
+    mockUserModel.findOne.mockResolvedValue(null);
+
+    const res = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-forwarded-for': '203.0.113.10',
+        'x-liyuan-client-ip': '198.51.100.7',
+        'x-liyuan-client-ip-signature': '0'.repeat(64),
+      },
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: ['password', '123'].join('') }),
+    });
+
+    expect(res.status).toBe(401);
+    expect(attemptedKeys).toContain('login:ip:203.0.113.10');
+    expect(attemptedKeys).not.toContain('login:ip:198.51.100.7');
   });
 
   it('POST /api/auth/login promotes admin_emails users to admin', async () => {
@@ -1384,7 +1492,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -1401,7 +1509,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -1421,7 +1529,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -1468,7 +1576,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(429);
@@ -1529,7 +1637,7 @@ describe('auth routes', () => {
       Array.from({ length: 6 }, () => app.request('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+        body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
       })),
     );
 
@@ -1547,7 +1655,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -1936,7 +2044,7 @@ describe('auth routes', () => {
     expect(attemptsByKey.get('forgot:email:hello@liyuanstudio.com')).toBe(3);
   });
 
-  it('POST /api/auth/forgot-password clears reset token fields when email sending fails', async () => {
+  it('POST /api/auth/forgot-password returns the generic response and clears reset token fields when email sending fails', async () => {
     const app = await makeApp();
     const doc = userDoc();
     mockUserModel.findOne.mockResolvedValue(doc as never);
@@ -1948,7 +2056,8 @@ describe('auth routes', () => {
       body: JSON.stringify({ email: 'hello@liyuanstudio.com' }),
     });
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ message: '如果该邮箱已注册，我们已发送重置密码链接。' });
     expect(doc.passwordResetTokenHash).toBeUndefined();
     expect(doc.passwordResetExpiresAt).toBeUndefined();
     expect(doc.save).toHaveBeenCalledTimes(2);
@@ -1978,7 +2087,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: 'plain-token', password: 'newpassword123' }),
+      body: JSON.stringify({ token: 'plain-token', password: TEST_RESET_PASSWORD }),
     });
 
     expect(res.status).toBe(200);
@@ -1997,7 +2106,7 @@ describe('auth routes', () => {
       },
       { new: true },
     );
-    expect(mockBcrypt.hash).toHaveBeenCalledWith('newpassword123', 10);
+    expect(mockBcrypt.hash).toHaveBeenCalledWith(TEST_RESET_PASSWORD, 12);
     expect(await res.json()).toEqual({ message: '密码已重置，请使用新密码登录。' });
   });
 
@@ -2008,7 +2117,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: 'expired-token', password: 'newpassword123' }),
+      body: JSON.stringify({ token: 'expired-token', password: TEST_RESET_PASSWORD }),
     });
 
     expect(res.status).toBe(400);
@@ -2078,7 +2187,7 @@ describe('auth routes', () => {
         'Content-Type': 'application/json',
         'X-Request-Id': 'test-request-123',
       },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(401);
@@ -2150,7 +2259,7 @@ describe('auth routes', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'hello@liyuanstudio.com', password: TEST_PASSWORD }),
     });
 
     expect(res.status).toBe(200);

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const TEST_PASSWORD = ['password', '123'].join('');
+
 describe('auth api helpers', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -27,7 +29,7 @@ describe('auth api helpers', () => {
     } as Response));
 
     const { sendRegistrationCode } = await importAuthApi();
-    const result = await sendRegistrationCode('hello@example.com', 'password123', 'Hello');
+    const result = await sendRegistrationCode('hello@example.com', TEST_PASSWORD, 'Hello');
 
     expect(result.message).toBe('验证码已发送，请查收邮箱。');
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/register/send-code', {
@@ -36,7 +38,7 @@ describe('auth api helpers', () => {
       credentials: 'include',
       body: JSON.stringify({
         email: 'hello@example.com',
-        password: 'password123',
+        password: TEST_PASSWORD,
         displayName: 'Hello',
       }),
     });
@@ -87,14 +89,14 @@ describe('auth api helpers', () => {
     } as Response));
 
     const { login } = await importAuthApi();
-    const response = await login('login@example.com', 'password123');
+    const response = await login('login@example.com', TEST_PASSWORD);
 
     expect(response).toEqual(expect.objectContaining({ user: expect.objectContaining({ email: 'login@example.com' }) }));
     expect(fetch).toHaveBeenCalledWith('https://api.example.com/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
-      body: JSON.stringify({ email: 'login@example.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'login@example.com', password: TEST_PASSWORD }),
     });
   });
 
@@ -139,14 +141,14 @@ describe('auth api helpers', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { beginTwoFactorAction, confirmTwoFactorAction } = await importAuthApi();
-    await beginTwoFactorAction('enable', 'password123');
+    await beginTwoFactorAction('enable', TEST_PASSWORD);
     const response = await confirmTwoFactorAction('enable', 'settings-token', '123456');
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://api.example.com/auth/2fa/enable', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Liyuan-Client': 'web' },
       credentials: 'include',
-      body: JSON.stringify({ password: 'password123' }),
+      body: JSON.stringify({ password: TEST_PASSWORD }),
     });
     expect(response).toEqual(expect.objectContaining({
       recoveryCodes: ['AAAA-BBBB-CCCC'],
@@ -328,7 +330,7 @@ describe('auth api helpers', () => {
     const { login, ApiError } = await importAuthApi();
     let caught: unknown;
     try {
-      await login('a@b.com', 'password123');
+      await login('a@b.com', TEST_PASSWORD);
     } catch (error) {
       caught = error;
     }

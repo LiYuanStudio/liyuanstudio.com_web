@@ -71,6 +71,27 @@ function isClearlyCrossSite(c: AppContext): boolean {
   return c.req.header('Sec-Fetch-Site') === 'cross-site';
 }
 
+// Workers has no timingSafeEqual; comparing SHA-256 digests with a fixed-length
+// XOR loop removes the early-exit timing signal of a plain string comparison.
+async function secretsMatch(a: string, b: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [digestA, digestB] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(a)),
+    crypto.subtle.digest('SHA-256', encoder.encode(b)),
+  ]);
+  const bytesA = new Uint8Array(digestA);
+  const bytesB = new Uint8Array(digestB);
+  let difference = 0;
+  for (let index = 0; index < bytesA.length; index += 1) {
+    difference |= bytesA[index] ^ bytesB[index];
+  }
+  return difference === 0;
+}
+
+async function csrfHeaderMatches(c: AppContext, csrf: string): Promise<boolean> {
+  return secretsMatch(c.req.header('X-CSRF-Token') ?? '', csrf);
+}
+
 function logPreviewCookieProxy(options: {
   context: AppContext;
   incomingSiteCookies: string | undefined;
@@ -797,7 +818,7 @@ app.post('/auth/2fa/resend', async (c) => {
 app.post('/auth/logout', async (c) => {
   const session = await readSession(c);
   const body = await c.req.parseBody();
-  if (!sameOrigin(c) || !session || body.csrf !== session.csrf) {
+  if (!sameOrigin(c) || !session || !(await secretsMatch(String(body.csrf ?? ''), session.csrf))) {
     return c.text('Forbidden', 403);
   }
   removeSession(c);
@@ -843,7 +864,7 @@ app.get('/api/rollout', async (c) => {
 app.post('/api/rollout/start', async (c) => {
   const session = await readSession(c);
   if (!session) return c.json({ error: '未登录' }, 401);
-  if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
+  if (!sameOrigin(c) || !(await csrfHeaderMatches(c, session.csrf))) {
     return c.json({ error: '请求校验失败' }, 403);
   }
   const body = await c.req.json().catch(() => null) as { candidateSha?: unknown; percentage?: unknown } | null;
@@ -865,7 +886,7 @@ app.post('/api/rollout/start', async (c) => {
 app.patch('/api/rollout', async (c) => {
   const session = await readSession(c);
   if (!session) return c.json({ error: '未登录' }, 401);
-  if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
+  if (!sameOrigin(c) || !(await csrfHeaderMatches(c, session.csrf))) {
     return c.json({ error: '请求校验失败' }, 403);
   }
   const body = await c.req.text();
@@ -879,7 +900,7 @@ app.patch('/api/rollout', async (c) => {
 app.patch('/api/rollout/audience', async (c) => {
   const session = await readSession(c);
   if (!session) return c.json({ error: '未登录' }, 401);
-  if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
+  if (!sameOrigin(c) || !(await csrfHeaderMatches(c, session.csrf))) {
     return c.json({ error: '请求校验失败' }, 403);
   }
   const body = await c.req.text();
@@ -893,7 +914,7 @@ app.patch('/api/rollout/audience', async (c) => {
 app.post('/api/promote', async (c) => {
   const session = await readSession(c);
   if (!session) return c.json({ error: '未登录' }, 401);
-  if (!sameOrigin(c) || c.req.header('X-CSRF-Token') !== session.csrf) {
+  if (!sameOrigin(c) || !(await csrfHeaderMatches(c, session.csrf))) {
     return c.json({ error: '请求校验失败' }, 403);
   }
 

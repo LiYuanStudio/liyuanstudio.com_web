@@ -68,7 +68,20 @@ function normalizeUpstreamOrigin(raw: string): URL {
   return parsed;
 }
 
-function createUpstreamHeaders(request: Request): Headers {
+async function hmacSha256Hex(key: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
+  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function createUpstreamHeaders(request: Request, clientIpHmacKey?: string): Promise<Headers> {
   const headers = new Headers();
   request.headers.forEach((value, name) => {
     if (ALLOWED_REQUEST_HEADERS.has(name.toLowerCase())) {
@@ -79,6 +92,13 @@ function createUpstreamHeaders(request: Request): Headers {
   const incoming = new URL(request.url);
   const clientIp = request.headers.get('cf-connecting-ip');
   if (clientIp) headers.set('x-forwarded-for', clientIp);
+  // Vercel overwrites x-forwarded-for with the proxy's egress IP, so the real
+  // client IP also travels in a signed header the API can authenticate. The
+  // signature scheme must stay in sync with getClientIp in server/src/routes/auth.ts.
+  if (clientIp && clientIpHmacKey) {
+    headers.set('x-liyuan-client-ip', clientIp);
+    headers.set('x-liyuan-client-ip-signature', await hmacSha256Hex(clientIpHmacKey, clientIp));
+  }
   headers.set('x-forwarded-host', incoming.host);
   headers.set('x-forwarded-proto', incoming.protocol.slice(0, -1));
   return headers;
@@ -120,6 +140,7 @@ function createResponseHeaders(
 export async function proxyApiRequest(
   request: Request,
   upstreamOriginValue: string,
+  clientIpHmacKey?: string,
 ): Promise<Response> {
   const publicUrl = new URL(request.url);
   if (publicUrl.pathname !== '/api' && !publicUrl.pathname.startsWith('/api/')) {
@@ -138,7 +159,7 @@ export async function proxyApiRequest(
   try {
     upstreamResponse = await fetch(upstreamUrl, {
       method: request.method,
-      headers: createUpstreamHeaders(request),
+      headers: await createUpstreamHeaders(request, clientIpHmacKey),
       body: request.method === 'GET' || request.method === 'HEAD'
         ? undefined
         : request.body,

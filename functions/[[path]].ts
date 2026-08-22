@@ -18,6 +18,7 @@ export type PagesRoutingContext = {
   env: {
     ASSETS: AssetFetcher;
     API_UPSTREAM_ORIGIN: string;
+    CLIENT_IP_HMAC_KEY?: string;
   };
   next(): Promise<Response>;
 };
@@ -29,7 +30,7 @@ function isPageRequest(method: string): boolean {
 export async function onRequest(context: PagesRoutingContext): Promise<Response> {
   const requestUrl = new URL(context.request.url);
   if (requestUrl.pathname === '/api' || requestUrl.pathname.startsWith('/api/')) {
-    return proxyApiRequest(context.request, context.env.API_UPSTREAM_ORIGIN);
+    return proxyApiRequest(context.request, context.env.API_UPSTREAM_ORIGIN, context.env.CLIENT_IP_HMAC_KEY);
   }
 
   if (!isPageRequest(context.request.method)) {

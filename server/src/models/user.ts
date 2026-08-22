@@ -27,7 +27,7 @@ const UserSchema = new mongoose.Schema<User>(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
-    displayName: { type: String, required: true, trim: true },
+    displayName: { type: String, required: true, trim: true, maxlength: 40 },
     username: {
       type: String,
       unique: true,

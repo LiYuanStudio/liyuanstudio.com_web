@@ -338,6 +338,7 @@ export function AuthForm({
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             required
+            maxLength={40}
             autoComplete="name"
             aria-invalid={Boolean(error)}
             aria-describedby={errorDescription}

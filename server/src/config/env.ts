@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 config();
 
 const MIN_JWT_SECRET_LENGTH = 32;
+const MIN_API_KEY_LENGTH = 32;
 
 function requireEnv(key: string): string {
   const value = process.env[key];
@@ -16,6 +17,14 @@ function requireJwtSecret(): string {
   const value = requireEnv('JWT_SECRET');
   if (value.length < MIN_JWT_SECRET_LENGTH) {
     throw new Error(`JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters`);
+  }
+  return value;
+}
+
+function requireApiKey(): string {
+  const value = requireEnv('API_KEY');
+  if (value.length < MIN_API_KEY_LENGTH) {
+    throw new Error(`API_KEY must be at least ${MIN_API_KEY_LENGTH} characters`);
   }
   return value;
 }
@@ -47,7 +56,7 @@ function resolveAppUrl(isProduction: boolean): string {
   return raw;
 }
 
-function resolveEmailConfig(isProduction: boolean): {
+function resolveEmailConfig(requireResend: boolean): {
   EMAIL_PROVIDER: string | undefined;
   RESEND_API_KEY: string | undefined;
   EMAIL_FROM: string | undefined;
@@ -56,7 +65,7 @@ function resolveEmailConfig(isProduction: boolean): {
   const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim() || undefined;
   const EMAIL_FROM = process.env.EMAIL_FROM?.trim() || undefined;
 
-  if (isProduction) {
+  if (requireResend) {
     if (EMAIL_PROVIDER !== 'resend') {
       throw new Error('EMAIL_PROVIDER must be set to resend in production');
     }
@@ -93,8 +102,12 @@ const isProduction = process.env.NODE_ENV === 'production';
 // gateway, which only forwards the Secure __Host- site cookies. NODE_ENV is not a
 // production signal there (preview runtimes do not set it), so key cookie security
 // off the Vercel platform itself instead of NODE_ENV alone.
-const secureSiteCookies = isProduction || Boolean(process.env.VERCEL);
-const emailConfig = resolveEmailConfig(isProduction);
+const isVercel = Boolean(process.env.VERCEL);
+const secureSiteCookies = isProduction || isVercel;
+// The mock email provider logs one-time codes and password-reset links to the
+// console. Function logs are readable outside the dev machine on Vercel, so mock
+// email must stay fail-closed on every Vercel runtime, not just NODE_ENV=production.
+const emailConfig = resolveEmailConfig(secureSiteCookies);
 const CORS_ORIGIN = parseOrigins(requireEnv('CORS_ORIGIN'));
 const APP_URL = resolveAppUrl(isProduction);
 const additionalTrustedOrigins = process.env.TRUSTED_ORIGINS?.trim()
@@ -103,11 +116,13 @@ const additionalTrustedOrigins = process.env.TRUSTED_ORIGINS?.trim()
 
 export const env = {
   IS_PRODUCTION: isProduction,
+  IS_VERCEL: isVercel,
   SECURE_SITE_COOKIES: secureSiteCookies,
   PORT: Number(process.env.PORT ?? '3000'),
   MONGODB_URI: requireEnv('MONGODB_URI'),
-  API_KEY: requireEnv('API_KEY'),
+  API_KEY: requireApiKey(),
   JWT_SECRET: requireJwtSecret(),
+  CLIENT_IP_HMAC_KEY: process.env.CLIENT_IP_HMAC_KEY?.trim() || undefined,
   APP_URL,
   EMAIL_PROVIDER: emailConfig.EMAIL_PROVIDER,
   RESEND_API_KEY: emailConfig.RESEND_API_KEY,

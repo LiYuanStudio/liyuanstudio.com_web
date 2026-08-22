@@ -17,7 +17,7 @@ const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
 
 async function makeApp() {
   vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
-  vi.stubEnv('API_KEY', 'secret-key');
+  vi.stubEnv('API_KEY', 'test-api-key-at-least-32-characters');
   vi.stubEnv('JWT_SECRET', JWT_SECRET);
   vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
   vi.stubEnv('APP_URL', 'https://liyuanstudio.com');

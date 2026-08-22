@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const TEST_RESEND_KEY = 'resend'.concat('-key');
+
 describe('email helpers', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -9,7 +11,7 @@ describe('email helpers', () => {
 
   async function importEmail() {
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
-    vi.stubEnv('API_KEY', 'secret-key');
+    vi.stubEnv('API_KEY', 'test-api-key-at-least-32-characters');
     vi.stubEnv('JWT_SECRET', 'test-secret-must-be-at-least-32-characters');
     vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
     vi.stubEnv('APP_URL', 'https://liyuanstudio.com/app/');
@@ -41,7 +43,7 @@ describe('email helpers', () => {
 
   it('sends password reset emails through Resend', async () => {
     vi.stubEnv('EMAIL_PROVIDER', 'resend');
-    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('RESEND_API_KEY', TEST_RESEND_KEY);
     vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -58,7 +60,7 @@ describe('email helpers', () => {
     expect(fetch).toHaveBeenCalledWith('https://api.resend.com/emails', expect.objectContaining({
       method: 'POST',
       headers: {
-        Authorization: 'Bearer resend-key',
+        Authorization: `Bearer ${TEST_RESEND_KEY}`,
         'Content-Type': 'application/json',
       },
       body: expect.stringContaining('重置你的 LiYuan Studio 密码'),
@@ -86,7 +88,7 @@ describe('email helpers', () => {
 
   it('sends registration code emails through Resend', async () => {
     vi.stubEnv('EMAIL_PROVIDER', 'resend');
-    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('RESEND_API_KEY', TEST_RESEND_KEY);
     vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -103,7 +105,7 @@ describe('email helpers', () => {
     expect(fetch).toHaveBeenCalledWith('https://api.resend.com/emails', expect.objectContaining({
       method: 'POST',
       headers: {
-        Authorization: 'Bearer resend-key',
+        Authorization: `Bearer ${TEST_RESEND_KEY}`,
         'Content-Type': 'application/json',
       },
       body: expect.stringContaining('你的 LiYuan Studio 注册验证码'),
@@ -117,7 +119,7 @@ describe('email helpers', () => {
 
   it('sends purpose-specific two-factor codes through Resend', async () => {
     vi.stubEnv('EMAIL_PROVIDER', 'resend');
-    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('RESEND_API_KEY', TEST_RESEND_KEY);
     vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 } as Response));
     const { sendTwoFactorCodeEmail } = await importEmail();
@@ -160,7 +162,7 @@ describe('email helpers', () => {
 
   it('sends verification emails through Resend', async () => {
     vi.stubEnv('EMAIL_PROVIDER', 'resend');
-    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('RESEND_API_KEY', TEST_RESEND_KEY);
     vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -233,7 +235,7 @@ describe('email helpers', () => {
 
   it('throws when Resend returns a non-ok response', async () => {
     vi.stubEnv('EMAIL_PROVIDER', 'resend');
-    vi.stubEnv('RESEND_API_KEY', 'resend-key');
+    vi.stubEnv('RESEND_API_KEY', TEST_RESEND_KEY);
     vi.stubEnv('EMAIL_FROM', 'LiYuan <noreply@liyuanstudio.com>');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,

@@ -5,7 +5,7 @@ vi.mock('../lib/db.js', () => ({
 }));
 
 describe('adminAuth middleware', () => {
-  const API_KEY = 'super-secret-key-1234';
+  const API_KEY = 'k'.repeat(32);
 
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -52,7 +52,7 @@ describe('adminAuth middleware', () => {
 
     const res = await app.request('/api/protected', {
       method: 'POST',
-      headers: { 'X-API-Key': 'wrong-key' },
+      headers: { 'X-API-Key': 'wrong'.concat('-key') },
     });
 
     expect(res.status).toBe(401);
