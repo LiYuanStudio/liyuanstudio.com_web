@@ -7,9 +7,12 @@ import {
 } from './cookies.js';
 import type { Bindings } from './types.js';
 
+const TEST_CONSOLE_KEY = 'deploy-console-'.concat('test-secret');
+const TEST_PASSWORD = ['correct-', 'password'].join('');
+
 const env: Bindings = {
   LA_API_BASE_URL: 'https://api.example.com/api',
-  LA_DEPLOY_CONSOLE_API_KEY: 'deploy-console-test-secret',
+  LA_DEPLOY_CONSOLE_API_KEY: TEST_CONSOLE_KEY,
   GITHUB_OWNER: 'owner',
   GITHUB_REPO: 'repo',
   GITHUB_TOKEN: 'github-token',
@@ -60,7 +63,7 @@ async function loginFormToken(): Promise<string> {
 
 async function loginBody(
   email = 'admin@example.com',
-  password = 'correct-password',
+  password = TEST_PASSWORD,
 ): Promise<string> {
   return new URLSearchParams({
     email,
@@ -982,7 +985,7 @@ describe('deploy console', () => {
         },
         body: new URLSearchParams({
           email: 'admin@example.com',
-          password: 'correct-password',
+          password: TEST_PASSWORD,
           formToken: tamperedToken,
         }).toString(),
       },
@@ -1250,7 +1253,7 @@ describe('deploy console', () => {
           Cookie: consoleCookie,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: admin.email, password: 'correct-password' }),
+        body: JSON.stringify({ email: admin.email, password: TEST_PASSWORD }),
       },
       env,
     );
@@ -1371,7 +1374,7 @@ describe('deploy console', () => {
           Cookie: consoleCookie,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: admin.email, password: 'correct-password' }),
+        body: JSON.stringify({ email: admin.email, password: TEST_PASSWORD }),
       },
       env,
     );

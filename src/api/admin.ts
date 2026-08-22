@@ -6,14 +6,14 @@ export function fetchUsers(): Promise<{ users: User[] }> {
 }
 
 export function updateUser(id: string, role: UserRole): Promise<{ user: User }> {
-  return apiFetchJson<{ user: User }>(`/admin/users/${id}`, {
+  return apiFetchJson<{ user: User }>(`/admin/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ role }),
   });
 }
 
 export function deleteUser(id: string): Promise<{ ok: boolean }> {
-  return apiFetchJson<{ ok: boolean }>(`/admin/users/${id}`, {
+  return apiFetchJson<{ ok: boolean }>(`/admin/users/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
 }

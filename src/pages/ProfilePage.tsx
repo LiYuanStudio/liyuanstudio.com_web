@@ -680,7 +680,7 @@ function SettingsPage({ user, logout, updateAvatar, updateProfile }: {
           </div>
           <form className="profile-form" onSubmit={handleSubmit}>
             <label htmlFor="profile-display-name">显示名称</label>
-            <input id="profile-display-name" type="text" value={form.displayName} onChange={(event) => handleChange('displayName', event.target.value)} required autoComplete="name" aria-invalid={Boolean(error)} aria-describedby={error ? 'profile-form-error' : undefined} />
+            <input id="profile-display-name" type="text" value={form.displayName} onChange={(event) => handleChange('displayName', event.target.value)} required maxLength={40} autoComplete="name" aria-invalid={Boolean(error)} aria-describedby={error ? 'profile-form-error' : undefined} />
             <div className="profile-label-row"><label htmlFor="profile-bio">一句话介绍</label><span>{form.bio.length}/{BIO_MAX_LENGTH}</span></div>
             <textarea id="profile-bio" value={form.bio} onChange={(event) => handleChange('bio', event.target.value.slice(0, BIO_MAX_LENGTH))} maxLength={BIO_MAX_LENGTH} rows={4} placeholder="用一句话介绍自己" />
             {error && <p id="profile-form-error" className="profile-error" role="alert" data-testid="profile-error">{error}</p>}
