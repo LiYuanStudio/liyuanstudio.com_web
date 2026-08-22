@@ -106,6 +106,72 @@ describe('same-origin API proxy', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('signs the forwarded client IP and drops client-supplied signature headers', async () => {
+    let capturedInit: RequestInit | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    await proxyApiRequest(
+      new Request('https://www.liyuanstudio.com/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': '203.0.113.8',
+          'X-Liyuan-Client-Ip': '6.6.6.6',
+          'X-Liyuan-Client-Ip-Signature': 'spoofed',
+        },
+        body: '{}',
+      }),
+      'https://liyuanstudio-com-web.vercel.app',
+      'proxy-shared-key',
+    );
+
+    const forwarded = new Headers(capturedInit?.headers);
+    expect(forwarded.get('x-liyuan-client-ip')).toBe('203.0.113.8');
+    const encoder = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode('proxy-shared-key'),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const digest = await crypto.subtle.sign(
+      'HMAC',
+      cryptoKey,
+      encoder.encode('203.0.113.8'),
+    );
+    const expected = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    expect(forwarded.get('x-liyuan-client-ip-signature')).toBe(expected);
+  });
+
+  it('does not emit signed client IP headers without a shared key', async () => {
+    let capturedInit: RequestInit | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    await proxyApiRequest(
+      new Request('https://www.liyuanstudio.com/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': '203.0.113.8',
+          'X-Liyuan-Client-Ip': '6.6.6.6',
+        },
+        body: '{}',
+      }),
+      'https://liyuanstudio-com-web.vercel.app',
+    );
+
+    const forwarded = new Headers(capturedInit?.headers);
+    expect(forwarded.get('x-liyuan-client-ip')).toBeNull();
+    expect(forwarded.get('x-liyuan-client-ip-signature')).toBeNull();
+  });
+
   it('returns a generic gateway error without leaking an upstream network failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('private DNS detail')));
 
