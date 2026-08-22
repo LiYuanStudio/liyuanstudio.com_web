@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context, Next } from 'hono';
 import bcrypt from 'bcryptjs';
@@ -42,6 +42,12 @@ const EMAIL_VERIFY_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 const GENERIC_PASSWORD_RESET_MESSAGE = '如果该邮箱已注册，我们已发送重置密码链接。';
 const BIO_MAX_LENGTH = 120;
+const DISPLAY_NAME_MAX_LENGTH = 40;
+const BCRYPT_COST = 12;
+// bcrypt only uses the first 72 password bytes; longer inputs are silently
+// truncated, so reject them at password-set time instead.
+const PASSWORD_MAX_BYTES = 72;
+const REGISTRATION_CODE_SENT_MESSAGE = '验证码已发送，请查收邮箱。';
 
 const REGISTRATION_RATE_LIMIT_MS = 60 * 1000;
 const REGISTRATION_VERIFY_MAX_ATTEMPTS = 5;
@@ -131,11 +137,23 @@ function validatePassword(password: unknown): string {
   return password;
 }
 
+function validateNewPassword(password: unknown): string {
+  const validated = validatePassword(password);
+  if (Buffer.byteLength(validated, 'utf8') > PASSWORD_MAX_BYTES) {
+    throw new Error(`密码长度不能超过 ${PASSWORD_MAX_BYTES} 字节`);
+  }
+  return validated;
+}
+
 function validateDisplayName(displayName: unknown): string {
   if (typeof displayName !== 'string' || displayName.trim().length === 0) {
     throw new Error('显示名称不能为空');
   }
-  return displayName.trim();
+  const trimmed = displayName.trim();
+  if (trimmed.length > DISPLAY_NAME_MAX_LENGTH) {
+    throw new Error(`显示名称不能超过 ${DISPLAY_NAME_MAX_LENGTH} 个字符`);
+  }
+  return trimmed;
 }
 
 function validateBio(bio: unknown): string {
@@ -262,9 +280,54 @@ function createRegistrationCode(): string {
   return String(randomInt(100000, 1000000));
 }
 
+const CLIENT_IP_HEADER = 'x-liyuan-client-ip';
+const CLIENT_IP_SIGNATURE_HEADER = 'x-liyuan-client-ip-signature';
+const IPV4_OR_IPV6_PATTERN = /^[0-9a-fA-F:.]{3,45}$/;
+
+// The Cloudflare Pages proxy (functions/[[path]].ts) is the only party allowed to
+// tell the API a client IP behind a signature. Vercel overwrites
+// x-forwarded-for/x-real-ip with the connecting peer, so those headers are only
+// meaningful for direct-to-Vercel traffic; elsewhere they are client-controlled
+// and must not feed throttle keys.
+function verifyClientIpSignature(ip: string, signature: string): boolean {
+  const secret = env.CLIENT_IP_HMAC_KEY;
+  if (!secret) {
+    return false;
+  }
+  const expected = createHmac('sha256', secret).update(ip).digest('hex');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  const providedBuffer = Buffer.from(signature, 'utf8');
+  return expectedBuffer.length === providedBuffer.length &&
+    timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+function getSocketRemoteAddress(c: Context): string | undefined {
+  const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)
+    ?.incoming;
+  return incoming?.socket?.remoteAddress;
+}
+
 function getClientIp(c: Context): string {
-  const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwarded || c.req.header('cf-connecting-ip') || 'unknown';
+  const signedIp = c.req.header(CLIENT_IP_HEADER);
+  const signature = c.req.header(CLIENT_IP_SIGNATURE_HEADER);
+  if (
+    signedIp &&
+    signature &&
+    IPV4_OR_IPV6_PATTERN.test(signedIp) &&
+    verifyClientIpSignature(signedIp, signature)
+  ) {
+    return signedIp;
+  }
+  if (env.IS_VERCEL) {
+    return c.req.header('x-real-ip')?.trim() ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'unknown';
+  }
+  // Standalone dev server: prefer the socket address; x-forwarded-for only comes
+  // from the local Vite proxy and is not trusted beyond that context.
+  return getSocketRemoteAddress(c) ||
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown';
 }
 
 function isActiveDate(date: Date | undefined, now: Date): boolean {
@@ -611,6 +674,13 @@ async function verifyCurrentPassword(user: UserForResponse, password: unknown): 
   return Boolean(user.passwordHash && await bcrypt.compare(validated, user.passwordHash));
 }
 
+let dummyPasswordHashPromise: Promise<string> | undefined;
+
+function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHashPromise ??= bcrypt.hash(randomBytes(32).toString('hex'), BCRYPT_COST);
+  return dummyPasswordHashPromise;
+}
+
 app.post('/register/send-code', async (c) => {
   let email: string;
   let password: string;
@@ -619,15 +689,10 @@ app.post('/register/send-code', async (c) => {
   try {
     const body = await c.req.json();
     email = validateEmail(body.email);
-    password = validatePassword(body.password);
+    password = validateNewPassword(body.password);
     displayName = validateDisplayName(body.displayName);
   } catch (error) {
     return badRequest(c, error);
-  }
-
-  const existingUser = await UserModel.findOne({ email });
-  if (existingUser) {
-    return jsonError(c, '该邮箱已被注册', 409);
   }
 
   const now = new Date();
@@ -642,9 +707,21 @@ app.post('/register/send-code', async (c) => {
     return jsonError(c, '验证码发送过于频繁，请稍后再试', 429);
   }
 
+  // Hash before the existing-account check so both paths spend the same time,
+  // otherwise the response timing would reveal which emails are registered.
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   const code = createRegistrationCode();
   const codeHash = hashToken(code);
-  const passwordHash = await bcrypt.hash(password, 10);
+
+  const existingUser = await UserModel.findOne({ email });
+  if (existingUser) {
+    // Anti-enumeration: reply exactly like a successful request without sending
+    // or persisting anything.
+    logAuthEvent(c, 'warn', 'auth.register_send_code_existing_email', {
+      email: maskEmail(email),
+    });
+    return c.json({ message: REGISTRATION_CODE_SENT_MESSAGE });
+  }
 
   await PendingRegistrationModel.findOneAndUpdate(
     { email },
@@ -664,12 +741,14 @@ app.post('/register/send-code', async (c) => {
     await sendRegistrationCodeEmail({ email, displayName, code });
   } catch (error) {
     await PendingRegistrationModel.deleteOne({ email });
-    return jsonError(c, '验证码邮件发送失败', 502, {
-      detail: error instanceof Error ? error.message : '未知邮件错误',
+    logAuthEvent(c, 'error', 'auth.registration_email_failed', {
+      email: maskEmail(email),
+      ...getErrorSummary(error),
     });
+    return jsonError(c, '验证码邮件发送失败', 502);
   }
 
-  return c.json({ message: '验证码已发送，请查收邮箱。' });
+  return c.json({ message: REGISTRATION_CODE_SENT_MESSAGE });
 });
 
 app.post('/register/verify', requireTrustedSessionCreation, async (c) => {
@@ -789,6 +868,9 @@ app.post('/login', requireTrustedSessionCreation, async (c) => {
   }
 
   if (!user) {
+    // Blind the timing difference: an unknown email must pay the same bcrypt
+    // compare as a wrong-password attempt.
+    await bcrypt.compare(password, await getDummyPasswordHash());
     let locked: boolean[];
     try {
       locked = await Promise.all(loginThrottleKeys.map((key) => recordLoginFailure(key, now)));
@@ -1002,7 +1084,7 @@ app.post('/2fa/login/verify', requireTrustedSessionCreation, async (c) => {
   return c.json(await issueAuthResponse(c, await ensureUsernameForRequest(c, user, '2fa-login')));
 });
 
-app.post('/2fa/login/resend', async (c) => {
+app.post('/2fa/login/resend', requireTrustedSessionCreation, async (c) => {
   let challengeToken: string;
   try {
     const body = await c.req.json();
@@ -1376,9 +1458,14 @@ app.post('/forgot-password', async (c) => {
       user.passwordResetTokenHash = undefined;
       user.passwordResetExpiresAt = undefined;
       await user.save();
-      return jsonError(c, '重置邮件发送失败', 502, {
-        detail: error instanceof Error ? error.message : '未知邮件错误',
+      logAuthEvent(c, 'error', 'auth.password_reset_email_failed', {
+        userId: user._id.toString(),
+        email: maskEmail(user.email),
+        ...getErrorSummary(error),
       });
+      // Keep the generic response so a mail-provider failure cannot be used to
+      // confirm which emails are registered.
+      return c.json({ message: GENERIC_PASSWORD_RESET_MESSAGE });
     }
   }
 
@@ -1395,12 +1482,12 @@ app.post('/reset-password', async (c) => {
       throw new Error('缺少重置令牌');
     }
     token = body.token;
-    password = validatePassword(body.password);
+    password = validateNewPassword(body.password);
   } catch (error) {
     return badRequest(c, error);
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   const user = await UserModel.findOneAndUpdate(
     {
       passwordResetTokenHash: hashToken(token),

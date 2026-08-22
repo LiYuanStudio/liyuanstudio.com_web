@@ -104,7 +104,7 @@ describe('blog routes', () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
-    vi.stubEnv('API_KEY', 'secret-key');
+    vi.stubEnv('API_KEY', 'test-api-key-at-least-32-characters');
     vi.stubEnv('JWT_SECRET', 'a'.repeat(32));
     vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com');
     mockBlogModel.find.mockReset();

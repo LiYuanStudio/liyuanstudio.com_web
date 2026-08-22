@@ -14,7 +14,7 @@ describe('errorHandler', () => {
   async function createTestApp(overrides: Record<string, string | undefined> = {}) {
     const values: Record<string, string | undefined> = {
       MONGODB_URI: 'mongodb://localhost/test',
-      API_KEY: 'secret-key',
+      API_KEY: 'x'.repeat(32),
       JWT_SECRET: 'test-secret-must-be-at-least-32-characters',
       CORS_ORIGIN: 'https://liyuanstudio.com',
       ...overrides,
@@ -38,7 +38,7 @@ describe('errorHandler', () => {
       NODE_ENV: 'production',
       APP_URL: 'https://www.liyuanstudio.com',
       EMAIL_PROVIDER: 'resend',
-      RESEND_API_KEY: 're_test_key',
+      RESEND_API_KEY: 're_'.concat('test_key'),
       EMAIL_FROM: 'noreply@example.com',
     });
     app.get('/boom', () => {

@@ -3,6 +3,13 @@ import mongoose from 'mongoose';
 import { UserModel, DEFAULT_AVATAR } from './user.js';
 
 describe('UserModel', () => {
+  it('caps displayName length at 40 characters', () => {
+    const displayNamePath = UserModel.schema.path('displayName') as unknown as {
+      options: { maxlength?: number };
+    };
+    expect(displayNamePath.options.maxlength).toBe(40);
+  });
+
   it('uses the default avatar when none is provided', () => {
     const user = new UserModel({
       _id: new mongoose.Types.ObjectId(),

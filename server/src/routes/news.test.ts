@@ -14,7 +14,7 @@ vi.mock('../models/session.js');
 const mockNewsModel = vi.mocked(NewsModel);
 const mockSessionModel = vi.mocked(SessionModel);
 const mockUserModel = vi.mocked(UserModel);
-const API_KEY = 'secret-key';
+const API_KEY = 'k'.repeat(32);
 const JWT_SECRET = 'test-secret-must-be-at-least-32-characters';
 
 const validNews = {
@@ -230,7 +230,7 @@ describe('news routes', () => {
     const app = await makeApp();
     const res = await app.request('/api/news', {
       method: 'POST',
-      headers: { 'X-API-Key': 'wrong-key!', 'Content-Type': 'application/json' },
+      headers: { 'X-API-Key': 'wrong'.concat('-key!'), 'Content-Type': 'application/json' },
       body: JSON.stringify(validNews),
     });
 

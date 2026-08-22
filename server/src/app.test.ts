@@ -13,7 +13,7 @@ describe('createApp', () => {
 
   async function makeApp(basePath?: string) {
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost/test');
-    vi.stubEnv('API_KEY', 'secret');
+    vi.stubEnv('API_KEY', 'test-api-key-at-least-32-characters');
     vi.stubEnv('CORS_ORIGIN', 'https://liyuanstudio.com,https://www.liyuanstudio.com');
     const { createApp: factory } = await import('./app.js');
     return factory(basePath);
@@ -24,6 +24,18 @@ describe('createApp', () => {
     const res = await app.request('/api/health');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
+  });
+
+  it('rejects oversized request bodies with 413', async () => {
+    const app = await makeApp('/api');
+    const res = await app.request('/api/auth/register/send-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'x'.repeat(1024 * 1024 + 1),
+    });
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: '请求体过大' });
   });
 
   it('works without a base path', async () => {

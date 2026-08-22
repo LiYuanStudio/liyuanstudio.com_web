@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { bodyLimit } from 'hono/body-limit';
 import { env } from './config/env.js';
 import { connectDB } from './lib/db.js';
 import { errorHandler } from './middleware/error.js';
@@ -11,6 +12,10 @@ import adminRoutes from './routes/admin.js';
 import newsRoutes from './routes/news.js';
 import blogRoutes from './routes/blog.js';
 import rolloutRoutes from './routes/rollout.js';
+
+// Largest legitimate payload is a base64 avatar (400k chars); 1MB leaves ample
+// headroom while capping memory abuse on the standalone node server.
+const MAX_BODY_BYTES = 1024 * 1024;
 
 export function createApp(basePath?: string) {
   const app = basePath ? new Hono().basePath(basePath) : new Hono();
@@ -32,6 +37,11 @@ export function createApp(basePath?: string) {
       credentials: true,
     }),
   );
+
+  app.use(bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json({ error: '请求体过大' }, 413),
+  }));
 
   app.use(async (c, next) => {
     await connectDB();
