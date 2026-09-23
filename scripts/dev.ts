@@ -32,9 +32,13 @@ function run(command: string, args: string[], options?: { cwd?: string; env?: No
 
 async function getProcessName(pid: number): Promise<string | null> {
   if (process.platform === 'win32') {
-    const { stdout } = await run('wmic', ['process', 'where', `ProcessId=${pid}`, 'get', 'Name']);
-    const match = stdout.split('\n').find((line) => line.trim() && !line.includes('Name'));
-    return match?.trim() ?? null;
+    const { stdout, code } = await run('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).ProcessName`,
+    ]);
+    return code === 0 ? stdout.trim() || null : null;
   }
   // macOS / Linux
   try {
@@ -63,8 +67,9 @@ async function getListeningPids(port: number): Promise<number[]> {
   const { stdout } = await run('lsof', ['-i', `TCP:${port}`, '-sTCP:LISTEN', '-t']);
   return stdout
     .split('\n')
-    .map((s) => Number(s.trim()))
-    .filter((n) => !Number.isNaN(n));
+    .map((s) => s.trim())
+    .filter((s) => /^\d+$/.test(s))
+    .map(Number);
 }
 
 async function killProcess(pid: number) {

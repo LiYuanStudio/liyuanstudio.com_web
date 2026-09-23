@@ -972,10 +972,6 @@ h1 {
   .hero-inner {
     gap: 20px;
   }
-
-  .hero-visual {
-    min-width: 200px;
-  }
 }
 
 @media (max-width: 760px) {
@@ -1104,16 +1100,6 @@ h1 {
     gap: 20px;
   }
 
-  .hero-visual {
-    --globe-size: min(125vw, 600px);
-    flex: none;
-    position: absolute;
-    right: calc(var(--globe-size) * -0.55);
-    top: calc(var(--globe-size) * -0.6);
-    width: var(--globe-size);
-    min-width: 0;
-  }
-
   .hero-copy {
     font-size: 18px;
   }
@@ -1130,7 +1116,7 @@ h1 {
   .hero {
     min-height: auto;
     align-items: flex-start;
-    padding: 176px 18px 42px;
+    padding: 176px 18px 104px;
     overflow: hidden;
   }
 
