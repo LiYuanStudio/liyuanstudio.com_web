@@ -47,7 +47,7 @@ a {
   left: 0;
   right: 0;
   z-index: 10001;
-  padding: 8px 24px;
+  padding: 12px 32px;
   min-height: 68px;
 }
 
@@ -70,12 +70,13 @@ a {
 }
 
 .nav-inner {
-  display: grid;
+  position: relative;
+  z-index: 1;
+  display: flex;
   width: min(1840px, 100%);
   margin: 0 auto;
-  grid-template-columns: minmax(160px, 1fr) auto minmax(160px, 1fr);
   align-items: center;
-  gap: 20px;
+  gap: 28px;
 }
 
 .nav-menu {
@@ -105,8 +106,8 @@ a {
 }
 
 .brand img {
-  width: 154px;
-  height: 40px;
+  width: 140px;
+  height: 36px;
   object-fit: contain;
 }
 
@@ -117,12 +118,55 @@ a {
 .nav-links {
   display: flex;
   align-items: center;
-  justify-self: center;
-  gap: 18px;
+  gap: 28px;
 }
 
-.nav-links .nav-user {
-  margin-left: 8px;
+@media (min-width: 761px) {
+  .nav-menu {
+    position: absolute;
+    top: 50%;
+    left: 168px;
+    display: block;
+    transform: translateY(-50%);
+    transition:
+      left 760ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 760ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .nav-settled .nav-menu {
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .nav-links .nav-user {
+    margin-left: 8px;
+    opacity: 0;
+    visibility: hidden;
+    filter: blur(4px);
+    transform: translateY(-12px) scale(0.72) rotate(-12deg);
+    pointer-events: none;
+    transition:
+      opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 650ms cubic-bezier(0.16, 1, 0.3, 1),
+      filter 420ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 650ms;
+  }
+
+  .nav-settled .nav-links .nav-user {
+    opacity: 1;
+    visibility: visible;
+    filter: blur(0);
+    transform: translateY(0) scale(1) rotate(0);
+    pointer-events: auto;
+    transition-delay: 140ms, 140ms, 140ms, 0s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-menu,
+  .nav-links .nav-user {
+    transition: none;
+  }
 }
 
 .nav-item {
@@ -130,8 +174,8 @@ a {
   align-items: center;
   justify-content: center;
   min-height: 44px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -140,7 +184,7 @@ a {
 }
 
 .nav-item {
-  padding: 0 14px;
+  padding: 0;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -240,7 +284,7 @@ h1 {
 .hero h1 {
   max-width: 100%;
   margin: 0;
-  font-size: clamp(46px, 5.7vw, 76px);
+  font-size: clamp(46px, min(5.7vw, 9.6vh), 76px);
   line-height: 1.04;
 }
 
@@ -941,8 +985,7 @@ h1 {
 
   .nav-inner {
     position: relative;
-    grid-template-columns: auto 44px;
-    gap: 10px;
+    justify-content: space-between;
   }
 
   .brand {
@@ -1025,14 +1068,10 @@ h1 {
   }
 
   .nav-links {
-    display: grid;
+    display: flex;
     width: 100%;
-    grid-template-columns: minmax(0, 1fr) 44px;
-    gap: 2px 8px;
-  }
-
-  .nav-links > .nav-item:nth-child(-n + 2) {
-    grid-column: 1 / -1;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .nav-menu .nav-item {
@@ -1041,25 +1080,12 @@ h1 {
     justify-content: flex-start;
     padding: 0 14px;
     border-radius: 12px;
+    font-size: 14px;
   }
 
   .nav-menu .nav-user {
-    width: 44px;
-    height: 44px;
-    padding: 4px;
-    border-radius: 50%;
-  }
-
-  .nav-links .nav-user {
-    margin-left: 0;
-  }
-
-  .nav-menu .nav-user img,
-  .nav-menu .nav-user .user-avatar-fallback {
-    width: 34px;
-    height: 34px;
-    flex: 0 0 auto;
-    border-radius: 50%;
+    align-self: flex-end;
+    margin-right: 14px;
   }
 
   .section-more-link {
@@ -1079,11 +1105,11 @@ h1 {
   }
 
   .hero-visual {
-    --globe-size: min(96vw, 480px);
+    --globe-size: min(125vw, 600px);
     flex: none;
     position: absolute;
-    right: calc(var(--globe-size) * -0.48);
-    top: calc(var(--globe-size) * -0.48);
+    right: calc(var(--globe-size) * -0.55);
+    top: calc(var(--globe-size) * -0.6);
     width: var(--globe-size);
     min-width: 0;
   }
@@ -1321,8 +1347,8 @@ h1 {
 .nav-user {
   position: relative;
   display: inline-flex;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;

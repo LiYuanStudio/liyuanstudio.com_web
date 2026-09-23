@@ -1,8 +1,8 @@
 .hero-visual {
-  --globe-size: min(72vw, 960px);
+  --globe-size: min(100vw, 1440px);
   position: absolute;
-  right: calc(var(--globe-size) * -0.46);
-  top: calc(var(--globe-size) * -0.32);
+  right: calc(var(--globe-size) * -0.4);
+  top: calc(var(--globe-size) * -0.4);
   width: var(--globe-size);
   aspect-ratio: 1;
   pointer-events: none;

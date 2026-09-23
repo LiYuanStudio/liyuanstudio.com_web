@@ -262,13 +262,16 @@ export function App() {
   useEffect(() => {
     const nav = navRef.current;
     const hero = heroRef.current;
-    if (!nav || !hero) return;
+    const products = productsRef.current;
+    if (!nav || !hero || !products) return;
 
     const handleScroll = () => {
       const navRect = nav.getBoundingClientRect();
       const heroRect = hero.getBoundingClientRect();
+      const productsRect = products.getBoundingClientRect();
       const isScrolled = heroRect.top < navRect.bottom - NAV_SCROLL_OFFSET;
       nav.classList.toggle('nav-scrolled', isScrolled);
+      nav.classList.toggle('nav-settled', productsRect.top <= navRect.bottom + 32);
     };
 
     handleScroll();

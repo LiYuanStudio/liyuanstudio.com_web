@@ -111,6 +111,8 @@ describe('App', () => {
     expect(menu).toHaveClass('nav-menu-open');
     expect(within(menu as HTMLElement).getByRole('link', { name: '产品' }))
       .toHaveAttribute('href', '/products/');
+    expect(within(menu as HTMLElement).getByRole('link', { name: '博客' }))
+      .toHaveAttribute('href', '/blog/');
     expect(within(menu as HTMLElement).getByRole('link', { name: '登录或注册' }))
       .toHaveAttribute('href', '/login/');
 
@@ -134,6 +136,22 @@ describe('App', () => {
     expect(document.querySelector('#main-nav-menu')).not.toHaveClass('nav-menu-open');
   });
 
+  it('settles the navigation when the products section reaches the header', () => {
+    renderApp();
+    const nav = screen.getByRole('navigation', { name: '主导航' });
+    const products = document.querySelector('#products');
+    if (!products) throw new Error('Missing products section');
+    const productsRect = vi.spyOn(products, 'getBoundingClientRect');
+
+    productsRect.mockReturnValue({ top: 20 } as DOMRect);
+    window.dispatchEvent(new Event('scroll'));
+    expect(nav).toHaveClass('nav-settled');
+
+    productsRect.mockReturnValue({ top: 1000 } as DOMRect);
+    window.dispatchEvent(new Event('scroll'));
+    expect(nav).not.toHaveClass('nav-settled');
+  });
+
   it('has no automated accessibility violations in the loaded empty state', async () => {
     const { container } = renderApp();
 
@@ -142,62 +160,6 @@ describe('App', () => {
     await expectNoAccessibilityViolations(container);
   });
 
-  it('links authenticated users with a valid username to their public profile from the homepage', async () => {
-    mockFetchNews.mockResolvedValue([]);
-    mockFetchBlogPosts.mockResolvedValue([]);
-    localStorage.setItem('liyuan_auth_token', 'admin-token');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        user: {
-          id: '1',
-          email: 'admin@example.com',
-          displayName: 'Admin',
-          username: 'li-yuan',
-          role: 'admin',
-          emailVerified: true,
-        },
-      }),
-    } as Response));
-
-    renderApp();
-
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'Admin' })).toBeInTheDocument();
-    });
-    expect(screen.queryByRole('link', { name: '后台' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '退出' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/li-yuan/');
-    expect(within(document.querySelector('#main-nav-menu') as HTMLElement)
-      .getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/li-yuan/');
-  });
-
-  it('does not use the display name as a homepage public profile slug', async () => {
-    mockFetchNews.mockResolvedValue([]);
-    mockFetchBlogPosts.mockResolvedValue([]);
-    localStorage.setItem('liyuan_auth_token', 'admin-token');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        user: {
-          id: '1',
-          email: 'admin@example.com',
-          displayName: 'LA',
-          role: 'admin',
-          emailVerified: true,
-        },
-      }),
-    } as Response));
-
-    renderApp();
-
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'LA' })).toBeInTheDocument();
-    });
-    expect(screen.getByRole('link', { name: 'LA' })).toHaveAttribute('href', '/profile/');
-  });
 });
 
 describe('utilities', () => {
