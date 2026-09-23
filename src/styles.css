@@ -121,12 +121,8 @@ a {
   gap: 18px;
 }
 
-.nav-actions {
-  display: flex;
-  align-items: center;
-  justify-self: end;
-  gap: 10px;
-  min-width: 0;
+.nav-links .nav-user {
+  margin-left: 8px;
 }
 
 .nav-item {
@@ -158,13 +154,15 @@ a {
 }
 
 .hero {
+  position: relative;
   display: flex;
   width: 100vw;
   min-height: 100vh;
   margin-left: calc(50% - 50vw);
-  align-items: center;
-  padding: 80px 30px;
+  align-items: flex-end;
+  padding: 80px 30px clamp(120px, 19vh, 180px);
   text-align: left;
+  overflow: hidden;
 }
 
 .products,
@@ -1027,10 +1025,14 @@ h1 {
   }
 
   .nav-links {
+    display: grid;
     width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 2px 8px;
+  }
+
+  .nav-links > .nav-item:nth-child(-n + 2) {
+    grid-column: 1 / -1;
   }
 
   .nav-menu .nav-item {
@@ -1041,29 +1043,15 @@ h1 {
     border-radius: 12px;
   }
 
-  .nav-menu .nav-actions {
-    display: grid;
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(29, 29, 31, 0.08);
-  }
-
-  .nav-menu .nav-actions .nav-item {
-    justify-content: center;
-    background: #f5f5f7;
-  }
-
   .nav-menu .nav-user {
-    width: 100%;
+    width: 44px;
     height: 44px;
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    gap: 10px;
-    padding: 4px 12px 4px 4px;
-    overflow: visible;
-    border-radius: 12px;
+    padding: 4px;
+    border-radius: 50%;
+  }
+
+  .nav-links .nav-user {
+    margin-left: 0;
   }
 
   .nav-menu .nav-user img,
@@ -1072,17 +1060,6 @@ h1 {
     height: 34px;
     flex: 0 0 auto;
     border-radius: 50%;
-  }
-
-  .nav-menu .nav-user-name {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip: auto;
-    color: #1d1d1f;
-    font-size: 14px;
-    white-space: nowrap;
   }
 
   .section-more-link {
@@ -1102,13 +1079,13 @@ h1 {
   }
 
   .hero-visual {
+    --globe-size: min(96vw, 480px);
     flex: none;
-    width: min(88vw, 370px);
-    height: min(88vw, 370px);
+    position: absolute;
+    right: calc(var(--globe-size) * -0.48);
+    top: calc(var(--globe-size) * -0.48);
+    width: var(--globe-size);
     min-width: 0;
-    max-width: 370px;
-    align-self: center;
-    aspect-ratio: auto;
   }
 
   .hero-copy {
@@ -1127,28 +1104,8 @@ h1 {
   .hero {
     min-height: auto;
     align-items: flex-start;
-    padding: 76px 18px 32px;
+    padding: 176px 18px 42px;
     overflow: hidden;
-  }
-
-  .hero-visual .hv-chip {
-    gap: 8px;
-    padding: 8px 12px 8px 10px;
-  }
-
-  .hero-visual .hv-chip-product {
-    top: 72%;
-    left: 2%;
-  }
-
-  .hero-visual .hv-chip-product img {
-    width: 26px;
-    height: 26px;
-  }
-
-  .hero-visual .hv-chip-cli {
-    top: 7%;
-    right: 2%;
   }
 
   .products {
@@ -1413,4 +1370,154 @@ h1 {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* Homepage dark preview */
+:root {
+  color: #f5f5f7;
+  background: #000;
+}
+
+body {
+  background: #000;
+}
+
+.nav::before {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.brand img,
+.footer-brand-link img {
+  filter: invert(1);
+}
+
+.nav-item {
+  color: #dedee3;
+}
+
+.nav-item:hover,
+.nav-scrolled .nav-item:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.hero-copy,
+.products-lead,
+.news-lead,
+.blog-lead,
+.news-status,
+.blog-status {
+  color: #b8b8c0;
+}
+
+.section-more-link,
+.product-tag,
+.news-tag,
+.blog-tag {
+  color: #8cc7ff;
+  background: rgba(76, 155, 255, 0.14);
+}
+
+.section-more-link:hover {
+  color: #c1e0ff;
+  background: rgba(76, 155, 255, 0.22);
+}
+
+.product-card,
+.product-card-side,
+.news-card,
+.blog-card,
+.product-card-side .product-card-body,
+.news-card-content,
+.blog-card-content {
+  color: #f5f5f7;
+  background: #161619;
+}
+
+.product-card,
+.news-card,
+.blog-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.product-card:hover,
+.news-card:hover,
+.blog-card:hover {
+  box-shadow: 0 18px 48px rgba(255, 255, 255, 0.06);
+}
+
+.product-card-visual,
+.preview-block,
+.polaroid-photo {
+  background: linear-gradient(135deg, #202025, #101013);
+}
+
+.product-card p,
+.product-card-side p,
+.news-card p,
+.blog-card p,
+.product-date,
+.news-date,
+.blog-date {
+  color: #b8b8c0;
+}
+
+.product-card-side h3 {
+  color: #f5f5f7;
+}
+
+.product-card-button {
+  color: #111;
+  background: #f5f5f7;
+}
+
+.product-card-button:hover {
+  background: #dcdce1;
+}
+
+.footer {
+  color: #f5f5f7;
+  background: #000;
+}
+
+.footer::after {
+  background: none;
+}
+
+.footer-brand-link,
+.footer-group h2 {
+  color: #f5f5f7;
+}
+
+.footer-tagline,
+.footer-group a,
+.footer-bottom {
+  color: #b8b8c0;
+}
+
+.footer-group a:hover {
+  color: #fff;
+}
+
+.footer-socials a {
+  color: #f5f5f7;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.footer-socials a:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.footer-bottom {
+  border-top-color: rgba(255, 255, 255, 0.16);
+}
+
+@media (max-width: 760px) {
+  .mobile-nav-toggle,
+  .nav-menu {
+    color: #f5f5f7;
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(20, 20, 23, 0.94);
+  }
 }

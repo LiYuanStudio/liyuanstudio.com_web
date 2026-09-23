@@ -12,15 +12,18 @@ describe('AuthNav', () => {
     vi.clearAllMocks();
   });
 
-  it('shows login and register links for guests on the main variant', () => {
+  it('shows a default avatar linking to the login and registration flow for guests', () => {
     mockUseAuth.mockReturnValue({
       state: { status: 'unauthenticated' },
     } as unknown as ReturnType<typeof useAuth>);
 
     render(<AuthNav />);
 
-    expect(screen.getByRole('link', { name: '登录' })).toHaveAttribute('href', '/login/');
-    expect(screen.getByRole('link', { name: '注册' })).toHaveAttribute('href', '/register/');
+    const accountLink = screen.getByRole('link', { name: '登录或注册' });
+    expect(accountLink).toHaveAttribute('href', '/login/');
+    expect(accountLink.querySelector('img')).toHaveAttribute('src', '/brand/default-avatar.svg');
+    expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '注册' })).not.toBeInTheDocument();
   });
 
   it('shows a combined login link for guests on the papyrus variant', () => {

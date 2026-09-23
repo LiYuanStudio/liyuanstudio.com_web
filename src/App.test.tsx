@@ -65,7 +65,11 @@ describe('App', () => {
 
     expect(navigation.getByRole('link', { name: '产品' })).toHaveAttribute('href', '/products/');
     expect(navigation.getByRole('link', { name: '动态' })).toHaveAttribute('href', '/release/');
-    expect(navigation.getByRole('link', { name: '博客' })).toHaveAttribute('href', '/blog/');
+    const blogLink = navigation.getByRole('link', { name: '博客' });
+    const accountLink = navigation.getByRole('link', { name: '登录或注册' });
+    expect(blogLink).toHaveAttribute('href', '/blog/');
+    expect(accountLink).toHaveAttribute('href', '/login/');
+    expect(blogLink.nextElementSibling).toBe(accountLink);
     const sectionLinks = screen.getAllByRole('link', { name: /查看更多/ });
     expect(sectionLinks.map((link) => link.getAttribute('href')))
       .toEqual(['/products/', '/release/', '/blog/']);
@@ -107,10 +111,8 @@ describe('App', () => {
     expect(menu).toHaveClass('nav-menu-open');
     expect(within(menu as HTMLElement).getByRole('link', { name: '产品' }))
       .toHaveAttribute('href', '/products/');
-    expect(within(menu as HTMLElement).getByRole('link', { name: '登录' }))
+    expect(within(menu as HTMLElement).getByRole('link', { name: '登录或注册' }))
       .toHaveAttribute('href', '/login/');
-    expect(within(menu as HTMLElement).getByRole('link', { name: '注册' }))
-      .toHaveAttribute('href', '/register/');
 
     await user.keyboard('{Escape}');
 

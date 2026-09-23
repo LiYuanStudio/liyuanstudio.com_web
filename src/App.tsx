@@ -347,8 +347,8 @@ export function App() {
               <a className="nav-item" href="/blog/">
                 博客
               </a>
+              <AuthNav />
             </div>
-            <AuthNav />
           </div>
         </div>
       </nav>
