@@ -364,7 +364,7 @@ export function App() {
           aria-labelledby="hero-title"
         >
           <div className="hero-inner">
-            <MaskedHeading as="h1" id="hero-title" className="fixed-blue-period">
+            <MaskedHeading as="h1" id="hero-title" className="fixed-blue-period" alternateText="Mens et Manus">
               打造「有生机的科技」
             </MaskedHeading>
             <HeroVisual />

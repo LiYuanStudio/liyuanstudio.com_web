@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import './HeroVisual.css';
 
-type Pattern = 'planet' | 'neural' | 'collision' | 'lattice' | 'gravity';
-const PATTERNS: Pattern[] = ['planet', 'neural', 'collision', 'lattice', 'gravity'];
+type Pattern = 'planet' | 'neural' | 'collision' | 'bloom' | 'fireflies' | 'gravity';
+const PATTERNS: Pattern[] = ['planet', 'bloom', 'neural', 'fireflies', 'collision', 'gravity'];
 const TRANSITION_SECONDS = 2.4;
 const TEAL = '#14b8a6';
 const CYCLE_SECONDS = 8;
@@ -24,7 +24,7 @@ const DOTS = Array.from({ length: 67 * 67 }, (_, index) => {
   return { x, y, radius, angle, accent };
 }).filter((dot) => dot.radius <= 1);
 
-// Scientific visual studies, not numerical simulations. All dots stay on their grid.
+// Natural and scientific visual studies, not simulations. Dots stay on their grid.
 function illumination(pattern: Pattern, radius: number, _angle: number, time: number, x: number, y: number) {
   if (pattern === 'planet') {
     // Project a rotating, tilted sphere onto the fixed grid. Longitude compression
@@ -79,15 +79,38 @@ function illumination(pattern: Pattern, radius: number, _angle: number, time: nu
     }
     return clamp(light + band(distance, 0.08) * band(age - 0.3, 0.23));
   }
-  if (pattern === 'lattice') {
-    // Material science: fixed lattice sites, coupled standing modes and nodal lines.
-    const u = x * 0.87 + y * 0.5;
-    const v = -x * 0.5 + y * 0.87;
-    const sites = Math.pow(Math.abs(Math.cos(u * 25) * Math.cos(v * 25)), 12);
-    const mode = Math.sin(u * 6.5) * Math.sin(v * 5.5);
-    const response = 0.5 + 0.5 * Math.sin(time * 1.8 + mode * 4);
-    const nodes = band(mode, 0.085) * 0.35;
-    return clamp(sites * (0.25 + response * 0.75) + nodes * response);
+  if (pattern === 'bloom') {
+    // Nested petals unfold at different speeds, centred within the visible globe.
+    const dx = x + 0.38;
+    const dy = y - 0.3;
+    const distance = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+    let light = band(distance, 0.055) * 0.75;
+    for (let layer = 0; layer < 3; layer += 1) {
+      const opening = smooth((time - layer * 0.7) / 4.4);
+      const petal = 0.76 + 0.24 * Math.cos(angle * 7 + layer * 1.6 + distance * 2);
+      const edge = (0.17 + layer * 0.15) * opening * petal;
+      const contour = band(distance - edge, 0.018 + opening * 0.013);
+      const body = smooth((edge - distance) / 0.1) * 0.12;
+      light = Math.max(light, (contour * (0.9 - layer * 0.12) + body) * opening);
+    }
+    return clamp(light);
+  }
+  if (pattern === 'fireflies') {
+    // Small, softly drifting lights with independent, slow bioluminescent pulses.
+    const gx = (x + 1) * 7;
+    const gy = (y + 1) * 7;
+    const column = Math.floor(gx);
+    const row = Math.floor(gy);
+    const hash = Math.sin(column * 127.1 + row * 311.7) * 43758.5453;
+    const seed = hash - Math.floor(hash);
+    const phase = seed * TAU;
+    const cx = 0.5 + 0.2 * Math.sin(time * 0.65 + phase);
+    const cy = 0.5 + 0.2 * Math.cos(time * 0.48 + phase * 2);
+    const distance = Math.hypot(gx - column - cx, gy - row - cy);
+    const pulse = Math.pow(0.5 + 0.5 * Math.sin(time * (0.8 + seed * 0.4) + phase), 3);
+    const gathering = 0.65 + 0.35 * Math.cos(x * 2 + y * 3 - time * 0.45);
+    return band(distance, 0.16) * pulse * gathering;
   }
   // Astronomy: a drifting source bends into arcs around an off-centre lens.
   const dx = x + 0.38;

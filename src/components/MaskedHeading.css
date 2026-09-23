@@ -8,7 +8,7 @@
   color: inherit;
 }
 
-.fixed-blue-period .masked-base::after {
+.fixed-blue-period .masked-base:not(.heading-morph)::after {
   content: '';
   display: inline-block;
   width: 0.18em;
@@ -21,7 +21,94 @@
 }
 
 @media (max-width: 760px) {
-  .fixed-blue-period .masked-base::after {
+  .fixed-blue-period .masked-base:not(.heading-morph)::after {
     margin-left: -0.5em;
   }
+}
+
+.heading-morph {
+  display: inline-grid;
+  vertical-align: baseline;
+}
+
+.heading-morph-layer {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+.heading-morph-character {
+  display: inline-block;
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  transition: opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1), filter 180ms ease;
+  transition-delay: var(--character-delay);
+}
+
+.heading-morph[data-alternate='true'] .heading-morph-primary .heading-morph-character {
+  opacity: 0;
+  transform: translateY(-0.22em);
+  filter: blur(5px);
+}
+
+.heading-morph[data-alternate='false'] .heading-morph-alternate .heading-morph-character {
+  opacity: 0;
+  transform: translateY(0.22em);
+  filter: blur(5px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heading-morph-character {
+    transition: none;
+    filter: none !important;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .heading-morph {
+    max-width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heading-morph-layer {
+    white-space: normal;
+  }
+}
+
+
+.heading-period-anchor {
+  visibility: hidden;
+  display: inline-block;
+  width: 0.16em;
+  height: 0.16em;
+  margin-left: 0.08em;
+  border-radius: 50%;
+  background: #206ccf;
+  vertical-align: baseline;
+}
+
+.heading-morph-primary .heading-period-anchor {
+  margin-left: -0.52em;
+}
+
+.heading-moving-period {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0.16em;
+  height: 0.16em;
+  border-radius: 50%;
+  background: #206ccf;
+  pointer-events: none;
+  transform: translate(var(--period-primary-x, 0px), var(--period-primary-y, 0px));
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.heading-morph[data-alternate='true'] .heading-moving-period {
+  transform: translate(var(--period-alternate-x, 0px), var(--period-alternate-y, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heading-moving-period { transition: none; }
 }
