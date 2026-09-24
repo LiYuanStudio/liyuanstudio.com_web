@@ -11,6 +11,8 @@
     "deploy-console"
   ],
   "scripts": {
+    "art:generate": "tsx scripts/art-generator/index.ts",
+    "test:art": "tsc -p scripts/art-generator/tsconfig.json && tsx --test scripts/art-generator/*.test.ts",
     "dev": "tsx scripts/dev.ts",
     "dev:web": "vite",
     "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build",
@@ -55,6 +57,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "axe-core": "^4.12.1",
     "jsdom": "^26.1.0",
+    "sharp": "0.35.2",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vite": "^7.3.6",

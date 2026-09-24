@@ -27,3 +27,6 @@ server/dist
 coverage
 server/coverage
 
+# Local generated art and product composites
+artifacts/art/
+
