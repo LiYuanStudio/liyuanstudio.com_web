@@ -3,10 +3,10 @@ import type { RefObject } from 'react';
 import { IconGithub } from '@arco-design/web-react/icon';
 import { AuthNav } from '../components/AuthNav.js';
 import { MaskedHeading } from '../components/MaskedHeading.js';
+import { fetchLatestPapyrusRelease } from '../api/papyrusdesktop.js';
 import './papyrusdesktop.css';
 
 const REPO = 'LiYuanStudio/Papyrus_Desktop';
-const RELEASES_API_URL = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
 const RELEASES_PAGE_URL = `https://github.com/${REPO}/releases`;
 const TRUSTED_DOWNLOAD_PATH_PREFIX = `/${REPO}/releases/download/`;
 
@@ -18,6 +18,7 @@ type GitHubReleaseAsset = {
 type GitHubRelease = {
   tagName: string;
   publishedAt: string;
+  prerelease: boolean;
   assets: GitHubReleaseAsset[];
 };
 
@@ -61,14 +62,13 @@ function isTrustedDownloadUrl(value: string): boolean {
 function parseRelease(value: unknown): GitHubRelease | null {
   if (!isRecord(value)) return null;
 
-  const { tag_name, published_at, prerelease, draft, assets } = value;
+  const { tagName, publishedAt, prerelease, assets } = value;
   if (
-    typeof tag_name !== 'string' ||
-    tag_name.length === 0 ||
-    typeof published_at !== 'string' ||
-    !Number.isFinite(Date.parse(published_at)) ||
-    prerelease !== true ||
-    draft !== false ||
+    typeof tagName !== 'string' ||
+    tagName.length === 0 ||
+    typeof publishedAt !== 'string' ||
+    !Number.isFinite(Date.parse(publishedAt)) ||
+    typeof prerelease !== 'boolean' ||
     !Array.isArray(assets)
   ) {
     return null;
@@ -76,27 +76,18 @@ function parseRelease(value: unknown): GitHubRelease | null {
 
   const parsedAssets = assets.flatMap<GitHubReleaseAsset>((asset) => {
     if (!isRecord(asset)) return [];
-    const { name, browser_download_url } = asset;
+    const { name, browserDownloadUrl } = asset;
     if (
       typeof name !== 'string' ||
-      typeof browser_download_url !== 'string' ||
-      !isTrustedDownloadUrl(browser_download_url)
+      typeof browserDownloadUrl !== 'string' ||
+      !isTrustedDownloadUrl(browserDownloadUrl)
     ) {
       return [];
     }
-    return [{ name, browserDownloadUrl: browser_download_url }];
+    return [{ name, browserDownloadUrl }];
   });
 
-  return { tagName: tag_name, publishedAt: published_at, assets: parsedAssets };
-}
-
-function selectLatestPrerelease(value: unknown): GitHubRelease | null {
-  if (!Array.isArray(value)) return null;
-
-  return value
-    .map(parseRelease)
-    .filter((release): release is GitHubRelease => release !== null)
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))[0] ?? null;
+  return { tagName, publishedAt, prerelease, assets: parsedAssets };
 }
 
 function toDownloadLink(
@@ -179,19 +170,15 @@ function useReleaseDownloads(): ReleaseDownloadState {
 
     void (async () => {
       try {
-        const response = await fetch(RELEASES_API_URL, { signal: controller.signal });
-        if (!response.ok) {
-          throw new Error(`GitHub API 返回 ${response.status}`);
-        }
-
-        const release = selectLatestPrerelease(await response.json());
+        const payload = await fetchLatestPapyrusRelease(controller.signal);
+        const release = parseRelease(payload.release);
         if (!release) {
-          throw new Error('暂无可用的 Papyrus Desktop 测试版');
+          throw new Error('Papyrus Desktop 版本信息无效');
         }
 
         const downloads = classifyReleaseAssets(release.assets);
         if (downloads.length === 0) {
-          throw new Error('最新测试版暂无可用安装包');
+          throw new Error('最新版本暂无可用安装包');
         }
 
         setState({ status: 'success', tagName: release.tagName, downloads });
@@ -258,7 +245,7 @@ function PapyrusDownload({ detectedPlatform }: { detectedPlatform: DetectedPlatf
       </div>
       {releaseState.status === 'loading' && (
         <p className="papyrus-download-status" aria-live="polite">
-          正在获取最新测试版…
+          正在获取最新版本…
         </p>
       )}
       {releaseState.status === 'error' && (
@@ -277,7 +264,7 @@ function PapyrusDownload({ detectedPlatform }: { detectedPlatform: DetectedPlatf
       {releaseState.status === 'success' && (
         <>
           <p className="papyrus-version papyrus-download-version" aria-live="polite">
-            当前测试版 {releaseState.tagName}
+            当前版本 {releaseState.tagName}
             {detectedPlatform && ` · 已识别 ${detectedPlatform}`}
           </p>
           <div className="papyrus-download-grid">
@@ -457,7 +444,7 @@ export function PapyrusDesktopPage() {
             </p>
             <div className="papyrus-hero-actions">
               <a className="papyrus-button papyrus-button-primary" href="#download">
-                {detectedPlatform ? `下载 ${detectedPlatform} 测试版` : '下载适合你的版本'}{' '}
+                {detectedPlatform ? `下载 ${detectedPlatform} 版` : '下载适合你的版本'}{' '}
                 <span aria-hidden="true">↓</span>
               </a>
               <a

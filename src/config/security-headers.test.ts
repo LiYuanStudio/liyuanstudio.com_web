@@ -30,7 +30,6 @@ describe('production security headers', () => {
     expect(directives.get('connect-src')).toEqual([
       "'self'",
       'https://cloudflareinsights.com',
-      'https://api.github.com',
     ]);
     expect(directives.get('default-src')).toEqual(["'self'"]);
     expect(directives.get('base-uri')).toEqual(["'none'"]);

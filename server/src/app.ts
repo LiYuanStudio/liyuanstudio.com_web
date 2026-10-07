@@ -11,6 +11,7 @@ import adminRoutes from './routes/admin.js';
 import newsRoutes from './routes/news.js';
 import blogRoutes from './routes/blog.js';
 import rolloutRoutes from './routes/rollout.js';
+import papyrusDesktopRoutes from './routes/papyrusdesktop.js';
 
 export function createApp(basePath?: string) {
   const app = basePath ? new Hono().basePath(basePath) : new Hono();
@@ -32,6 +33,10 @@ export function createApp(basePath?: string) {
       credentials: true,
     }),
   );
+
+  // This public feed does not depend on MongoDB. Keep it ahead of the database
+  // middleware so downloads remain available during unrelated database outages.
+  app.route('/papyrusdesktop', papyrusDesktopRoutes);
 
   app.use(async (c, next) => {
     await connectDB();
