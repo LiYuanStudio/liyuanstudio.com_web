@@ -43,13 +43,10 @@ describe('App', () => {
 
     expect(container.querySelector('#hero-title')).toBeInTheDocument();
     expect(container.querySelector('#hero-title')).toHaveClass('fixed-blue-period');
-    expect(container.querySelector('#products-title')).toBeInTheDocument();
-    expect(container.querySelector('.product-card-large h3')).toHaveTextContent('Papyrus Desktop');
-    expect(screen.getAllByRole('heading', { name: 'Papyrus' })[0]).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { name: 'Papyrus CLI' })[0]).toBeInTheDocument();
-    const githubLinks = screen.getAllByRole('link', { name: 'GitHub →' });
-    expect(githubLinks[0]).toHaveAttribute('href', 'https://github.com/PapyrusOR/Papyrus');
-    expect(githubLinks[1]).toHaveAttribute('href', 'https://github.com/PapyrusOR/Papyrus_CLI');
+    const products = screen.getByRole('region', { name: '产品' });
+    expect(within(products).getByRole('heading', { name: 'Papyrus Desktop' })).toBeInTheDocument();
+    expect(within(products).getAllByRole('article')).toHaveLength(1);
+    expect(within(products).getByRole('link', { name: '查看详情 →' })).toHaveAttribute('href', '/products/papyrusdesktop/');
     expect(container.querySelector('#news-title')).toBeInTheDocument();
     expect(container.querySelector('#blog-title')).toBeInTheDocument();
     expect(await screen.findAllByText('敬请期待')).toHaveLength(1);
@@ -72,10 +69,9 @@ describe('App', () => {
     expect(blogLink.nextElementSibling).toBe(accountLink);
     const sectionLinks = screen.getAllByRole('link', { name: /查看更多/ });
     expect(sectionLinks.map((link) => link.getAttribute('href')))
-      .toEqual(['/products/', '/release/', '/blog/']);
+      .toEqual(['/release/', '/blog/']);
 
     const sections = [
-      { selector: '#products', gridSelector: '.product-grid', href: '/products/' },
       { selector: '#news', gridSelector: '.news-grid', href: '/release/' },
       { selector: '#blog', gridSelector: '.blog-grid', href: '/blog/' },
     ];

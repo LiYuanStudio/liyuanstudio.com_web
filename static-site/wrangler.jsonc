@@ -1,0 +1,11 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "liyuanstudiocom",
+  "pages_build_output_dir": "../dist-site",
+  "compatibility_date": "2025-09-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "WORKSPACE_UPSTREAM_ORIGIN": "https://liyuanstudio-com-web.vercel.app"
+  }
+}

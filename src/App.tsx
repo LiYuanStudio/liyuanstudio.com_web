@@ -375,15 +375,8 @@ export function App() {
           ref={productsRef}
           className="products"
           id="products"
-          aria-labelledby="products-title"
+          aria-label="产品"
         >
-          <MaskedHeading as="h2" id="products-title">
-            我们的产品
-          </MaskedHeading>
-          <p className="products-lead">
-            从桌面应用到开源核心与命令行工具，连接更自由的创作流程。
-          </p>
-
           <div className="product-grid">
             <article className="product-card product-card-large">
               <div className="product-card-visual product-card-visual-large" aria-hidden="true">
@@ -391,7 +384,7 @@ export function App() {
               </div>
               <div className="product-card-body product-card-body-large">
                 <div className="product-card-text">
-                  <h3>Papyrus Desktop</h3>
+                  <h2>Papyrus Desktop</h2>
                   <p>由简入深</p>
                 </div>
                 <div className="product-card-footer">
@@ -401,50 +394,7 @@ export function App() {
                 </div>
               </div>
             </article>
-            <article className="product-card product-card-side product-card-side-1">
-              <div className="product-card-hero" aria-hidden="true">
-                <h4>Papyrus</h4>
-              </div>
-              <div className="product-card-body">
-                <div className="product-card-text">
-                  <h3>Papyrus</h3>
-                  <p>随手随学</p>
-                </div>
-                <div className="product-card-footer">
-                  <a
-                    className="product-card-button"
-                    href="https://github.com/PapyrusOR/Papyrus"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    GitHub →
-                  </a>
-                </div>
-              </div>
-            </article>
-            <article className="product-card product-card-side product-card-side-2">
-              <div className="product-card-hero" aria-hidden="true">
-                <h4>Papyrus CLI</h4>
-              </div>
-              <div className="product-card-body">
-                <div className="product-card-text">
-                  <h3>Papyrus CLI</h3>
-                  <p>为自动化与终端工作流准备的命令行入口。</p>
-                </div>
-                <div className="product-card-footer">
-                  <a
-                    className="product-card-button"
-                    href="https://github.com/PapyrusOR/Papyrus_CLI"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    GitHub →
-                  </a>
-                </div>
-              </div>
-            </article>
           </div>
-          <a className="section-more-link" href="/products/">查看更多 <span aria-hidden="true">›</span></a>
         </section>
 
         <News ref={newsRef} />

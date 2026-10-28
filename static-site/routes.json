@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "include": [
+    "/api", "/api/*",
+    "/login", "/login/*",
+    "/register", "/register/*",
+    "/forgot-password", "/forgot-password/*",
+    "/reset-password", "/reset-password/*",
+    "/admin", "/admin/*",
+    "/profile", "/profile/*",
+    "/me", "/me/*",
+    "/blog/release", "/blog/release/*",
+    "/assets/*"
+  ],
+  "exclude": []
+}

@@ -4,6 +4,28 @@ import '@testing-library/jest-dom/vitest';
 // jsdom does not implement canvas 2D context; the app gracefully falls back.
 HTMLCanvasElement.prototype.getContext = vi.fn() as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
+// jsdom does not expose the layout APIs used by the animated hero heading.
+if (typeof globalThis.DOMMatrixReadOnly === 'undefined') {
+  Object.defineProperty(globalThis, 'DOMMatrixReadOnly', {
+    value: class {
+      readonly m41 = 0;
+      readonly m42 = 0;
+    },
+    configurable: true,
+  });
+}
+
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    value: class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+    configurable: true,
+  });
+}
+
 // Provide a working localStorage implementation for tests.
 function createStorage(): Storage {
   const store = new Map<string, string>();
