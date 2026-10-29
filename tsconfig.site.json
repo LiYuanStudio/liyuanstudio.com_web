@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src", "scripts/build-site.ts", "scripts/sync-site-content.ts", "scripts/test-static-site.ts", "vite.site.config.ts", "static-site/functions"]
+}

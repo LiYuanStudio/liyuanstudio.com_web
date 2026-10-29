@@ -19,6 +19,7 @@ jobs:
     env:
       NODE_VERSION: 22
       GRAY_TRUSTED_ORIGIN: https://gray.liyuanstudio.com
+      STATIC_SITE_ENABLED: ${{ vars.STATIC_SITE_ENABLED || 'false' }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID || 'team_I2l4qs9iDsMVQTTvVZ3kNg5n' }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || 'prj_GWA2MHwmjPLxbQw3vqqWthutWY7Z' }}
 
@@ -71,6 +72,12 @@ jobs:
       - name: Build API
         run: npm run build:api
 
+      - name: Verify static content build
+        run: npm run test:site
+
+      - name: Verify workspace routing in workerd
+        run: node --test static-site/workspace-runtime.test.mjs
+
       - name: Build deploy console
         run: npm run build:deploy-console
 
@@ -109,6 +116,7 @@ jobs:
             npx --yes vercel@50.28.0 deploy --yes --token "$VERCEL_TOKEN" \
               --build-env VITE_API_BASE_URL=/api \
               --build-env VITE_PUBLIC_PROFILE_PREFIX=/ \
+              --build-env "VITE_STATIC_SITE_ENABLED=$STATIC_SITE_ENABLED" \
               --env "TRUSTED_ORIGINS=$GRAY_TRUSTED_ORIGIN"
           )"
           echo "url=$preview_url" >> "$GITHUB_OUTPUT"

@@ -6,6 +6,25 @@ LiYuan Studio 官网。
 - **后端 API**：Hono + Mongoose + TypeScript，部署在 Vercel
 - **数据库**：MongoDB Atlas
 
+## 静态官网与团队工作台
+
+分离构建已提供，默认生产流程仍保持原状，尚未切换线上站点：
+
+- `npm run build`：现有账号、编辑和管理应用，输出 `dist/`。
+- `npm run build:site -- --snapshot .site-content/public.json`：从公开内容快照生成官网 HTML，输出 `dist-site/`；不在构建时查询数据库，不在浏览器中请求文章或鉴权 API。
+- `npm run test:site`：使用独立测试内容验证真实静态构建，不读取线上数据库。
+- `npm run preview:site -- --host 127.0.0.1 --port 4180`：预览已经生成的静态页面；本命令不运行工作台代理。
+
+现有后台新增 `/api/site-content` 导出已公开内容，字段白名单不包含邮箱、密码、会话或验证码，草稿和非公开文章不进入产物。`SITE_CONTENT_URL` 指向该接口后，`npm run sync:site-content` 会生成构建快照。快照和构建结果均已 gitignore。
+
+团队成员仍使用原登录、个人设置、文章编辑和账号后台地址。Cloudflare 将这些路径和 `/api` 同源转发给原后台，公开内容则直接服务静态 HTML。本阶段 Vercel/MongoDB 仍承担后台和内容源；完全停用它们需要后续后台存储迁移。
+
+切换由维护者通过既有 Review/CI/Auto Review/灰度批准流程完成，不需要成员手动导出文章或更改账号。准备切换时设置仓库变量 `STATIC_SITE_ENABLED=true`；`promote.yml` 才会构建并发布静态官网。`STATIC_SITE_ORIGIN` 默认 `https://www.liyuanstudio.com`，`SITE_CONTENT_URL` 默认指向当前 Vercel 生产 API。沿用已有 Cloudflare 凭证配置，无凭证写入源码。
+
+切换后，`publish-content.yml` 每 15 分钟检查公开内容变化，使用**最近成功批准上线的代码提交**构建，而非直接发布尚未上线的 `main` 代码。GitHub 调度可能延迟；写入后 UI 显示“等待官网自动更新”，撤稿同样需要等待新产物上线。导出/构建失败会使工作流失败，上一版官网继续服务；手动重跑失败工作流即可重试，不需要团队成员重复编辑。
+
+Cloudflare 路由、会话、旧网址及上线验证要求见 [发布边界说明](docs/cloudflare-static-site.md)。真实 workerd 测试在 Linux CI 执行；当前 Windows 本机启动 workerd 失败，不能用单元测试代替线上会话验收。
+
 ## 目录结构
 
 ```text

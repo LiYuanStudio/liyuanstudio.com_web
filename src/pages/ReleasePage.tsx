@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchNews } from '../api/news.js';
+import { useStaticSite } from '../site/context.js';
 import { getErrorMessage } from '../api/errors.js';
 import {
   CollageCard,
@@ -14,14 +14,16 @@ import { NewsDetailPage } from './NewsDetailPage.js';
 const TONES: HubTone[] = ['blue', 'green', 'pink', 'orange', 'ink', 'sand'];
 
 function ReleaseIndex() {
-  const [items, setItems] = useState<NewsUpdate[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const site = useStaticSite();
+  const [items, setItems] = useState<NewsUpdate[]>(site?.content.news ?? []);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(site ? 'ready' : 'loading');
   const [error, setError] = useState('');
 
   useEffect(() => {
     document.title = '动态 | LiYuan Studio';
+    if (site) return;
     let cancelled = false;
-    fetchNews()
+    import('../api/news.js').then(({ fetchNews }) => fetchNews())
       .then((list) => {
         if (cancelled) return;
         setItems(list);
@@ -36,7 +38,7 @@ function ReleaseIndex() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [site]);
 
   return (
     <ContentHubLayout
@@ -67,6 +69,7 @@ function ReleaseIndex() {
 }
 
 export function ReleasePage() {
-  const slug = matchReleaseContentPath(window.location.pathname);
+  const site = useStaticSite();
+  const slug = matchReleaseContentPath(site?.pathname ?? window.location.pathname);
   return slug ? <NewsDetailPage slug={slug} /> : <ReleaseIndex />;
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
-import { fetchNewsItem } from '../api/news.js';
+import { useStaticSite } from '../site/context.js';
 import { getErrorMessage } from '../api/errors.js';
 import { matchNewsContentPath, matchReleaseContentPath } from '../lib/news-path.js';
 import type { NewsUpdate } from '../types.js';
@@ -27,7 +27,7 @@ export function getNewsSlugFromPath(pathname: string): string | null {
   return matchReleaseContentPath(pathname) ?? matchNewsContentPath(pathname);
 }
 
-function NewsMarkdown({ content }: { content: string }) {
+export function NewsMarkdown({ content }: { content: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -54,17 +54,20 @@ function NewsMarkdown({ content }: { content: string }) {
 }
 
 export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
-  const slug = slugOverride ?? getNewsSlugFromPath(window.location.pathname);
-  const [item, setItem] = useState<NewsUpdate | null>(null);
+  const site = useStaticSite();
+  const slug = slugOverride ?? getNewsSlugFromPath(site?.pathname ?? window.location.pathname);
+  const initialItem = site?.content.news.find((item) => item.slug === slug) ?? null;
+  const [item, setItem] = useState<NewsUpdate | null>(initialItem);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
-    slug ? 'loading' : 'error',
+    initialItem ? 'ready' : slug ? 'loading' : 'error',
   );
   const [error, setError] = useState(slug ? '' : '动态地址无效。');
 
   useEffect(() => {
+    if (site) return;
     if (!slug) return;
     let cancelled = false;
-    fetchNewsItem(slug)
+    import('../api/news.js').then(({ fetchNewsItem }) => fetchNewsItem(slug))
       .then((news) => {
         if (cancelled) return;
         setItem(news);
@@ -79,7 +82,7 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, site]);
 
   return (
     <div className="news-detail-page">

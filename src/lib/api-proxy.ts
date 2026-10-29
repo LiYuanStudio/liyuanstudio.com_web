@@ -33,6 +33,7 @@ const ALLOWED_COOKIE_NAMES = new Set([
 
 type HeadersWithSetCookie = Headers & {
   getSetCookie?: () => string[];
+  getAll?: (name: string) => string[];
 };
 
 function splitCombinedSetCookie(value: string): string[] {
@@ -43,6 +44,8 @@ function splitCombinedSetCookie(value: string): string[] {
 }
 
 function getSetCookieValues(headers: Headers): string[] {
+  const workerValues = (headers as HeadersWithSetCookie).getAll?.('Set-Cookie');
+  if (workerValues && workerValues.length > 0) return workerValues;
   const values = (headers as HeadersWithSetCookie).getSetCookie?.();
   if (values && values.length > 0) return values;
   const combined = headers.get('set-cookie');

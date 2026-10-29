@@ -11,6 +11,7 @@ import { deleteUser, fetchUsers, updateUser } from '../api/admin.js';
 import { createNews, deleteNews, fetchNews, updateNews } from '../api/news.js';
 import type { NewsInput, NewsUpdate, User, UserRole } from '../types.js';
 import './admin.css';
+import { publicationMessage } from '../lib/publication.js';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   tourist: '游客',
@@ -231,10 +232,10 @@ function NewsEditor({
     try {
       if (isEditing && item?._id) {
         await updateNews(item._id, payload);
-        setMessage('动态已更新。');
+        setMessage(publicationMessage('动态已更新。'));
       } else {
         await createNews(payload);
-        setMessage('动态已发布。');
+        setMessage(publicationMessage('动态已发布。'));
       }
       onSaved();
     } catch (err) {
@@ -389,7 +390,7 @@ function NewsPanel() {
     setMessage(null);
     try {
       await deleteNews(item._id);
-      setMessage('动态已删除。');
+      setMessage(publicationMessage('动态已删除。'));
       await loadNews();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除失败');
@@ -402,7 +403,7 @@ function NewsPanel() {
         onCancel={() => setMode('list')}
         onSaved={() => {
           setMode('list');
-          setMessage('动态已发布。');
+          setMessage(publicationMessage('动态已发布。'));
           void loadNews();
         }}
       />
@@ -420,7 +421,7 @@ function NewsPanel() {
         onSaved={() => {
           setEditing(null);
           setMode('list');
-          setMessage('动态已更新。');
+          setMessage(publicationMessage('动态已更新。'));
           void loadNews();
         }}
       />

@@ -36,6 +36,7 @@ jobs:
       APPROVED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
       APPROVED_SHA: ${{ inputs.sha }}
       APPROVED_BY: ${{ inputs.approved_by }}
+      STATIC_SITE_ENABLED: ${{ vars.STATIC_SITE_ENABLED || 'false' }}
 
     steps:
       - name: Verify latest gray deployment
@@ -140,6 +141,7 @@ jobs:
               payload: {
                 gray_deployment_id: Number(process.env.APPROVED_DEPLOYMENT_ID),
                 approved_by: process.env.APPROVED_BY,
+                static_site: process.env.STATIC_SITE_ENABLED === 'true',
               },
               transient_environment: false,
               production_environment: true,
@@ -201,12 +203,32 @@ jobs:
       - name: Deploy API to Vercel production
         id: vercel_production
         run: |
-          production_url="$(npx --yes vercel@50.28.0 deploy --prod --yes --token "$VERCEL_TOKEN")"
+          production_url="$(npx --yes vercel@50.28.0 deploy --prod --yes --token "$VERCEL_TOKEN" --build-env "VITE_STATIC_SITE_ENABLED=$STATIC_SITE_ENABLED")"
           echo "url=$production_url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
+      - name: Export public content for the static site
+        if: vars.STATIC_SITE_ENABLED == 'true'
+        run: npm run sync:site-content
+        env:
+          SITE_CONTENT_URL: ${{ vars.SITE_CONTENT_URL || 'https://liyuanstudio-com-web.vercel.app/api/site-content' }}
+
+      - name: Build static frontend
+        if: vars.STATIC_SITE_ENABLED == 'true'
+        run: npm run build:site -- --snapshot .site-content/public.json
+        env:
+          SITE_ORIGIN: ${{ vars.STATIC_SITE_ORIGIN || 'https://www.liyuanstudio.com' }}
+
+      - name: Deploy static frontend to Cloudflare Pages production
+        if: vars.STATIC_SITE_ENABLED == 'true'
+        run: npx wrangler --cwd static-site pages deploy ../dist-site --project-name "$CLOUDFLARE_PROJECT_NAME" --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy frontend to Cloudflare Pages production
+        if: vars.STATIC_SITE_ENABLED != 'true'
         id: cloudflare_production
         run: npx wrangler pages deploy dist --project-name "$CLOUDFLARE_PROJECT_NAME" --branch main
         env:

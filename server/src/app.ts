@@ -12,6 +12,7 @@ import adminRoutes from './routes/admin.js';
 import newsRoutes from './routes/news.js';
 import blogRoutes from './routes/blog.js';
 import rolloutRoutes from './routes/rollout.js';
+import siteContentRoutes from './routes/site-content.js';
 
 // Largest legitimate payload is a base64 avatar (400k chars); 1MB leaves ample
 // headroom while capping memory abuse on the standalone node server.
@@ -54,6 +55,7 @@ export function createApp(basePath?: string) {
   app.route('/news', newsRoutes);
   app.route('/blog', blogRoutes);
   app.route('/rollout', rolloutRoutes);
+  app.route('/site-content', siteContentRoutes);
 
   app.get('/health', (c) => c.json({ ok: true }));
 

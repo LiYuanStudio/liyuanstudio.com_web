@@ -43,6 +43,12 @@ jobs:
       - name: Build API
         run: npm run build:api
 
+      - name: Verify static content build
+        run: npm run test:site
+
+      - name: Verify workspace routing in workerd
+        run: node --test static-site/workspace-runtime.test.mjs
+
       - name: Build deploy console
         run: npm run build:deploy-console
 

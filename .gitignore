@@ -17,6 +17,8 @@ accounts.md
 
 # build files
 dist
+dist-site
+.site-content/
 node_modules
 *.tsbuildinfo
 vite.config.d.ts

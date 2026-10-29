@@ -6,6 +6,18 @@ afterEach(() => {
 });
 
 describe('same-origin API proxy', () => {
+  it('preserves both cookies when Cloudflare exposes them through getAll', async () => {
+    const upstream = new Response('{}');
+    Object.defineProperty(upstream.headers, 'getAll', { value: () => [
+      '__Host-liyuan_session=session; Path=/; Secure; HttpOnly; SameSite=Lax',
+      '__Host-liyuan_csrf=csrf; Path=/; Secure; SameSite=Lax',
+    ] });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(upstream));
+    const response = await proxyApiRequest(new Request('https://liyuanstudio.com/api/auth/login'), 'https://api.example.com');
+    const cookies = response.headers.get('set-cookie') ?? '';
+    expect(cookies).toContain('__Host-liyuan_session=session');
+    expect(cookies).toContain('__Host-liyuan_csrf=csrf');
+  });
   it('forwards browser session and CSRF headers to the fixed upstream', async () => {
     let captured: { input: RequestInfo | URL; init?: RequestInit } | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

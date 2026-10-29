@@ -1,5 +1,6 @@
 import { Children, type ReactNode } from 'react';
 import './ContentHub.css';
+import { useStaticSite } from '../site/context.js';
 
 export type HubSection = 'products' | 'release' | 'blog';
 export type HubTone = 'blue' | 'green' | 'orange' | 'pink' | 'ink' | 'sand';
@@ -10,6 +11,7 @@ interface ContentHubNavProps {
 }
 
 export function ContentHubNav({ current, action }: ContentHubNavProps) {
+  const site = useStaticSite();
   return (
     <nav className="hub-nav" aria-label="主导航">
       <a className="hub-brand" href="/">
@@ -20,7 +22,7 @@ export function ContentHubNav({ current, action }: ContentHubNavProps) {
         <a aria-current={current === 'release' ? 'page' : undefined} href="/release/">动态</a>
         <a aria-current={current === 'blog' ? 'page' : undefined} href="/blog/">博客</a>
       </div>
-      <div className="hub-nav-action">{action}</div>
+      <div className="hub-nav-action">{action ?? (site && <a className="hub-action-button" href="/profile/">工作台</a>)}</div>
     </nav>
   );
 }

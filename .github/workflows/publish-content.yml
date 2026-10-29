@@ -1,0 +1,75 @@
+name: Publish static content
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: read
+
+jobs:
+  publish:
+    if: vars.STATIC_SITE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find the approved production code
+        id: production
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployments = await github.rest.repos.listDeployments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              environment: 'production', per_page: 20,
+            });
+            for (const deployment of deployments.data) {
+              const statuses = await github.rest.repos.listDeploymentStatuses({
+                owner: context.repo.owner, repo: context.repo.repo,
+                deployment_id: deployment.id, per_page: 1,
+              });
+              if (statuses.data[0]?.state !== 'success') continue;
+              const approved = deployment.creator?.login === 'github-actions[bot]' &&
+                deployment.description?.startsWith('Approved through LA deploy console by ') &&
+                deployment.payload?.static_site === true;
+              if (!approved) throw new Error('Production has not been promoted to the static-site pipeline');
+              core.setOutput('sha', deployment.sha);
+              return;
+            }
+            throw new Error('No approved production deployment was found');
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.production.outputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Export current public content
+        id: content
+        run: npm run sync:site-content
+        env:
+          SITE_CONTENT_URL: ${{ vars.SITE_CONTENT_URL || 'https://liyuanstudio-com-web.vercel.app/api/site-content' }}
+          SITE_PUBLIC_URL: ${{ vars.STATIC_SITE_ORIGIN || 'https://www.liyuanstudio.com' }}
+
+      - name: Render static pages
+        if: steps.content.outputs.changed == 'true'
+        run: npm run build:site -- --snapshot .site-content/public.json
+        env:
+          SITE_ORIGIN: ${{ vars.STATIC_SITE_ORIGIN || 'https://www.liyuanstudio.com' }}
+
+      - name: Publish content with the approved code
+        if: steps.content.outputs.changed == 'true'
+        run: npx wrangler --cwd static-site pages deploy ../dist-site --project-name liyuanstudiocom --branch main --commit-hash "$RELEASE_SHA"
+        env:
+          RELEASE_SHA: ${{ steps.production.outputs.sha }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

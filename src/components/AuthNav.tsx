@@ -4,6 +4,7 @@ import {
   isValidPublicUsername,
 } from '../lib/profile-path.js';
 import { UserAvatar } from './UserAvatar.js';
+import { useStaticSite } from '../site/context.js';
 
 type AuthNavVariant = 'main' | 'papyrus';
 
@@ -16,6 +17,14 @@ function getProfilePath(username: string | undefined) {
 }
 
 export function AuthNav({ variant = 'main' }: AuthNavProps) {
+  const site = useStaticSite();
+  if (site) {
+    return <a className={variant === 'papyrus' ? 'papyrus-nav-link' : 'nav-item'} href="/profile/">工作台</a>;
+  }
+  return <AccountNav variant={variant} />;
+}
+
+function AccountNav({ variant = 'main' }: AuthNavProps) {
   const { state } = useAuth();
 
   if (state.status === 'authenticated') {

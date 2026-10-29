@@ -1,3 +1,4 @@
+/// <reference path="../worker-configuration.d.ts" />
 import { proxyApiRequest } from '../../src/lib/api-proxy.js';
 
 const WORKSPACE_PREFIXES = [
@@ -28,8 +29,7 @@ const COOKIE_NAMES = new Set([
 
 export type StaticWorkspaceContext = {
   request: Request;
-  env: {
-    WORKSPACE_UPSTREAM_ORIGIN?: string;
+  env: { [Name in keyof StaticWorkspaceBindings]?: string } & {
     CLIENT_IP_HMAC_KEY?: string;
   };
   next(): Promise<Response>;
@@ -54,8 +54,12 @@ function responseHeaders(response: Response, upstream: URL, publicUrl: URL): Hea
   const headers = new Headers(response.headers);
   for (const name of HOP_BY_HOP_HEADERS) headers.delete(name);
   headers.delete('set-cookie');
-  const cookieHeaders = response.headers as Headers & { getSetCookie?: () => string[] };
-  const cookies = cookieHeaders.getSetCookie?.() ??
+  const cookieHeaders = response.headers as Headers & {
+    getAll?: (name: string) => string[];
+    getSetCookie?: () => string[];
+  };
+  const separateCookies = cookieHeaders.getAll?.('Set-Cookie') ?? cookieHeaders.getSetCookie?.();
+  const cookies = separateCookies && separateCookies.length > 0 ? separateCookies :
     (response.headers.get('set-cookie')?.split(/,(?=\s*[^;,=\s]+=[^;,]*)/u) ?? []);
   for (const cookie of cookies) {
     if (COOKIE_NAMES.has(cookie.slice(0, cookie.indexOf('=')).trim())) {
@@ -67,7 +71,8 @@ function responseHeaders(response: Response, upstream: URL, publicUrl: URL): Hea
   const location = headers.get('location');
   if (location) {
     try {
-      const target = new URL(location, upstream);
+      const upstreamRequest = new URL(`${publicUrl.pathname}${publicUrl.search}`, upstream);
+      const target = new URL(location, upstreamRequest);
       if (target.origin !== upstream.origin && target.origin !== publicUrl.origin) return null;
       headers.set('Location', `${publicUrl.origin}${target.pathname}${target.search}${target.hash}`);
     } catch {

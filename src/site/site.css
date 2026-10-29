@@ -1,0 +1,14 @@
+.profile-page h1,
+.news-detail-page h1,
+.hub-page h1 {
+  width: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .profile-article h1 {
+    font-size: 36px;
+    line-height: 1.15;
+  }
+}

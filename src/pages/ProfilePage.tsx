@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { publicationMessage } from '../lib/publication.js';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import Cropper from 'react-easy-crop';
@@ -164,7 +165,7 @@ function MyPostsPage() {
   const handleDelete = async (post: BlogPost) => {
     if (!post._id) return;
     await deleteBlogPost(post._id);
-    setMessage('文章已删除。');
+    setMessage(publicationMessage('文章已删除。'));
     await loadPosts();
   };
 
@@ -255,7 +256,7 @@ function BlogEditorPage({ id }: { id?: string }) {
     const input = { ...form, status };
     try {
       const saved = id ? await updateBlogPost(id, input) : await createBlogPost(input);
-      setMessage(status === 'published' ? '文章已发布。' : '草稿已保存。');
+      setMessage(status === 'published' ? publicationMessage('文章已发布。') : '草稿已保存。');
       if (!id && saved._id) {
         window.history.replaceState({}, '', `/me/posts/${saved._id}/edit/`);
       }

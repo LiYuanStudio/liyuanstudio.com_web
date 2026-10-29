@@ -3,6 +3,7 @@ import { createBlogPost, fetchBlogPosts } from '../api/blog.js';
 import { getErrorMessage } from '../api/errors.js';
 import { useAuth } from '../context/AuthContext.js';
 import { importBlogFile } from '../lib/blog-upload.js';
+import { publicationMessage } from '../lib/publication.js';
 import type { BlogPost, BlogPostInput, User } from '../types.js';
 import {
   CollageCard,
@@ -322,7 +323,7 @@ function BlogRelease() {
         {error && <p id="blog-form-error" className="blog-page-error" role="alert">{error}</p>}
         {successPath && (
           <p className="blog-page-success" role="status">
-            已发布。<a href="/blog/">去博客页查看</a>，或<a href={successPath}>打开文章</a>。
+            {publicationMessage('已发布。')}<a href="/blog/">去博客页查看</a>，或<a href={successPath}>打开文章</a>。
           </p>
         )}
 

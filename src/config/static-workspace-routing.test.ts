@@ -104,6 +104,32 @@ describe('static site and same-origin workspace', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 
+  it('resolves relative workspace redirects against the requested path', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, {
+      status: 302,
+      headers: { Location: '../?tab=posts#current' },
+    })));
+    const response = await onRequest(context('/me/posts/new/'));
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe(`${PUBLIC_ORIGIN}/me/posts/?tab=posts#current`);
+  });
+
+  it('reads both cookies through the Workers-specific Headers.getAll API', async () => {
+    const cookies = [
+      '__Host-liyuan_session=renewed; Path=/; Secure; HttpOnly; SameSite=Lax',
+      '__Host-liyuan_csrf=csrf; Path=/; Secure; SameSite=Lax',
+    ];
+    const upstream = new Response('Workspace HTML');
+    Object.defineProperty(upstream.headers, 'getSetCookie', { value: undefined });
+    Object.defineProperty(upstream.headers, 'getAll', { value: (name: string) => {
+      expect(name).toBe('Set-Cookie');
+      return cookies;
+    } });
+    vi.stubGlobal('fetch', vi.fn(async () => upstream));
+    const response = await onRequest(context('/profile/'));
+    expect(response.headers.getSetCookie()).toEqual(cookies);
+  });
+
   it('serves local static assets without touching the workspace', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

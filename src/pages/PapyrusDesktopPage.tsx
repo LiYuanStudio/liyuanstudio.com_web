@@ -4,6 +4,7 @@ import { IconGithub } from '@arco-design/web-react/icon';
 import { AuthNav } from '../components/AuthNav.js';
 import { MaskedHeading } from '../components/MaskedHeading.js';
 import './papyrusdesktop.css';
+import { useStaticSite } from '../site/context.js';
 
 const REPO = 'LiYuanStudio/Papyrus_Desktop';
 const RELEASES_API_URL = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
@@ -37,6 +38,7 @@ type PlatformDownload = {
 type DetectedPlatform = PlatformDownload['platform'] | null;
 
 type ReleaseDownloadState =
+  | { status: 'static' }
   | { status: 'loading' }
   | { status: 'success'; tagName: string; downloads: PlatformDownload[] }
   | { status: 'error'; message: string };
@@ -172,7 +174,8 @@ function classifyReleaseAssets(assets: GitHubReleaseAsset[]): PlatformDownload[]
 }
 
 function useReleaseDownloads(): ReleaseDownloadState {
-  const [state, setState] = useState<ReleaseDownloadState>({ status: 'loading' });
+  const site = useStaticSite();
+  const [state, setState] = useState<ReleaseDownloadState>({ status: site ? 'static' : 'loading' });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -207,7 +210,7 @@ function useReleaseDownloads(): ReleaseDownloadState {
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [site]);
 
   return state;
 }
@@ -261,9 +264,9 @@ function PapyrusDownload({ detectedPlatform }: { detectedPlatform: DetectedPlatf
           正在获取最新测试版…
         </p>
       )}
-      {releaseState.status === 'error' && (
+      {(releaseState.status === 'error' || releaseState.status === 'static') && (
         <div className="papyrus-download-status">
-          <p role="status">{releaseState.message}</p>
+          {releaseState.status === 'error' && <p role="status">{releaseState.message}</p>}
           <a
             className="papyrus-button papyrus-button-primary"
             href={RELEASES_PAGE_URL}

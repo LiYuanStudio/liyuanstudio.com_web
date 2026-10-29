@@ -5,10 +5,10 @@ import React, {
   useState,
 } from 'react';
 import { IconGithub } from '@arco-design/web-react/icon';
-import { fetchBlogPosts, fetchNews } from './api.js';
 import { getErrorMessage } from './api/errors.js';
 import {
   applyBlogSettings,
+  DEFAULT_BLOG_SETTINGS,
   readBlogSettings,
 } from './blog-settings.js';
 import type { BlogPost, NewsUpdate } from './types.js';
@@ -18,6 +18,7 @@ import { HeroVisual } from './components/HeroVisual.js';
 import { MaskedHeading } from './components/MaskedHeading.js';
 import { SkipLink } from './components/SkipLink.js';
 import './styles.css';
+import { useStaticSite } from './site/context.js';
 
 export const NAV_SCROLL_OFFSET = 120;
 
@@ -80,14 +81,16 @@ export function Footer() {
 }
 
 export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
-  const [items, setItems] = useState<NewsUpdate[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const site = useStaticSite();
+  const [items, setItems] = useState<NewsUpdate[]>(site?.content.news ?? []);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(site ? 'ready' : 'loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (site) return;
     let cancelled = false;
 
-    fetchNews()
+    import('./api.js').then(({ fetchNews }) => fetchNews())
       .then((list) => {
         if (cancelled) return;
         setItems(list);
@@ -104,7 +107,7 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [site]);
 
   return (
     <section
@@ -158,19 +161,21 @@ export const News = React.forwardRef<HTMLElement>((_, forwardedRef) => {
 function formatPostDate(post: BlogPost): string {
   const value = post.publishedAt || post.createdAt || post.updatedAt;
   if (!value) return '未发布';
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(new Date(value));
+  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeZone: 'Asia/Shanghai' }).format(new Date(value));
 }
 
 export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [settings, setSettings] = useState(() => readBlogSettings());
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const site = useStaticSite();
+  const [posts, setPosts] = useState<BlogPost[]>(site?.content.posts ?? []);
+  const [settings, setSettings] = useState(() => site ? DEFAULT_BLOG_SETTINGS : readBlogSettings());
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(site ? 'ready' : 'loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (site) return;
     let cancelled = false;
 
-    fetchBlogPosts()
+    import('./api.js').then(({ fetchBlogPosts }) => fetchBlogPosts())
       .then((list) => {
         if (cancelled) return;
         setPosts(list);
@@ -187,10 +192,11 @@ export const Blog = React.forwardRef<HTMLElement>((_, forwardedRef) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [site]);
 
   useEffect(() => {
     const handleSettingsChange = () => setSettings(readBlogSettings());
+    if (site) handleSettingsChange();
     window.addEventListener('storage', handleSettingsChange);
     window.addEventListener('liyuan-blog-settings-change', handleSettingsChange);
     return () => {
