@@ -754,7 +754,7 @@ export function PapyrusDesktopPage() {
           <figure className="papyrus-hero-stage">
             <div className="papyrus-stage-frame">
               <img
-                src="/images/papyrus-desktop-hero-v3.png"
+                src="/images/papyrus-desktop-hero-dark.png"
                 alt="Papyrus Desktop 卷轴复习与进度界面"
                 width="1586"
                 height="992"

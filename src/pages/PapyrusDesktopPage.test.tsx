@@ -260,7 +260,7 @@ describe('PapyrusDesktopPage', () => {
     expect(container.querySelector('.papyrus-hero h1')).not.toHaveClass('fixed-blue-period');
     expect(screen.getByRole('img', { name: 'Papyrus Desktop 卷轴复习与进度界面' })).toHaveAttribute(
       'src',
-      '/images/papyrus-desktop-hero-v3.png',
+      '/images/papyrus-desktop-hero-dark.png',
     );
     expect(screen.getByRole('img', { name: 'Papyrus Desktop 卷轴复习与进度界面' })).toHaveAttribute(
       'width',
