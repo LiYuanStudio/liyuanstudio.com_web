@@ -1266,8 +1266,10 @@ h1 {
 
 /* Homepage dark preview */
 :root {
+  color-scheme: dark;
   color: #f5f5f7;
   background: #000;
+  accent-color: #8cc7ff;
 }
 
 body {

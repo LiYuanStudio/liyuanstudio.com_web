@@ -537,7 +537,7 @@ export function AdminPage() {
 
   if (state.status === 'loading') {
     return (
-      <div className="admin-page">
+      <div className="admin-page ly-dot-surface">
         <main className="admin-main" id="main-content" tabIndex={-1}>
           <h1 className="visually-hidden">账号后台</h1>
           <p className="admin-empty" role="status">加载中…</p>
@@ -548,7 +548,7 @@ export function AdminPage() {
 
   if (state.status !== 'authenticated' || state.user.role !== 'admin') {
     return (
-      <div className="admin-page">
+      <div className="admin-page ly-dot-surface">
         <main className="admin-main" id="main-content" tabIndex={-1}>
           <div className="admin-card">
             <h1>账号后台</h1>
@@ -561,7 +561,7 @@ export function AdminPage() {
   }
 
   return (
-    <div className="admin-page">
+    <div className="admin-page ly-dot-surface">
       <nav className="admin-nav" aria-label="后台导航">
         <div className="admin-nav-inner">
           <a className="admin-brand" href="/">

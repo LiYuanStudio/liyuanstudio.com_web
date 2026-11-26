@@ -1,10 +1,36 @@
+@import '../theme.css';
+
+/* Papyrus Desktop product page unified with the pure-black homepage design system.
+ * 复用主页纯黑背景、深色卡片与白色胶囊按钮体系的 Papyrus Desktop 专题页样式。 */
 .papyrus-page {
+  --papyrus-ink: var(--ly-text);
+  --papyrus-muted: var(--ly-text-muted);
+  --papyrus-surface: var(--ly-surface);
+  --papyrus-blue: #206ccf;
+  --papyrus-accent: var(--ly-accent);
+  --papyrus-teal: var(--ly-teal);
   min-height: 100vh;
-  background: #f5f5f7;
-  color: #1d1d1f;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  overflow-x: clip;
+  background: var(--ly-bg);
+  color: var(--papyrus-ink);
+  font-family: var(--ly-font-sans);
 }
 
+.papyrus-nav,
+.papyrus-nav-inner,
+.papyrus-hero-inner,
+.papyrus-main,
+.papyrus-button,
+.papyrus-feature,
+.papyrus-tech,
+.papyrus-tech-card,
+.papyrus-download-card,
+.papyrus-download-link,
+.papyrus-source,
+.papyrus-footer,
+.papyrus-footer-inner {
+  box-sizing: border-box;
+}
 
 .papyrus-nav {
   position: sticky;
@@ -12,8 +38,8 @@
   left: 0;
   right: 0;
   z-index: 10001;
-  padding: 28px 24px 12px;
-  min-height: 84px;
+  min-height: 68px;
+  padding: 12px 24px;
 }
 
 .papyrus-nav::before {
@@ -21,46 +47,59 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: rgba(255, 255, 255, 0.68);
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 100%);
-  mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 100%);
+  background: var(--ly-nav-bg);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border-bottom: 1px solid var(--ly-border);
 }
 
 .papyrus-nav-inner {
-  width: min(100% - 48px, 1120px);
+  width: min(100% - 48px, 1240px);
   margin: 0 auto;
-  height: 64px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 20px;
 }
 
 .papyrus-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 10px;
   font-size: 18px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ly-text);
   text-decoration: none;
 }
 
 .papyrus-brand img {
   width: 140px;
-  height: 32px;
+  height: 34px;
   object-fit: contain;
+  filter: invert(1);
 }
 
 .papyrus-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--ly-accent-bg);
+  color: var(--ly-accent);
   font-size: 14px;
-  color: #0071e3;
+  font-weight: 600;
   text-decoration: none;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
 }
 
 .papyrus-nav-link:hover {
-  text-decoration: underline;
+  color: var(--ly-accent-hover);
+  background: var(--ly-accent-bg-hover);
 }
 
 .papyrus-nav-actions {
@@ -73,15 +112,20 @@
   align-items: center;
   gap: 8px;
   min-height: 36px;
-  padding: 4px 10px 4px 4px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid var(--ly-border);
   border-radius: 999px;
-  color: #1d1d1f;
+  background: var(--ly-surface);
+  color: var(--ly-text);
   text-decoration: none;
-  transition: background 0.2s ease;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
 .papyrus-nav-user:hover {
-  background: rgba(29, 29, 31, 0.06);
+  background: var(--ly-surface-elevated);
+  border-color: var(--ly-border-strong);
 }
 
 .papyrus-nav-user img,
@@ -101,10 +145,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #1d1d1f;
-  color: #fff;
+  background: var(--ly-accent-bg);
+  color: var(--ly-accent);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .papyrus-nav-user-name {
@@ -117,409 +161,13 @@
 }
 
 .papyrus-hero {
-  padding: 100px 0 80px;
-  text-align: center;
-}
-
-.papyrus-hero-inner {
-  width: min(100% - 48px, 800px);
-  margin: 0 auto;
-}
-
-.papyrus-eyebrow {
-  margin-bottom: 16px;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #6e6e73;
-}
-
-.papyrus-hero h1 {
-  width: max-content;
-  margin: 0 auto 12px;
-  font-size: clamp(40px, 8vw, 72px);
-  line-height: 1.05;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.papyrus-version {
-  font-size: 16px;
-  color: #6e6e73;
-  margin-bottom: 24px;
-}
-
-.papyrus-lead {
-  font-size: 20px;
-  line-height: 1.6;
-  color: #6e6e73;
-  margin-bottom: 32px;
-  letter-spacing: 0.25em;
-}
-
-.papyrus-hero-actions {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.papyrus-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 44px;
-  padding: 0 24px;
-  border-radius: 999px;
-  font-size: 15px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.papyrus-button:hover {
-  transform: translateY(-2px);
-}
-
-.papyrus-button-primary {
-  background: #1d1d1f;
-  color: #fff;
-}
-
-.papyrus-button-secondary {
-  background: #fff;
-  color: #1d1d1f;
-  border: 1px solid rgba(29, 29, 31, 0.12);
-}
-
-.papyrus-note {
-  font-size: 13px;
-  color: #6e6e73;
-}
-
-.papyrus-main {
-  width: min(100% - 48px, 1120px);
-  margin: 0 auto;
-  padding-bottom: 120px;
-}
-
-.papyrus-section {
-  margin-top: 80px;
-}
-
-.papyrus-section h2 {
-  font-size: clamp(28px, 5vw, 40px);
-  font-weight: 700;
-  margin-bottom: 24px;
-}
-
-.papyrus-section-lead {
-  font-size: 17px;
-  color: #6e6e73;
-  margin-bottom: 24px;
-  line-height: 1.6;
-}
-
-.papyrus-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-
-.papyrus-card {
-  background: #fff;
-  border-radius: 24px;
-  padding: 28px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-}
-
-.papyrus-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-
-.papyrus-card p {
-  font-size: 15px;
-  line-height: 1.55;
-  color: #6e6e73;
-}
-
-.papyrus-table-wrap {
-  overflow-x: auto;
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-}
-
-.papyrus-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 15px;
-}
-
-.papyrus-table th,
-.papyrus-table td {
-  padding: 16px 24px;
-  text-align: left;
-  border-bottom: 1px solid rgba(29, 29, 31, 0.06);
-}
-
-.papyrus-table th {
-  font-weight: 600;
-  color: #6e6e73;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.papyrus-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.papyrus-table kbd {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: #f5f5f7;
-  border: 1px solid rgba(29, 29, 31, 0.08);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-}
-
-.papyrus-stack {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.papyrus-stack li {
-  background: #fff;
-  border-radius: 16px;
-  padding: 18px 22px;
-  font-size: 15px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-}
-
-.papyrus-footer {
-  border-top: 1px solid rgba(29, 29, 31, 0.06);
-}
-
-.papyrus-footer-inner {
-  width: min(100% - 48px, 1120px);
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.papyrus-download {
-  padding: 80px 0 60px;
-}
-
-.papyrus-download-title {
-  font-size: clamp(28px, 5vw, 40px);
-  font-weight: 700;
-  margin: 0 0 32px;
-  text-align: center;
-  color: #1d1d1f;
-}
-
-.papyrus-download-status {
-  text-align: center;
-  color: #6e6e73;
-  font-size: 16px;
-  line-height: 1.6;
-}
-
-.papyrus-download-status p {
-  margin: 0 0 16px;
-}
-
-.papyrus-download-version {
-  margin: -16px 0 24px;
-  text-align: center;
-}
-
-.papyrus-download-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-
-.papyrus-download-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  background: #fff;
-  border-radius: 24px;
-  padding: 32px 28px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-  transition:
-    transform 220ms ease,
-    box-shadow 220ms ease;
-}
-
-.papyrus-download-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
-}
-
-.papyrus-download-icon {
-  width: 64px;
-  height: 64px;
-  margin-bottom: 20px;
-}
-
-.papyrus-download-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.papyrus-download-info h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 6px;
-  color: #1d1d1f;
-}
-
-.papyrus-download-arch {
-  font-size: 13px;
-  color: #6e6e73;
-}
-
-.papyrus-download-links {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  margin-top: 20px;
-}
-
-.papyrus-download-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 999px;
-  background: #1d1d1f;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  transition:
-    transform 0.2s ease,
-    background 0.2s ease;
-}
-
-.papyrus-download-link:hover {
-  transform: translateY(-2px);
-  background: #000;
-}
-
-.papyrus-download-link-secondary {
-  background: #fff;
-  color: #1d1d1f;
-  border: 1px solid rgba(29, 29, 31, 0.12);
-}
-
-.papyrus-download-link-secondary:hover {
-  background: #f5f5f7;
-}
-
-.papyrus-footer-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 32px 0;
-  border-top: 1px solid rgba(29, 29, 31, 0.06);
-  font-size: 13px;
-  color: #6e6e73;
-}
-
-.papyrus-footer-bottom a {
-  color: #6e6e73;
-  text-decoration: none;
-}
-
-.papyrus-footer-bottom a:hover {
-  text-decoration: underline;
-}
-
-@media (max-width: 760px) {
-  .papyrus-hero {
-    padding: 72px 0 56px;
-  }
-
-  .papyrus-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .papyrus-table th,
-  .papyrus-table td {
-    padding: 14px 18px;
-  }
-
-  .papyrus-download {
-    padding: 64px 0 48px;
-  }
-
-  .papyrus-download-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .papyrus-footer-bottom {
-    flex-direction: column;
-    gap: 8px;
-    text-align: center;
-  }
-}
-
-/* 2026 product story refresh */
-.papyrus-page {
-  --papyrus-ink: #151515;
-  --papyrus-muted: #65645f;
-  --papyrus-paper: #f4f1e9;
-  --papyrus-blue: #1f63e9;
-  --papyrus-red: #d94c36;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 82% 8%, rgba(31, 99, 233, 0.1), transparent 24rem),
-    var(--papyrus-paper);
-  color: var(--papyrus-ink);
-}
-
-.papyrus-nav {
-  min-height: 74px;
-  padding: 16px 24px 8px;
-}
-
-.papyrus-nav::before {
-  background: rgba(244, 241, 233, 0.82);
-  -webkit-mask-image: none;
-  mask-image: none;
-  border-bottom: 1px solid rgba(21, 21, 21, 0.07);
-}
-
-.papyrus-nav-inner,
-.papyrus-main,
-.papyrus-footer-inner {
-  width: min(100% - 48px, 1240px);
-}
-
-.papyrus-hero {
   padding: 86px 0 112px;
   text-align: left;
 }
 
 .papyrus-hero-inner {
   width: min(100% - 48px, 1240px);
+  margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(350px, 0.86fr) minmax(560px, 1.34fr);
   align-items: center;
@@ -536,70 +184,93 @@
   align-items: center;
   gap: 10px;
   margin: 0 0 22px;
-  color: var(--papyrus-muted);
+  color: var(--papyrus-accent);
   font-size: 13px;
-  letter-spacing: 0.12em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .papyrus-eyebrow span {
-  width: 28px;
-  height: 1px;
-  background: var(--papyrus-red);
+  width: 24px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--papyrus-teal);
 }
 
 .papyrus-hero h1 {
   width: auto;
-  margin: 0 0 28px;
+  margin: 0 0 26px;
+  color: var(--ly-text);
   font-size: clamp(50px, 5.5vw, 78px);
   line-height: 1.03;
-  letter-spacing: -0.055em;
+  font-weight: 700;
+  letter-spacing: -0.045em;
   white-space: normal;
 }
 
+.papyrus-version {
+  font-size: 15px;
+  color: var(--ly-text-muted);
+  margin-bottom: 20px;
+}
+
 .papyrus-lead {
-  max-width: 580px;
+  max-width: 560px;
   margin: 0 0 34px;
   color: var(--papyrus-muted);
-  font-size: clamp(17px, 1.7vw, 20px);
-  line-height: 1.8;
-  letter-spacing: 0;
+  font-size: clamp(17px, 1.6vw, 20px);
+  line-height: 1.75;
 }
 
 .papyrus-hero-actions {
+  display: flex;
   justify-content: flex-start;
-  margin-bottom: 18px;
+  gap: 14px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
 }
 
 .papyrus-button {
-  min-height: 48px;
-  height: auto;
-  gap: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  gap: 10px;
   padding: 0 24px;
   border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 15px;
   font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
-.papyrus-button:focus-visible,
-.papyrus-download-link:focus-visible,
-.papyrus-nav a:focus-visible {
-  outline: 3px solid rgba(31, 99, 233, 0.35);
-  outline-offset: 3px;
+.papyrus-button:hover {
+  transform: translateY(-2px);
 }
 
 .papyrus-button-primary {
-  background: var(--papyrus-blue);
-  box-shadow: 0 10px 28px rgba(31, 99, 233, 0.22);
+  background: var(--ly-btn-bg);
+  color: var(--ly-btn-ink);
+}
+
+.papyrus-button-primary:hover {
+  background: var(--ly-btn-bg-hover);
 }
 
 .papyrus-button-secondary {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(21, 21, 21, 0.13);
+  background: var(--ly-surface);
+  color: var(--ly-text);
+  border-color: var(--ly-border-strong);
 }
 
-.papyrus-note {
-  color: #7e7c75;
-  font-size: 12px;
-  letter-spacing: 0.04em;
+.papyrus-button-secondary:hover {
+  background: var(--ly-surface-elevated);
+  border-color: rgba(255, 255, 255, 0.36);
 }
 
 .papyrus-proof-list {
@@ -608,8 +279,8 @@
   gap: 10px 22px;
   margin: 0;
   padding: 0;
-  color: #6b6962;
-  font-size: 12px;
+  color: var(--ly-text-muted);
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
   list-style: none;
@@ -622,10 +293,10 @@
 }
 
 .papyrus-proof-list li::before {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--papyrus-red);
+  background: var(--papyrus-teal);
   content: '';
 }
 
@@ -638,29 +309,30 @@
 .papyrus-hero-visual::before {
   content: '';
   position: absolute;
-  inset: 9% 4% -7% 2%;
+  inset: 8% 4% -6% 2%;
   z-index: -2;
   border-radius: 48%;
-  background: rgba(31, 99, 233, 0.18);
-  filter: blur(46px);
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.24), rgba(32, 108, 207, 0.16) 55%, transparent 75%);
+  filter: blur(42px);
 }
 
 .papyrus-hero-visual img {
   position: relative;
   z-index: 1;
   display: block;
-  width: 118%;
+  width: 112%;
   height: auto;
   max-width: none;
-  margin-left: -5%;
-  border-radius: 30px;
-  box-shadow: 0 34px 80px rgba(39, 49, 69, 0.16);
+  margin-left: -4%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 28px;
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.72);
 }
 
 .papyrus-visual-orbit {
   position: absolute;
   z-index: -1;
-  border: 1px solid rgba(31, 99, 233, 0.22);
+  border: 1px solid rgba(20, 184, 166, 0.28);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -676,20 +348,21 @@
 .papyrus-visual-orbit-two {
   width: 340px;
   height: 170px;
-  right: -8%;
+  right: -6%;
   bottom: 0;
-  border-color: rgba(217, 76, 54, 0.28);
+  border-color: rgba(140, 199, 255, 0.26);
   transform: rotate(14deg);
 }
 
 .papyrus-visual-badge {
   position: absolute;
   z-index: 3;
-  padding: 10px 15px;
-  border: 1px solid rgba(21, 21, 21, 0.1);
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 12px 28px rgba(21, 21, 21, 0.1);
+  background: rgba(22, 22, 25, 0.88);
+  color: var(--ly-text);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(12px);
   font-size: 12px;
   font-weight: 700;
@@ -702,10 +375,12 @@
 
 .papyrus-visual-badge-ai {
   top: 13%;
-  right: -4%;
+  right: -3%;
 }
 
 .papyrus-main {
+  width: min(100% - 48px, 1240px);
+  margin: 0 auto;
   padding-bottom: 110px;
 }
 
@@ -718,16 +393,18 @@
   grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.7fr);
   align-items: end;
   gap: 72px;
-  margin-bottom: 54px;
+  margin-bottom: 52px;
 }
 
 .papyrus-section-heading h2,
 .papyrus-download-title {
   max-width: 720px;
   margin: 10px 0 0;
-  font-size: clamp(38px, 5.4vw, 68px);
+  color: var(--ly-text);
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 700;
   line-height: 1.08;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.04em;
 }
 
 .papyrus-section-heading > p {
@@ -739,14 +416,16 @@
 }
 
 .papyrus-kicker {
-  color: var(--papyrus-red);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
+  display: inline-block;
+  color: var(--papyrus-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .papyrus-feature-list {
-  border-bottom: 1px solid rgba(21, 21, 21, 0.13);
+  border-bottom: 1px solid var(--ly-border);
 }
 
 .papyrus-feature {
@@ -755,26 +434,33 @@
   align-items: start;
   gap: 32px;
   margin: 0 -20px;
-  padding: 38px 24px;
-  border-top: 1px solid rgba(21, 21, 21, 0.13);
-  border-radius: 20px;
+  padding: 36px 24px;
+  border: 1px solid transparent;
+  border-top-color: var(--ly-border);
+  border-radius: 22px;
   transition:
-    color 220ms ease,
     background-color 220ms ease,
     border-color 220ms ease;
 }
 
+.papyrus-feature:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--ly-surface);
+}
+
 .papyrus-feature-index,
 .papyrus-feature-eyebrow {
-  color: #85827a;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
+  color: var(--papyrus-teal);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.1em;
 }
 
 .papyrus-feature h3 {
   margin: 8px 0 0;
-  font-size: clamp(24px, 2.5vw, 34px);
+  color: var(--ly-text);
+  font-size: clamp(24px, 2.4vw, 32px);
   line-height: 1.2;
   letter-spacing: -0.025em;
 }
@@ -784,45 +470,48 @@
   color: var(--papyrus-muted);
   font-size: 16px;
   line-height: 1.85;
-  transition: color 220ms ease;
 }
 
 .papyrus-tech {
-  width: calc(100% + 96px);
-  margin-left: -48px;
-  padding: 80px 48px 48px;
-  border-radius: 42px;
-  background: #ddd6c9;
-  color: var(--papyrus-ink);
+  padding: 64px 48px 48px;
+  border: 1px solid var(--ly-border);
+  border-radius: 32px;
+  background: var(--ly-surface);
+  color: var(--ly-text);
 }
 
 .papyrus-section-heading-light > p {
-  color: #625e56;
+  color: var(--ly-text-muted);
 }
 
 .papyrus-tech-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
 .papyrus-tech-card {
-  min-height: 245px;
+  min-height: 236px;
   padding: 30px;
-  border: 1px solid rgba(21, 21, 21, 0.1);
-  border-radius: 24px;
-  background: rgba(247, 243, 235, 0.62);
+  border: 1px solid var(--ly-border);
+  border-radius: 22px;
+  background: #0c0c0f;
 }
 
 .papyrus-tech-card > span {
-  color: var(--papyrus-red);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--ly-accent-bg);
+  color: var(--ly-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .papyrus-tech-card h3 {
-  margin: 68px 0 12px;
+  margin: 54px 0 12px;
+  color: var(--ly-text);
   font-size: 24px;
   letter-spacing: -0.02em;
 }
@@ -830,24 +519,9 @@
 .papyrus-tech-card p {
   max-width: 470px;
   margin: 0;
-  color: #625e56;
-  font-size: 14px;
+  color: var(--ly-text-muted);
+  font-size: 15px;
   line-height: 1.75;
-}
-
-.papyrus-feature:hover {
-  border-color: var(--papyrus-ink);
-  background: var(--papyrus-ink);
-  color: #fff;
-}
-
-.papyrus-feature:hover .papyrus-feature-index,
-.papyrus-feature:hover .papyrus-feature-eyebrow {
-  color: rgba(255, 255, 255, 0.58);
-}
-
-.papyrus-feature:hover > p {
-  color: rgba(255, 255, 255, 0.72);
 }
 
 .papyrus-download {
@@ -856,41 +530,70 @@
 
 .papyrus-download-heading {
   align-items: end;
-  margin-bottom: 38px;
+  margin-bottom: 36px;
 }
 
 .papyrus-download-title {
   text-align: left;
 }
 
-.papyrus-download-version {
+.papyrus-download-status {
+  text-align: center;
+  color: var(--ly-text-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.papyrus-download-status p {
   margin: 0 0 18px;
+}
+
+.papyrus-download-version {
+  margin: 0 0 20px;
   text-align: left;
+  color: var(--ly-accent);
+  font-weight: 600;
 }
 
 .papyrus-download-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
-  gap: 16px;
+  gap: 18px;
 }
 
 .papyrus-download-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  min-height: 330px;
+  min-height: 320px;
   padding: 30px;
   overflow: hidden;
   text-align: left;
-  border: 1px solid rgba(21, 21, 21, 0.08);
+  border: 1px solid var(--ly-border);
   border-radius: 26px;
-  background: rgba(255, 255, 255, 0.62);
-  box-shadow: none;
+  background: var(--ly-surface);
+  color: var(--ly-text);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.papyrus-download-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: var(--ly-card-hover-shadow);
 }
 
 .papyrus-download-card-recommended {
-  color: #fff;
-  border-color: transparent;
-  background: var(--papyrus-blue);
-  box-shadow: 0 22px 54px rgba(31, 99, 233, 0.24);
+  color: #ffffff;
+  border-color: rgba(140, 199, 255, 0.38);
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.26), transparent 55%),
+    linear-gradient(145deg, #1a4f9c 0%, #102447 100%);
+  box-shadow: 0 22px 54px rgba(32, 108, 207, 0.22);
 }
 
 .papyrus-download-card-recommended::after {
@@ -900,68 +603,133 @@
   bottom: -110px;
   width: 260px;
   height: 260px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
+  pointer-events: none;
 }
 
 .papyrus-recommended {
   position: absolute;
   top: 22px;
   right: 22px;
-  padding: 6px 10px;
+  padding: 6px 11px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
-  font-size: 11px;
+  color: #ffffff;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .papyrus-download-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 38px;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 34px;
 }
 
-.papyrus-download-card-recommended .papyrus-download-icon img {
+.papyrus-download-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   filter: brightness(0) invert(1);
 }
 
 .papyrus-download-info h3 {
-  margin-bottom: 8px;
+  margin: 0 0 8px;
+  color: var(--ly-text);
   font-size: 24px;
+  font-weight: 700;
+}
+
+.papyrus-download-arch {
+  font-size: 13px;
+  color: var(--ly-text-muted);
 }
 
 .papyrus-download-card-recommended .papyrus-download-info h3,
 .papyrus-download-card-recommended .papyrus-download-arch {
-  color: #fff;
+  color: #ffffff;
 }
 
 .papyrus-download-card-recommended .papyrus-download-arch {
-  opacity: 0.68;
+  opacity: 0.78;
 }
 
 .papyrus-download-links {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
   margin-top: auto;
   padding-top: 26px;
 }
 
+.papyrus-download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--ly-btn-bg);
+  color: var(--ly-btn-ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.papyrus-download-link:hover {
+  transform: translateY(-2px);
+  background: var(--ly-btn-bg-hover);
+}
+
+.papyrus-download-link-secondary {
+  background: transparent;
+  color: var(--ly-text);
+  border-color: var(--ly-border-strong);
+}
+
+.papyrus-download-link-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .papyrus-download-card-recommended .papyrus-download-link {
-  background: #fff;
-  color: var(--papyrus-blue);
+  background: #f5f5f7;
+  color: #111111;
+}
+
+.papyrus-download-card-recommended .papyrus-download-link:hover {
+  background: #dcdce1;
+}
+
+.papyrus-download-card-recommended .papyrus-download-link-secondary {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.papyrus-download-card-recommended .papyrus-download-link-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .papyrus-source {
-  padding: 92px 48px;
-  border-top: 1px solid rgba(21, 21, 21, 0.12);
-  border-bottom: 1px solid rgba(21, 21, 21, 0.12);
+  padding: 88px 48px;
+  border-top: 1px solid var(--ly-border);
+  border-bottom: 1px solid var(--ly-border);
   text-align: center;
 }
 
 .papyrus-source h2 {
   margin: 12px auto 18px;
-  font-size: clamp(38px, 5vw, 64px);
-  letter-spacing: -0.045em;
+  color: var(--ly-text);
+  font-size: clamp(36px, 5vw, 60px);
+  letter-spacing: -0.04em;
 }
 
 .papyrus-source p {
@@ -972,41 +740,24 @@
   line-height: 1.75;
 }
 
+/* Footer matching homepage dark footer */
 .papyrus-footer {
   position: relative;
   z-index: 0;
   display: flex;
-  min-height: 0;
   flex-direction: column;
-  margin-top: 140px;
-  padding: 72px 24px 36px;
-  overflow: hidden;
-  border-top: 0;
-  background: var(--papyrus-paper);
-  color: var(--papyrus-ink);
-}
-
-.papyrus-footer::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: -1;
-  height: 35%;
-  pointer-events: none;
-  background: linear-gradient(
-    to top,
-    #7be188 0%,
-    rgba(123, 225, 136, 0.55) 40%,
-    rgba(244, 241, 233, 0.15) 75%,
-    transparent 100%
-  );
-  content: '';
+  margin-top: 120px;
+  padding: 72px 24px 40px;
+  background: var(--ly-bg);
+  color: var(--ly-text);
 }
 
 .papyrus-footer-inner {
   width: min(1120px, 100%);
-  gap: 48px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
 }
 
 .papyrus-footer-main {
@@ -1019,12 +770,14 @@
 .papyrus-footer-brand {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
 }
 
 .papyrus-footer-brand-link {
   display: inline-flex;
   align-items: center;
+  width: fit-content;
+  color: var(--ly-text);
   transition: opacity 160ms ease;
 }
 
@@ -1036,12 +789,13 @@
   width: 164px;
   height: 42px;
   object-fit: contain;
+  filter: invert(1);
 }
 
 .papyrus-footer-tagline {
   max-width: 280px;
   margin: 0;
-  color: var(--papyrus-muted);
+  color: var(--ly-text-muted);
   font-size: 15px;
   line-height: 1.55;
 }
@@ -1058,15 +812,15 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(21, 21, 21, 0.06);
-  color: var(--papyrus-ink);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ly-text);
   transition:
-    background 160ms ease,
+    background-color 160ms ease,
     transform 160ms ease;
 }
 
 .papyrus-footer-socials a:hover {
-  background: rgba(21, 21, 21, 0.12);
+  background: rgba(255, 255, 255, 0.18);
   transform: translateY(-2px);
 }
 
@@ -1079,12 +833,12 @@
 .papyrus-footer-group {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .papyrus-footer-group h2 {
   margin: 0 0 6px;
-  color: var(--papyrus-ink);
+  color: var(--ly-text);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1092,7 +846,7 @@
 }
 
 .papyrus-footer-group a {
-  color: var(--papyrus-muted);
+  color: var(--ly-text-muted);
   font-size: 15px;
   font-weight: 500;
   text-decoration: none;
@@ -1100,20 +854,17 @@
 }
 
 .papyrus-footer-group a:hover {
-  color: #0071e3;
-}
-
-.papyrus-footer-brand-link:focus-visible,
-.papyrus-footer-socials a:focus-visible,
-.papyrus-footer-group a:focus-visible {
-  outline: 3px solid rgba(31, 99, 233, 0.35);
-  outline-offset: 3px;
+  color: #ffffff;
 }
 
 .papyrus-footer-bottom {
-  padding: 40px 0 0;
-  border-top: 1px solid rgba(21, 21, 21, 0.08);
-  color: var(--papyrus-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 36px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--ly-text-muted);
   font-size: 14px;
   font-weight: 500;
 }
@@ -1121,7 +872,7 @@
 @media (max-width: 1040px) {
   .papyrus-hero-inner {
     grid-template-columns: 1fr;
-    gap: 62px;
+    gap: 56px;
   }
 
   .papyrus-hero-copy {
@@ -1133,6 +884,11 @@
     margin: 0 auto;
   }
 
+  .papyrus-hero-visual img {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .papyrus-section-heading {
     gap: 36px;
   }
@@ -1141,17 +897,13 @@
     grid-template-columns: 58px minmax(230px, 0.75fr) 1.1fr;
   }
 
-  .papyrus-footer::after {
-    height: 38%;
-  }
-
   .papyrus-footer-inner {
-    gap: 56px;
+    gap: 48px;
   }
 
   .papyrus-footer-main {
     grid-template-columns: 1fr;
-    gap: 48px;
+    gap: 44px;
   }
 
   .papyrus-footer-nav {
@@ -1174,14 +926,15 @@
 
   .papyrus-brand img {
     width: 118px;
+    height: 28px;
   }
 
   .papyrus-hero {
-    padding: 62px 0 76px;
+    padding: 56px 0 72px;
   }
 
   .papyrus-hero-inner {
-    gap: 46px;
+    gap: 42px;
   }
 
   .papyrus-hero h1 {
@@ -1193,28 +946,33 @@
     flex-direction: column;
   }
 
-  .papyrus-proof-list {
-    gap: 10px 18px;
-  }
-
   .papyrus-button {
     width: 100%;
   }
 
   .papyrus-hero-visual {
-    width: 108%;
-    margin-left: -4%;
+    width: 100%;
   }
 
   .papyrus-hero-visual img {
-    width: 122%;
-    margin-left: -11%;
+    width: 100%;
+    margin-left: 0;
     border-radius: 18px;
   }
 
   .papyrus-visual-badge {
-    padding: 8px 11px;
-    font-size: 10px;
+    padding: 7px 11px;
+    font-size: 11px;
+  }
+
+  .papyrus-visual-badge-local {
+    left: 10px;
+    bottom: 10px;
+  }
+
+  .papyrus-visual-badge-ai {
+    top: 10px;
+    right: 10px;
   }
 
   .papyrus-visual-orbit {
@@ -1222,29 +980,29 @@
   }
 
   .papyrus-main {
-    padding-bottom: 72px;
+    padding-bottom: 64px;
   }
 
   .papyrus-section {
-    margin-top: 88px;
+    margin-top: 84px;
   }
 
   .papyrus-section-heading {
     grid-template-columns: 1fr;
-    gap: 22px;
-    margin-bottom: 36px;
+    gap: 20px;
+    margin-bottom: 32px;
   }
 
   .papyrus-section-heading h2,
   .papyrus-download-title {
-    font-size: clamp(36px, 11vw, 52px);
+    font-size: clamp(34px, 10vw, 48px);
   }
 
   .papyrus-feature {
     grid-template-columns: 36px 1fr;
-    gap: 20px;
+    gap: 18px;
     margin: 0;
-    padding: 30px 16px;
+    padding: 28px 16px;
   }
 
   .papyrus-feature > p {
@@ -1252,10 +1010,8 @@
   }
 
   .papyrus-tech {
-    width: calc(100% + 32px);
-    margin-left: -16px;
-    padding: 54px 20px 20px;
-    border-radius: 28px;
+    padding: 40px 20px 24px;
+    border-radius: 24px;
   }
 
   .papyrus-tech-grid {
@@ -1263,29 +1019,29 @@
   }
 
   .papyrus-tech-card {
-    min-height: 220px;
+    min-height: 200px;
     padding: 24px;
   }
 
   .papyrus-tech-card h3 {
-    margin-top: 54px;
+    margin-top: 36px;
   }
 
   .papyrus-download-grid {
-    gap: 12px;
+    grid-template-columns: 1fr;
+    gap: 14px;
   }
 
   .papyrus-download-card {
-    min-height: 300px;
+    min-height: 280px;
   }
 
   .papyrus-source {
-    padding: 64px 0;
+    padding: 56px 16px;
   }
 
   .papyrus-footer {
-    min-height: 0;
-    margin-top: 96px;
+    margin-top: 80px;
     padding: 56px 16px 32px;
   }
 
@@ -1303,6 +1059,7 @@
   }
 
   .papyrus-footer-bottom {
+    flex-direction: column;
     align-items: flex-start;
     padding-top: 28px;
     text-align: left;
@@ -1313,10 +1070,9 @@
   .papyrus-button,
   .papyrus-feature,
   .papyrus-download-card,
-  .papyrus-download-link {
-    transition: none;
-  }
-
+  .papyrus-download-link,
+  .papyrus-nav-link,
+  .papyrus-nav-user,
   .papyrus-footer-brand-link,
   .papyrus-footer-socials a,
   .papyrus-footer-group a {
@@ -1325,7 +1081,8 @@
 
   .papyrus-button:hover,
   .papyrus-download-card:hover,
-  .papyrus-download-link:hover {
+  .papyrus-download-link:hover,
+  .papyrus-footer-socials a:hover {
     transform: none;
   }
 }

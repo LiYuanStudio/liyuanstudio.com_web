@@ -4,6 +4,7 @@ import { PapyrusDesktopPage } from '../pages/PapyrusDesktopPage.js';
 import { ReleasePage } from '../pages/ReleasePage.js';
 import { NewsMarkdown } from '../pages/NewsDetailPage.js';
 import { CollageCard, CollageGrid, ContentHubLayout, ContentHubNav } from '../components/ContentHub.js';
+import { SiteFooter } from '../components/SiteFooter.js';
 import { SkipLink } from '../components/SkipLink.js';
 import { UserAvatar } from '../components/UserAvatar.js';
 import { getPublicPostPath, getPublicProfilePath } from '../lib/profile-path.js';
@@ -42,7 +43,7 @@ function PublicPage({ content, pathname }: StaticSiteState) {
 
   const post = content.posts.find((post) => getPublicPostPath(post.authorUsername, post.blogNumber) === pathname);
   const author = content.authors.find((author) => getPublicProfilePath(author.username) === pathname);
-  return <div className="profile-page">
+  return <div className="profile-page ly-dot-surface">
     <SkipLink /><ContentHubNav current="blog" action={action} />
     <main className={`profile-main${post ? ' profile-article-main' : ''}`} id="main-content" tabIndex={-1}>
       {post ? <article className="profile-article">
@@ -68,6 +69,7 @@ function PublicPage({ content, pathname }: StaticSiteState) {
         </section>
       </> : <section className="profile-card"><h1>页面不存在</h1><p>这个页面可能已移动或撤下。</p><a href="/">返回首页</a></section>}
     </main>
+    <SiteFooter />
   </div>;
 }
 

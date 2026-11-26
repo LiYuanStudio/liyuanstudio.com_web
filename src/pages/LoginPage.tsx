@@ -23,7 +23,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-page">
+    <div className="login-page ly-dot-surface">
       <nav className="login-nav" aria-label="账号导航">
         <a className="login-brand" href="/">
           <img src="/brand/liyuan-wordmark.svg" alt="LiYuan Studio" />

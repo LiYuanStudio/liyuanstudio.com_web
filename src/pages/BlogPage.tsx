@@ -345,7 +345,7 @@ export function BlogPage() {
   if (!isRelease) return <BlogIndex />;
 
   return (
-    <div className="blog-page blog-release-page">
+    <div className="blog-page blog-release-page ly-dot-surface">
       <BlogNav action="list" />
       <main className="blog-page-main" id="main-content" tabIndex={-1}>
         <BlogRelease />

@@ -1,18 +1,23 @@
+@import '../theme.css';
+
 .auth-card {
   width: 100%;
-  max-width: 420px;
-  background: #fff;
-  border-radius: 24px;
+  max-width: 440px;
+  border: 1px solid var(--ly-border);
+  border-radius: 28px;
   padding: 40px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  background: var(--ly-surface);
+  color: var(--ly-text);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
 }
 
 .auth-card h1 {
-  margin: 0 0 24px;
-  font-size: 28px;
+  margin: 0 0 28px;
+  font-size: 32px;
   font-weight: 700;
+  letter-spacing: -0.03em;
   text-align: center;
-  color: #1d1d1f;
+  color: var(--ly-text);
 }
 
 .auth-form {
@@ -24,43 +29,54 @@
 .auth-form label {
   font-size: 14px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ly-text);
 }
 
 .auth-form input {
   height: 48px;
   padding: 0 16px;
-  border: 1px solid rgba(29, 29, 31, 0.12);
+  border: 1px solid var(--ly-border-strong);
   border-radius: 12px;
-  background: #fff;
+  background: var(--ly-surface-input);
+  font: inherit;
   font-size: 15px;
-  color: #1d1d1f;
+  color: var(--ly-text);
   transition: border-color 160ms ease;
 }
 
+.auth-form input::placeholder {
+  color: #868692;
+}
+
 .auth-form input:focus {
-  border-color: #0071e3;
+  border-color: var(--ly-accent);
 }
 
 .auth-inline-link {
-  color: #0071e3;
+  color: var(--ly-accent);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
+  transition: color 160ms ease;
 }
 
 .auth-inline-link:hover {
+  color: var(--ly-accent-hover);
   text-decoration: underline;
 }
 
 .auth-forgot-link {
   align-self: flex-end;
-  margin-top: -8px;
+  margin-top: -6px;
 }
 
 .auth-error {
   margin: 0;
-  color: #ff3b30;
+  padding: 10px 14px;
+  border: 1px solid var(--ly-danger-border);
+  border-radius: 12px;
+  background: var(--ly-danger-bg);
+  color: var(--ly-danger);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -73,37 +89,40 @@
   padding: 0 24px;
   border: none;
   border-radius: 999px;
-  background: #1d1d1f;
-  color: #fff;
+  background: var(--ly-btn-bg);
+  color: var(--ly-btn-ink);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease;
 }
 
 .auth-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  background: #000;
+  background: var(--ly-btn-bg-hover);
 }
 
 .auth-button:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
 .auth-lead {
   margin: 0;
   text-align: center;
-  color: #6e6e73;
-  font-size: 16px;
+  color: var(--ly-text-muted);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .auth-toggle {
   margin: 24px 0 0;
   text-align: center;
   font-size: 14px;
-  color: #6e6e73;
+  color: var(--ly-text-muted);
 }
 
 .auth-toggle button {
@@ -111,25 +130,31 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: #0071e3;
+  color: var(--ly-accent);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .auth-toggle button:hover {
+  color: var(--ly-accent-hover);
   text-decoration: underline;
 }
 
 @media (max-width: 760px) {
   .auth-card {
     padding: 32px 24px;
+    border-radius: 22px;
   }
 }
 
 .auth-success {
   margin: 0;
-  color: #137333;
+  padding: 10px 14px;
+  border: 1px solid var(--ly-success-border);
+  border-radius: 12px;
+  background: var(--ly-success-bg);
+  color: var(--ly-success);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -151,24 +176,25 @@
   height: 52px;
   margin: 0 auto 20px;
   border-radius: 50%;
-  background: rgba(19, 115, 51, 0.1);
-  color: #137333;
+  background: var(--ly-success-bg);
+  color: var(--ly-success);
   font-size: 26px;
   font-weight: 700;
 }
 
 .auth-secondary-button {
-  margin-top: 14px;
+  margin-top: 10px;
   padding: 0;
   border: none;
   background: transparent;
-  color: #0071e3;
+  color: var(--ly-accent);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
 
-.auth-secondary-button:hover {
+.auth-secondary-button:hover:not(:disabled) {
+  color: var(--ly-accent-hover);
   text-decoration: underline;
 }
 
@@ -176,12 +202,22 @@
   padding: 2px 0;
   border: none;
   background: transparent;
-  color: #6e6e73;
+  color: var(--ly-text-muted);
   font-size: 13px;
   cursor: pointer;
 }
 
 .auth-text-button:hover {
-  color: #0071e3;
+  color: var(--ly-accent);
   text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-button {
+    transition: none;
+  }
+
+  .auth-button:hover:not(:disabled) {
+    transform: none;
+  }
 }

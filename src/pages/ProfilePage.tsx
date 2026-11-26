@@ -115,7 +115,7 @@ function Nav({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<
 
 function LoginPrompt({ title = '请先登录' }: { title?: string }) {
   return (
-    <div className="profile-page">
+    <div className="profile-page ly-dot-surface">
       <Nav />
       <main className="profile-main" id="main-content" tabIndex={-1}>
         <section className="profile-card profile-card-narrow">
@@ -130,7 +130,7 @@ function LoginPrompt({ title = '请先登录' }: { title?: string }) {
 
 function MemberRequiredPrompt({ user, onLogout }: { user?: User; onLogout?: () => void | Promise<void> }) {
   return (
-    <div className="profile-page">
+    <div className="profile-page ly-dot-surface">
       <Nav user={user} onLogout={onLogout} />
       <main className="profile-main" id="main-content" tabIndex={-1}>
         <section className="profile-card profile-card-narrow">
@@ -732,7 +732,7 @@ export function ProfilePage() {
   }, [route.kind]);
 
   if (state.status === 'loading') {
-    return <div className="profile-page"><main className="profile-main" id="main-content" tabIndex={-1}><h1 className="visually-hidden">个人主页</h1><p className="profile-empty" role="status">加载中...</p></main></div>;
+    return <div className="profile-page ly-dot-surface"><main className="profile-main" id="main-content" tabIndex={-1}><h1 className="visually-hidden">个人主页</h1><p className="profile-empty" role="status">加载中...</p></main></div>;
   }
 
   const user = state.status === 'authenticated' ? state.user : undefined;
@@ -747,7 +747,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="profile-page">
+    <div className="profile-page ly-dot-surface">
       {route.kind !== 'settings' && <Nav user={user} onLogout={user ? logout : undefined} />}
       {route.kind === 'settings' && user && <SettingsPage user={user} logout={logout} updateAvatar={updateAvatar} updateProfile={updateProfile} />}
       {route.kind === 'my-posts' && <MyPostsPage />}

@@ -445,7 +445,7 @@ export function PapyrusDesktopPage() {
   }, []);
 
   return (
-    <div className="papyrus-page">
+    <div className="papyrus-page ly-dot-surface">
       <PapyrusNav navRef={navRef} />
 
       <header className="papyrus-hero">

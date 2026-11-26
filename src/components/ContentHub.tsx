@@ -1,6 +1,7 @@
 import { Children, type ReactNode } from 'react';
 import './ContentHub.css';
 import { useStaticSite } from '../site/context.js';
+import { SiteFooter } from './SiteFooter.js';
 
 export type HubSection = 'products' | 'release' | 'blog';
 export type HubTone = 'blue' | 'green' | 'orange' | 'pink' | 'ink' | 'sand';
@@ -43,7 +44,7 @@ export function ContentHubLayout({
   children,
 }: ContentHubLayoutProps) {
   return (
-    <div className="hub-page">
+    <div className="hub-page ly-dot-surface">
       <ContentHubNav current={current} action={action} />
       <main className="hub-main" id="main-content" tabIndex={-1}>
         <header className="hub-hero">
@@ -53,6 +54,7 @@ export function ContentHubLayout({
         </header>
         {children}
       </main>
+      <SiteFooter />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useStaticSite } from '../site/context.js';
 import { getErrorMessage } from '../api/errors.js';
 import { matchNewsContentPath, matchReleaseContentPath } from '../lib/news-path.js';
 import type { NewsUpdate } from '../types.js';
+import { SiteFooter } from '../components/SiteFooter.js';
 import './news-detail.css';
 
 const MARKDOWN_SANITIZE_SCHEMA = {
@@ -85,7 +86,7 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
   }, [slug, site]);
 
   return (
-    <div className="news-detail-page">
+    <div className="news-detail-page ly-dot-surface">
       <nav className="news-detail-nav" aria-label="动态导航">
         <a className="news-detail-brand" href="/">
           <img src="/brand/liyuan-wordmark.svg" alt="LiYuan Studio" />
@@ -116,6 +117,7 @@ export function NewsDetailPage({ slug: slugOverride }: { slug?: string } = {}) {
           </article>
         )}
       </main>
+      <SiteFooter />
     </div>
   );
 }
