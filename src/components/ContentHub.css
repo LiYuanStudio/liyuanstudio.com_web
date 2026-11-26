@@ -113,26 +113,6 @@
   margin-bottom: 48px;
 }
 
-.hub-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 18px;
-  color: var(--ly-accent);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.hub-kicker::before {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ly-teal);
-}
-
 .hub-hero h1 {
   margin: 0;
   color: var(--ly-text);
@@ -170,7 +150,6 @@
 
 .collage-card {
   --card-accent: #8cc7ff;
-  --card-glow: rgba(76, 155, 255, 0.16);
   --card-pill-bg: rgba(76, 155, 255, 0.14);
   position: relative;
   grid-column: span 4;
@@ -179,9 +158,7 @@
   overflow: hidden;
   border: 1px solid var(--ly-border);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at 92% 10%, var(--card-glow), transparent 58%),
-    var(--ly-surface);
+  background: var(--ly-surface);
   color: var(--ly-text);
   isolation: isolate;
   transition:
@@ -289,20 +266,8 @@
   transform: scale(1.035);
 }
 
-/* Subtle halftone dot ring watermark tying cards back to the homepage dot matrix.
- * 用弱化的点阵光晕水印呼应主页点阵主视觉，同时不干扰标题可读性。 */
 .collage-card-shape {
-  position: absolute;
-  top: -18%;
-  right: -12%;
-  width: 58%;
-  aspect-ratio: 1;
-  border: 1px solid var(--card-accent);
-  border-radius: 50%;
-  opacity: 0.18;
-  pointer-events: none;
-  background-image: radial-gradient(circle, var(--card-accent) 1.25px, transparent 1.5px);
-  background-size: 12px 12px;
+  display: none;
 }
 
 .collage-card-content {
@@ -373,37 +338,31 @@
 
 .collage-card-blue {
   --card-accent: #8cc7ff;
-  --card-glow: rgba(76, 155, 255, 0.18);
   --card-pill-bg: rgba(76, 155, 255, 0.14);
 }
 
 .collage-card-green {
   --card-accent: #5eead4;
-  --card-glow: rgba(20, 184, 166, 0.2);
   --card-pill-bg: rgba(20, 184, 166, 0.15);
 }
 
 .collage-card-orange {
   --card-accent: #ffb494;
-  --card-glow: rgba(255, 154, 123, 0.18);
   --card-pill-bg: rgba(255, 154, 123, 0.15);
 }
 
 .collage-card-pink {
   --card-accent: #f9a8d4;
-  --card-glow: rgba(244, 114, 182, 0.16);
   --card-pill-bg: rgba(244, 114, 182, 0.14);
 }
 
 .collage-card-ink {
   --card-accent: #c7d2fe;
-  --card-glow: rgba(129, 140, 248, 0.16);
   --card-pill-bg: rgba(129, 140, 248, 0.14);
 }
 
 .collage-card-sand {
   --card-accent: #f3d79b;
-  --card-glow: rgba(226, 204, 153, 0.15);
   --card-pill-bg: rgba(226, 204, 153, 0.14);
 }
 

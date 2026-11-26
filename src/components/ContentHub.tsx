@@ -48,7 +48,6 @@ export function ContentHubLayout({
       <ContentHubNav current={current} action={action} />
       <main className="hub-main" id="main-content" tabIndex={-1}>
         <header className="hub-hero">
-          <span className="hub-kicker">LiYuan Studio</span>
           <h1>{title}</h1>
           <p>{description}</p>
         </header>

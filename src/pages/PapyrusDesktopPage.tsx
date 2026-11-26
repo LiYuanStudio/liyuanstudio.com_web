@@ -247,68 +247,48 @@ const WORKFLOW_SCENES: Array<{
   tabLabel: string;
   title: string;
   desc: string;
-  points: string[];
 }> = [
   {
     id: 'review',
     tabLabel: '间隔复习',
     title: '让复习顺着节奏发生',
     desc: 'SM-2 会根据每次反馈自动安排下次出现的时间。键盘驱动的操作，把注意力留给真正需要记住的内容。',
-    points: [
-      '按熟悉程度动态调整下一次回顾间隔',
-      '全键盘快捷键切换与评分，减少视线打断',
-      '卷轴进度清晰可见，当日待复习一目了然',
-    ],
   },
   {
     id: 'think',
     tabLabel: '知识网络',
     title: '让笔记彼此看得见',
     desc: '文件夹、标签与关系图谱组成清晰的知识结构，也能导入已有的 Obsidian 笔记库，从旧习惯自然迁移。',
-    points: [
-      '双向链接与标签共存，兼顾目录整理与网状联想',
-      '直接导入现有 Obsidian 笔记库与层级关系',
-      '每次编辑自动生成内容哈希，随时追溯历史版本',
-    ],
   },
   {
     id: 'agent',
     tabLabel: '可控智能体',
     title: '让 AI 真正参与整理',
     desc: '连接 OpenAI、Anthropic 或本地 Ollama。智能体可以管理卡片与笔记，工具调用始终由你决定手动或自动批准。',
-    points: [
-      '自由接入云端模型或离线本地 Ollama 服务',
-      '可协助拆解笔记、生成复习卡片与梳理结构',
-      '写入与修改具备清晰审批边界，结果全程可审计',
-    ],
   },
 ];
 
 const REVIEW_RATINGS: Record<ReviewRatingId, {
   label: string;
   interval: string;
-  ease: string;
   progress: number;
   note: string;
 }> = {
   again: {
     label: '重来',
     interval: '10 分钟后',
-    ease: '1.90',
     progress: 28,
     note: '重新加入本轮卷轴队列，短间隔强化记忆。',
   },
   good: {
     label: '一般',
     interval: '4 天后',
-    ease: '2.50',
     progress: 72,
     note: '按标准遗忘曲线推进，下一次在记忆衰减前提醒。',
   },
   easy: {
     label: '熟练',
     interval: '12 天后',
-    ease: '2.65',
     progress: 94,
     note: '显著拉长复现周期，把精力留给更生疏的卡片。',
   },
@@ -452,28 +432,16 @@ function InteractiveWorkflowStage() {
         <div className="papyrus-stage-copy">
           <h3>{currentScene.title}</h3>
           <p>{currentScene.desc}</p>
-          <ul className="papyrus-stage-points">
-            {currentScene.points.map((point) => (
-              <li key={point}>{point}</li>
-            ))}
-          </ul>
         </div>
 
         <div className="papyrus-stage-demo">
           {activeScene === 'review' && (
             <div className="papyrus-demo-pane">
-              <div className="papyrus-demo-header">
-                <span>诗词札记</span>
-                <span className="papyrus-demo-metric">下次复习：{currentRating.interval}</span>
-              </div>
+              <p className="papyrus-demo-metric">下次复习：{currentRating.interval}</p>
               <p className="papyrus-demo-prompt">SM-2 调度如何避免无效重复？</p>
               <p className="papyrus-demo-answer">{currentRating.note}</p>
               <div className="papyrus-demo-meter" aria-hidden="true">
                 <span style={{ width: `${currentRating.progress}%` }} />
-              </div>
-              <div className="papyrus-demo-stats">
-                <span>熟悉度系数 {currentRating.ease}</span>
-                <span>掌握进度 {currentRating.progress}%</span>
               </div>
               <div className="papyrus-demo-segmented" role="group" aria-label="模拟复习反馈">
                 {(['again', 'good', 'easy'] as const).map((rating) => (
@@ -493,10 +461,6 @@ function InteractiveWorkflowStage() {
 
           {activeScene === 'think' && (
             <div className="papyrus-demo-pane">
-              <div className="papyrus-demo-header">
-                <span>知识关系图谱</span>
-                <span className="papyrus-demo-metric">{currentNode.label}</span>
-              </div>
               <svg
                 className="papyrus-graph-svg"
                 viewBox="0 0 440 240"
@@ -556,12 +520,9 @@ function InteractiveWorkflowStage() {
 
           {activeScene === 'agent' && (
             <div className="papyrus-demo-pane">
-              <div className="papyrus-demo-header">
-                <span>智能体工具调用边界</span>
-                <span className="papyrus-demo-metric">
-                  {approvalMode === 'manual' ? '等待手动确认' : '可信规则自动通过'}
-                </span>
-              </div>
+              <p className="papyrus-demo-metric">
+                {approvalMode === 'manual' ? '等待手动确认' : '可信规则自动通过'}
+              </p>
               <p className="papyrus-demo-prompt">
                 请求执行：为「上伊那牡丹」笔记生成 3 张复习卡片并关联标签
               </p>
@@ -570,10 +531,6 @@ function InteractiveWorkflowStage() {
                   ? '写入本地数据库前将暂停并展示变更摘要，由你决定批准或拒绝。'
                   : '仅对已授权的卡片整理工具自动放行，每次写入仍保留可回滚的版本快照。'}
               </p>
-              <div className="papyrus-demo-stats">
-                <span>模型来源：本地 Ollama / 云端 API</span>
-                <span>密钥存储：AES-GCM</span>
-              </div>
               <div className="papyrus-demo-segmented" role="group" aria-label="切换审批策略">
                 <button
                   type="button"

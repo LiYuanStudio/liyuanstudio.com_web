@@ -330,31 +330,18 @@
   color: rgba(255, 255, 255, 0.36);
 }
 
-/* Wide architectural product display stage */
+/* Wide architectural product display stage (flat solid frame, no glow gradients) */
 .papyrus-hero-stage {
   position: relative;
   width: min(100%, 1080px);
   margin: 56px auto 0;
 }
 
-.papyrus-hero-stage::before {
-  content: '';
-  position: absolute;
-  inset: -24px 8% auto;
-  height: 220px;
-  z-index: -1;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.24), rgba(32, 108, 207, 0.14) 55%, transparent 74%);
-  filter: blur(48px);
-  pointer-events: none;
-}
-
 .papyrus-stage-frame {
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--ly-border);
   border-radius: 30px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(22, 22, 25, 0.9) 100%);
-  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.85);
+  background: var(--ly-surface);
 }
 
 .papyrus-stage-frame img {
@@ -449,9 +436,7 @@
   padding: 44px;
   border: 1px solid var(--ly-border);
   border-radius: 28px;
-  background:
-    radial-gradient(circle at 92% 10%, rgba(20, 184, 166, 0.14), transparent 52%),
-    var(--ly-surface);
+  background: var(--ly-surface);
 }
 
 .papyrus-stage-copy {
@@ -476,35 +461,6 @@
   line-height: 1.7;
 }
 
-.papyrus-stage-points {
-  margin: 28px 0 0;
-  padding: 24px 0 0;
-  border-top: 1px solid var(--ly-border);
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.papyrus-stage-points li {
-  position: relative;
-  padding-left: 18px;
-  color: var(--ly-text-soft);
-  font-size: var(--pd-body);
-  line-height: 1.55;
-}
-
-.papyrus-stage-points li::before {
-  content: '';
-  position: absolute;
-  top: 0.62em;
-  left: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ly-teal);
-}
-
 .papyrus-stage-demo {
   display: flex;
   flex-direction: column;
@@ -519,18 +475,11 @@
   gap: 18px;
 }
 
-.papyrus-demo-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--ly-text-muted);
+.papyrus-demo-metric {
+  margin: 0;
+  color: var(--ly-accent);
   font-size: var(--pd-sm);
   font-weight: 600;
-}
-
-.papyrus-demo-metric {
-  color: var(--ly-accent);
 }
 
 .papyrus-demo-prompt {
@@ -559,7 +508,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--ly-teal), var(--ly-accent));
+  background: var(--ly-accent);
   transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -567,15 +516,6 @@
   .papyrus-demo-meter span {
     transition: none;
   }
-}
-
-.papyrus-demo-stats {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--ly-text-muted);
-  font-size: var(--pd-sm);
 }
 
 .papyrus-demo-segmented {
@@ -762,11 +702,8 @@
 
 .papyrus-download-card-recommended {
   color: #ffffff;
-  border-color: rgba(140, 199, 255, 0.4);
-  background:
-    radial-gradient(circle at top right, rgba(20, 184, 166, 0.28), transparent 56%),
-    linear-gradient(145deg, #1a4f9c 0%, #102447 100%);
-  box-shadow: 0 22px 54px rgba(32, 108, 207, 0.22);
+  border-color: rgba(140, 199, 255, 0.42);
+  background: #14366b;
 }
 
 .papyrus-recommended {
