@@ -338,17 +338,15 @@
 }
 
 .papyrus-stage-frame {
-  padding: 12px;
-  border: 1px solid var(--ly-border);
-  border-radius: 30px;
-  background: var(--ly-surface);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
 }
 
 .papyrus-stage-frame img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 20px;
 }
 
 /* Main content container & architectural section rhythm */
@@ -1051,11 +1049,6 @@
   }
 
   .papyrus-stage-frame {
-    padding: 8px;
-    border-radius: 22px;
-  }
-
-  .papyrus-stage-frame img {
     border-radius: 14px;
   }
 
