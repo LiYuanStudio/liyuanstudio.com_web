@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '../context/AuthContext.js';
 import { PapyrusDesktopPage } from './PapyrusDesktopPage.js';
+import { expectNoAccessibilityViolations } from '../test/accessibility.js';
 
 const RELEASES_API_URL =
   'https://api.github.com/repos/LiYuanStudio/Papyrus_Desktop/releases?per_page=20';
@@ -336,5 +338,35 @@ describe('PapyrusDesktopPage', () => {
       'src',
       'https://example.com/avatar.png',
     );
+  });
+
+  it('switches interactive workflow scenes by click and keyboard without accessibility violations', async () => {
+    installFetchMock();
+    const user = userEvent.setup();
+    const { container } = renderPage();
+
+    const reviewTab = screen.getByRole('tab', { name: '间隔复习' });
+    const thinkTab = screen.getByRole('tab', { name: '知识网络' });
+    const agentTab = screen.getByRole('tab', { name: '可控智能体' });
+
+    expect(reviewTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('下次复习：4 天后')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '熟练' }));
+    expect(screen.getByText('下次复习：12 天后')).toBeInTheDocument();
+
+    reviewTab.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(thinkTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { level: 3, name: '让笔记彼此看得见' })).toBeInTheDocument();
+
+    await user.click(agentTab);
+    expect(agentTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('等待手动确认')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '可信流自动审批' }));
+    expect(screen.getByText('可信规则自动通过')).toBeInTheDocument();
+
+    await expectNoAccessibilityViolations(container);
   });
 });
